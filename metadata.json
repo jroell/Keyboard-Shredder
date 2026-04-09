@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Guitar Hero: AI Shredder",
+  "description": "A high-octane Guitar Hero clone where AI generates the music and note patterns. Battle friends in real-time or jam with Gemini.",
+  "requestFramePermissions": ["microphone"]
+}

@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: songs
+    // Document ID: {songId}
+    // Fields:
+    //   - title: string (required)
+    //   - genre: string (optional)
+    //   - audioUrl: string (required)
+    //   - lyrics: string (optional)
+    //   - patterns: array of objects (required)
+    //   - userId: string (required)
+    //   - createdAt: timestamp/string (required)
+    //   - highScore: number (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function uidUnchanged() {
+      return !('userId' in request.resource.data) ||
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('userId' in request.resource.data) ||
+        request.resource.data.userId == resource.data.userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidSong(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.audioUrl is string && data.audioUrl.size() > 0 &&
+             data.patterns is list && data.patterns.size() < 1000 &&
+             data.userId is string && data.userId == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /songs/{songId} {
+      // Users can only read their own songs
+      allow read: if isDocOwner();
+      
+      // Users can only create songs where they are the owner
+      allow create: if isAuthenticated() && 
+                      hasRequiredFields(['title', 'audioUrl', 'patterns', 'userId', 'createdAt']) &&
+                      isValidSong(request.resource.data);
+      
+      // Users can only update their own songs (e.g., updating high score)
+      allow update: if isDocOwner() && 
+                      uidNotModified() &&
+                      isValidSong(request.resource.data);
+      
+      // Users can only delete their own songs
+      allow delete: if isDocOwner();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

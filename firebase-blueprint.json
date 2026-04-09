@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "Song": {
+      "title": "Song",
+      "description": "A generated song for the Guitar Hero game.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the song." },
+        "genre": { "type": "string", "description": "The genre or prompt used to generate the song." },
+        "audioUrl": { "type": "string", "description": "The URL to the generated audio file." },
+        "lyrics": { "type": "string", "description": "The generated lyrics." },
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "time": { "type": "number" },
+              "key": { "type": "string" },
+              "duration": { "type": "number" }
+            }
+          }
+        },
+        "userId": { "type": "string", "description": "The ID of the user who generated the song." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "highScore": { "type": "number", "description": "The user's high score for this song." }
+      },
+      "required": ["title", "audioUrl", "patterns", "userId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/songs/{songId}": {
+      "schema": "Song",
+      "description": "Collection of generated songs."
+    }
+  }
+}
