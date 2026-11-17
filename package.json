@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "keyboard-shredder",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,18 +8,26 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "start": "NODE_ENV=production tsx server.ts",
+    "setup:analysis": "uv sync --project analysis --locked && node analysis/setup.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "test:analysis": "uv run --project analysis --locked --no-sync python -m unittest discover -s analysis -p \"test_*.py\"",
+    "test:e2e": "playwright test",
+    "test:e2e:live": "node tests/live.mjs",
+    "dev:fixture": "LOCAL_TEST_AUTH=1 FIXTURE_MUSIC=1 SONG_DATA_DIR=.song-data/fixtures tsx server.ts",
+    "benchmark:music": "tsx scripts/music-benchmark.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
-    "@tailwindcss/vite": "^4.1.14",
     "@types/canvas-confetti": "^1.9.0",
-    "@vitejs/plugin-react": "^5.0.4",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
-    "express": "^4.21.2",
+    "express": "4.22.3",
+    "fflate": "0.8.3",
     "firebase": "^12.11.0",
+    "firebase-admin": "14.5.1",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.0",
@@ -27,16 +35,28 @@
     "react-markdown": "^10.1.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
-    "tailwind-merge": "^3.5.0",
-    "vite": "^6.2.0"
+    "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@tailwindcss/vite": "^4.1.14",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
+    "tsx": "4.23.15",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "1.14.7",
+    "qs": "6.17.1",
+    "tsx": {
+      "esbuild": "0.28.2"
+    }
   }
 }

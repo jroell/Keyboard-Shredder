@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+.song-data/
+analysis/.venv/
+analysis/weights/
+__pycache__/
+test-results/
+playwright-report/
