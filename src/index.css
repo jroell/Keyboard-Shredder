@@ -120,3 +120,7 @@ progress { width: 100%; accent-color: var(--accent); }
 }
 .game-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
 .count-in { inset: .8rem auto auto 50%; transform: translateX(-50%); border-radius: .6rem; padding: .45rem .75rem; white-space: nowrap; }
+.hit-feedback { min-height: 2.7rem; text-align: center; line-height: 1.15; padding-top: .2rem; }
+.hit-feedback small { display: block; margin-top: .2rem; color: var(--muted); font-size: .75rem; }
+.target.hit { outline: 2px solid #fef7df; outline-offset: 3px; }
+.target.missed { outline: 2px dashed #ff928c; outline-offset: 3px; }

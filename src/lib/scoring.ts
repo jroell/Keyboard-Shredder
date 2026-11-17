@@ -1,6 +1,8 @@
 import type { SongEvent } from '../../shared/song';
 
 export type Judgement = 'Perfect' | 'Good' | 'Miss' | 'Sustain dropped';
+type Feedback = { judgement: Judgement; timeMs: number; lanes: number[]; offsetMs?: number };
+
 export const DEFAULT_KEYS = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG'];
 
 export class Scoring {
@@ -12,20 +14,24 @@ export class Scoring {
   misses = 0;
   combo = 0;
   bestCombo = 0;
-  judgement: Judgement | null = null;
+  feedback: Feedback | null = null;
+
+  get judgement() {
+    return this.feedback?.judgement ?? null;
+  }
   private cursor = 0;
-  private chord: { event: SongEvent; lanes: Set<number>; firstMs: number } | null = null;
+  private chord: { event: SongEvent; lanes: Set<number>; firstMs: number; offsetMs: number } | null = null;
 
   constructor(readonly events: SongEvent[], readonly windowMs = 95) {}
 
   tick(timeMs: number) {
     if (this.chord && timeMs - this.chord.firstMs > 55) {
-      this.miss(this.chord.event);
+      this.miss(this.chord.event, timeMs);
       this.chord = null;
     }
     while (this.cursor < this.events.length && this.events[this.cursor].timeMs + this.windowMs < timeMs) {
       const event = this.events[this.cursor++];
-      if (!this.consumed.has(event.id)) this.miss(event);
+      if (!this.consumed.has(event.id)) this.miss(event, timeMs);
     }
     for (const [id, event] of this.sustaining) {
       if (timeMs >= event.timeMs + event.durationMs) {
@@ -41,10 +47,13 @@ export class Scoring {
     this.held.add(lane);
     const event = this.chord?.event ?? this.nearest(lane, timeMs);
     if (!event || this.consumed.has(event.id) || !event.lanes.includes(lane)) return;
-    if (!this.chord) this.chord = { event, firstMs: timeMs, lanes: new Set() };
+    const offset = timeMs - event.timeMs;
+    if (!this.chord) this.chord = { event, firstMs: timeMs, lanes: new Set(), offsetMs: offset };
+    if (Math.abs(offset) > Math.abs(this.chord.offsetMs)) this.chord.offsetMs = offset;
     this.chord.lanes.add(lane);
     if (!event.lanes.every(key => this.chord!.lanes.has(key) && this.held.has(key))) return;
-    const perfect = Math.max(Math.abs(event.timeMs - timeMs), Math.abs(event.timeMs - this.chord.firstMs)) <= 45;
+    const offsetMs = Math.round(this.chord.offsetMs);
+    const perfect = Math.abs(this.chord.offsetMs) <= 45;
     this.consumed.add(event.id);
     this.chord = null;
     this.hits++;
@@ -52,7 +61,7 @@ export class Scoring {
     this.bestCombo = Math.max(this.bestCombo, this.combo);
     this.score += (perfect ? 100 : 70) * Math.min(4, 1 + Math.floor((this.combo - 1) / 10));
     if (event.durationMs) this.sustaining.set(event.id, event);
-    this.judgement = perfect ? 'Perfect' : 'Good';
+    this.feedback = { judgement: perfect ? 'Perfect' : 'Good', offsetMs, lanes: event.lanes, timeMs };
   }
 
   release(lane: number, timeMs: number) {
@@ -63,7 +72,7 @@ export class Scoring {
         if (timeMs >= event.timeMs + event.durationMs - 50) this.score += 30;
         else {
           this.combo = 0;
-          this.judgement = 'Sustain dropped';
+          this.feedback = { judgement: 'Sustain dropped', lanes: [lane], timeMs };
         }
         this.sustaining.delete(id);
       }
@@ -74,6 +83,7 @@ export class Scoring {
     this.held.clear();
     this.chord = null;
     this.sustaining.clear();
+    this.feedback = null;
   }
 
   finish() {
@@ -95,12 +105,12 @@ export class Scoring {
     return best;
   }
 
-  private miss(event: SongEvent) {
+  private miss(event: SongEvent, timeMs: number) {
     if (this.consumed.has(event.id)) return;
     this.consumed.add(event.id);
     if (this.chord?.event.id === event.id) this.chord = null;
     this.misses++;
     this.combo = 0;
-    this.judgement = 'Miss';
+    this.feedback = { judgement: 'Miss', lanes: event.lanes, timeMs };
   }
 }

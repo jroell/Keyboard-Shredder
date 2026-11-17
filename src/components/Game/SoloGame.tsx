@@ -135,6 +135,12 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
   }, [state, keys, calibration]);
 
   const game = scoring.current;
+  const feedback = state === 'playing' && game.feedback && time - calibration - game.feedback.timeMs < 650
+    ? game.feedback : null;
+  const timing = feedback?.offsetMs
+    ? `${Math.abs(feedback.offsetMs)} ms ${feedback.offsetMs < 0 ? 'early' : 'late'}`
+    : feedback?.offsetMs === 0 ? 'On time' : '';
+  const missed = feedback?.judgement === 'Miss' || feedback?.judgement === 'Sustain dropped';
   if (state === 'results') {
     const accuracy = Math.round(game.hits * 100 / events.length);
     return <section className="panel results">
@@ -154,11 +160,11 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
         {state === 'playing' && <button onClick={() => pauseAction.current()}>Pause</button>}
         <button onClick={leave}>Exit track</button>
       </div></header>
-    <div className="hud"><strong>Score {game.score}</strong><span>{game.judgement}</span><strong>{game.combo} combo</strong></div>
+    <div className="hud"><strong>Score {game.score}</strong><span className="hit-feedback">{feedback?.judgement}{timing && <small>{timing}</small>}</span><strong>{game.combo} combo</strong></div>
     <div className="board">
       <div aria-hidden="true">
       <div className="lanes">{keys.map((key, lane) => <div className="lane" key={key} style={{ color: laneColors[lane] }}>
-        <span className={game.held.has(lane) ? 'target held' : 'target'}>{key.replace(/^(Key|Digit)/, '')}</span>
+        <span className={`target${game.held.has(lane) ? ' held' : ''}${feedback?.lanes.includes(lane) ? missed ? ' missed' : ' hit' : ''}`}>{key.replace(/^(Key|Digit)/, '')}</span>
       </div>)}</div>
       {chart.beatsMs.filter(beat => beat >= time && beat <= time + lookahead).map(beat =>
         <div key={beat} className={chart.downbeatsMs.includes(beat) ? 'beat downbeat' : 'beat'} style={{ bottom: `${12 + (beat - time) * 75 / lookahead}%` }} />)}

@@ -62,3 +62,15 @@ test('Overlapping 95 ms windows credit the attack closest to the press', () => {
   game.finish();
   assert.deepEqual([game.hits, game.misses], [1, 1]);
 });
+
+test('A good hit 70 ms early reports its signed timing and successful lane', () => {
+  const game = new Scoring([{ id: 'note', timeMs: 1000, lanes: [2], durationMs: 0 }]);
+  game.press(2, 930);
+  assert.deepEqual(game.feedback, { judgement: 'Good', offsetMs: -70, lanes: [2], timeMs: 930 });
+});
+
+test('An expired chord identifies both missed lanes after the 95 ms hit window', () => {
+  const game = new Scoring([{ id: 'chord', timeMs: 1000, lanes: [0, 3], durationMs: 0 }]);
+  game.tick(1096);
+  assert.deepEqual(game.feedback, { judgement: 'Miss', lanes: [0, 3], timeMs: 1096 });
+});
