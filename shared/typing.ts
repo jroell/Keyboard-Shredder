@@ -24,6 +24,9 @@ const keyLayout = PRACTICE_ROWS.flatMap(({ keys }, row) => keys.map((code, index
   return { code, label, char: label.toLowerCase(), row: row as KeyInfo['row'], column, finger: columnFingers[column], hand: column < 5 ? 'L' : 'R' };
 }));
 keyLayout.push({ code: 'Space', label: 'Space', char: ' ', row: 4, column: 4.5, finger: 'thumb', hand: 'both' });
+// Backspace has its own sign in a lesson text. It sits past the right edge, under the right little finger.
+export const ERASE = '⌫';
+keyLayout.push({ code: 'Backspace', label: ERASE, char: ERASE, row: 0, column: 9, finger: 'R-pinky', hand: 'R' });
 
 // Capital letters and a few marks need Shift. They are their own "keys", written as Shift+<code>.
 const shiftedMarks: Record<string, string> = { Slash: '?', Digit1: '!' };
@@ -108,6 +111,7 @@ const units: { name: string; lessons: LessonRow[] }[] = [
     ['capital-words', 'Capital letters', 'Hold Shift with the little finger of the other hand, then press the letter.', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'words', 'umbra-samba', 30],
     ['proper-sentences', 'Proper sentences', 'Start each sentence with a capital and end it with a full stop.', '', 'sentences', 'copper-moon', 34],
     ['commas-apostrophes', 'Commas and apostrophes', 'Use your right middle finger for the comma and your right little finger for the apostrophe.', "'", 'sentences', 'lantern-lofi', 30],
+    ['backspace', 'Fix with Backspace', 'Type the wrong letter, erase it with Backspace and your right little finger, then type the right letter to finish the word.', ERASE, 'words', 'lantern-lofi', 24],
     ['questions', 'Questions and shouts', 'Hold Shift for the question mark and the exclamation mark.', '?!', 'sentences', 'voltage-parade', 36],
   ] },
   { name: 'Numbers', lessons: [
@@ -321,6 +325,17 @@ function typingGroups(length: number, options: TypingOptions): { groups: string[
   // The lesson that introduces the apostrophe draws on sentences that use it, and commas, every time.
   const sentences = options.kind === 'sentences' ? (preferred.has("'") ? PUNCTUATED : SENTENCES).filter(plain) : [];
   const words = options.kind !== 'drill' && !sentences.length ? WORDS.filter(word => plain(word) && word.length >= (options.minLength ?? 0)) : [];
+  // The Backspace lesson puts one slip in each word: a neighbouring key, the erase sign, then the right letter.
+  const rows = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+  const slip = (word: string) => {
+    const at = 1 + (Array.from(word).reduce((total, char) => total + char.charCodeAt(0), 0) % (word.length - 1));
+    const row = rows.find(keys => keys.includes(word[at]));
+    if (!row) return word;
+    const index = row.indexOf(word[at]);
+    const wrong = row[index + 1] ?? row[index - 1];
+    return word.slice(0, at) + wrong + ERASE + word.slice(at);
+  };
+  const fixing = preferred.has(ERASE) && options.kind === 'words';
   const vim = options.kind === 'drill' && options.keys.length <= 9 && ['KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyW', 'KeyB'].every(code => options.keys.includes(code));
   const cased = options.keys.some(needsShift);
   const marks = ['.', '?', '!'].filter(mark => allowed.has(mark));
@@ -335,10 +350,11 @@ function typingGroups(length: number, options: TypingOptions): { groups: string[
     ...(allowed.has('?') ? QUESTIONS.filter(plain).map(text => dress(text, 0).replace(/\.$/, '') + '?') : []),
     ...(allowed.has('!') ? SHOUTS.filter(plain).map(text => dress(text, 0).replace(/\.$/, '') + '!') : []),
   ];
-  const source = vim ? VIM_MOVES : sentences.length ? sentences : words.length >= 8 ? words : [];
+  const source = vim ? VIM_MOVES : sentences.length ? sentences : fixing ? words.filter(word => word.length >= 3 && word.length <= 6 && /^[a-z]+$/.test(word)).map(slip).filter(word => word.includes(ERASE))
+    : words.length >= 8 ? words.filter(word => !word.includes(ERASE)) : [];
   // A lesson on question and exclamation marks is mostly questions and shouts, with a few plain statements between them.
   const statements = source.filter(text => text !== 'the quick brown fox jumps over the lazy dog').slice(0, Math.ceil(marked.length / 4));
-  const bank = (options.kind === 'sentences' && marked.length ? [...marked, ...statements.map(dress)] : source.map(dress)).filter(isTypeable);
+  const bank = (options.kind === 'sentences' && marked.length ? [...marked, ...statements.map(dress)] : fixing ? source : source.map(dress)).filter(isTypeable);
   const preferredWords = sentences.length ? [] : bank.filter(word => Array.from(word).some(char => preferred.has(char)));
   const separator = bank.length || options.keys.includes('Space') ? ' ' : '';
   const groups: string[] = [];

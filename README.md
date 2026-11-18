@@ -6,7 +6,7 @@ Keyboard Shredder is a browser rhythm game. Gems slide down a 3D guitar neck, an
 
 - **Quick play:** Pick a song, a difficulty and optional modifiers. The list plays a preview of the highlighted song and shows your best stars and grade.
 - **World tour:** Play ten venues and a sunrise encore across 43 songs. Hit 60% of the notes to clear a song and unlock the next. Tour with a friend is an online co-op tour with one team target.
-- **Typing academy:** Study 31 lessons in seven units, including capitals, coder keys and a Vim lesson. Finger columns are colour coded, and an on-screen keyboard lights the next key and names the finger. Pass key drills at 80% accuracy and words and sentences at 85%. Results show words per minute, accuracy and a heat map of missed keys.
+- **Typing academy:** Study 32 lessons in seven units, including capitals, coder keys and a Vim lesson. Finger columns are colour coded, and an on-screen keyboard lights the next key and names the finger. Pass key drills at 80% accuracy and words and sentences at 85%. Results show words per minute, accuracy and a heat map of missed keys.
 - **Party mode:** Two players share one keyboard. Player 1 uses A S D F G and Space. Player 2 uses H J K L ; and Enter. Battle is highest score wins, and overdrive shakes the other player's neck. Co-op uses one team score, and solo play can battle the computer at three skill levels.
 - **Play online:** Create an invite link, send it to a friend, and both press Ready. Choose head-to-head play or a co-op tour. The server keeps both players in sync and scores both, and duels award badges.
 - **Daily challenge:** One song, difficulty and modifier set is fixed for everyone each UTC day, with its own leaderboard.
@@ -35,7 +35,7 @@ Start from song select ("Practice") or the results song map at 50%, 75% or 100% 
 
 ## Typing academy
 
-There are 31 lessons in seven units: home row, top row, bottom row, fluency, capitals and punctuation, numbers, and coder keys (including Vim motions such as hjkl, gg and wb). By default the song waits at each letter until you type it; only wrong keys count against accuracy. "Keep the beat" turns that off for a rhythm challenge.
+There are 32 lessons in seven units: home row, top row, bottom row, fluency, capitals and punctuation, numbers, and coder keys (including Vim motions such as hjkl, gg and wb). By default the song waits at each letter until you type it; only wrong keys count against accuracy. "Keep the beat" turns that off for a rhythm challenge.
 
 ## Progress and leaderboards
 
