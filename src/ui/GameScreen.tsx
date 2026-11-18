@@ -29,7 +29,7 @@ export type RunSetup = {
   typing?: { options: TypingOptions; lesson?: TypingLesson };
   party?: { coop: boolean; cpu?: number; names: [string, string]; difficulties?: [Difficulty, Difficulty] };
   /** Several songs played back to back as one set, with a running total. */
-  set?: { name: string; ids: string[]; index: number; score: number; ratings: number[] };
+  set?: { name: string; ids: string[]; index: number; score: number; ratings: number[]; scores?: number[] };
   /** Loop one part of the song at a chosen speed. Nothing is saved or ranked. */
   practice?: { startMs: number; endMs: number; rate: number };
   tour?: boolean;

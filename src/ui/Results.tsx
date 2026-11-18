@@ -4,6 +4,7 @@ import { difficultyNames } from '../../shared/difficulty';
 import { MODS, finalScore, isRanked } from '../../shared/modifiers';
 import { levelFor } from '../../shared/progression';
 import { starsFor } from '../../shared/rating';
+import { TOUR_TRACKS } from '../../shared/tour';
 import { keyLabel } from '../../shared/practice';
 import { weakestKeys } from '../../shared/typing';
 import type { Recording } from '../lib/recording';
@@ -41,6 +42,8 @@ function useCountUp(target: number, delay: number, duration = 1100) {
   }, [target, delay, duration]);
   return value;
 }
+
+const songTitles: Record<string, string> = Object.fromEntries(TOUR_TRACKS.map(track => [track.id, track.title]));
 
 export function challengeLink(songId: string, difficulty: string, score: number, name: string, mods: string[]) {
   const link = new URL(location.origin + location.pathname);
@@ -262,7 +265,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         {!typing && <div className="grade" data-grade={summary.grade[0]} aria-label={`Grade ${summary.grade}`}>{summary.grade}</div>}
       </div>}
 
-      {setup.set && <p className={`challenge-result ${failed ? 'lost' : 'won'}`} role="status">
+      {setup.set && !(!failed && songCleared(summary) && setup.set.index + 1 === setup.set.ids.length) && <p className={`challenge-result ${failed || !songCleared(summary) ? 'lost' : 'won'}`} role="status">
         {failed || !songCleared(summary) ? `The set ends here, ${setup.set.index + 1} of ${setup.set.ids.length} songs in. Set total ${(setup.set.score + summary.score).toLocaleString()}.`
           : setup.set.index + 1 < setup.set.ids.length ? `Set total ${(setup.set.score + summary.score).toLocaleString()} after ${setup.set.index + 1} of ${setup.set.ids.length} songs.`
           : (() => {
@@ -271,10 +274,23 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
             return `Set complete: ${(setup.set.score + summary.score).toLocaleString()} points, ${average.toFixed(1)}% average timing rating. ${average >= 80 ? 'Gold record earned!' : 'Average 80% for the gold record.'}`;
           })()}</p>}
       {setup.tutorial && <p className="offset-hint">Here to learn typing? The Typing academy on the main menu starts with two keys and waits for you.</p>}
+      {setup.set && !failed && songCleared(summary) && setup.set.index + 1 === setup.set.ids.length && (() => {
+        const ratings = [...setup.set.ratings, summary.rating];
+        const scores = [...(setup.set.scores ?? []), summary.score];
+        const average = ratings.reduce((total, value) => total + value, 0) / ratings.length;
+        return <div className="set-summary" data-gold={average >= 80 ? 'true' : undefined}>
+          <div className="record" aria-hidden="true"><i /></div>
+          <div>
+            <h2>{average >= 80 ? 'Gold record' : 'Set finished'}: {setup.set.name}</h2>
+            <ol>{setup.set.ids.map((id, index) => <li key={id}><span>{songTitles[id] ?? `Song ${index + 1}`}</span><em>{(scores[index] ?? 0).toLocaleString()}</em><b>{(ratings[index] ?? 0).toFixed(1)}%</b></li>)}</ol>
+            <p>Total {scores.reduce((total, value) => total + value, 0).toLocaleString()} · average timing rating {average.toFixed(1)}% on {difficultyNames[setup.difficulty]}</p>
+          </div>
+        </div>;
+      })()}
       {challenge && <p className={`challenge-result ${beat ? 'won' : 'lost'}`} role="status">
         {beat ? `You beat ${challenge.name} by ${(summary.score - challenge.score).toLocaleString()}. Send the challenge back!`
           : `${challenge.name} still leads by ${(challenge.score - summary.score).toLocaleString()}. One more try?`}</p>}
-      {outcome.tour && <p className="challenge-result won" role="status">
+      {outcome.tour && !setup.set && <p className="challenge-result won" role="status">
         {outcome.tour.firstClear ? 'Song cleared. The next show is unlocked.' : outcome.tour.cleared ? 'Song cleared.' : 'Hit 60% of the notes to clear this song.'}</p>}
       {outcome.lesson && <p className={`challenge-result ${outcome.lesson.passed ? 'won' : 'lost'}`} role="status">
         {outcome.lesson.passed ? `${outcome.lesson.stars === 3 ? 'Three stars. Nothing left to prove here.' : 'Reach 97% accuracy for three stars.'}${outcome.lesson.firstPass && outcome.lesson.next ? ` Unlocked: ${outcome.lesson.next.title}.` : ''}`
