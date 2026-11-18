@@ -9,8 +9,8 @@ export type LaneLayout = {
   color: (lane: number) => string;
   /** Text printed on the gem. Empty for plain gems. */
   gemLabel: (lane: number) => string;
-  /** `unused` marks a ring no note in this chart uses. It is drawn faint and without its label. */
-  targets: { label: string; color: string; unused?: boolean }[];
+  /** `unused` marks a ring no note in this chart uses. It is drawn faint and without its label. `hidden` leaves it out. */
+  targets: { label: string; color: string; unused?: boolean; hidden?: boolean }[];
 };
 
 export type HighwayLook = { theme: string; gem: string; fx: string; lookahead: number; hidden: boolean; calm: boolean; /** Show a plain tick for hits, for modes that do not judge timing. */ plainHits?: boolean };
@@ -593,6 +593,8 @@ export class Highway {
       const down = held.has(column);
       const flash = this.targetFlash[column];
       const flashing = flash && flash.until > now ? (flash.until - now) / 220 : 0;
+      // A typing lesson leaves out the rings it does not use. A song chart draws its unused lanes faint, so the neck keeps five lanes.
+      if (target.hidden && !down && !flashing) continue;
       if (target.unused && !down && !flashing) {
         if (!top) {
           ellipse(ctx, x, y, rx, ry);
