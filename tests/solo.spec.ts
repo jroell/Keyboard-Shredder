@@ -189,3 +189,115 @@ test('A failed separation can be retried from the saved recording', async ({ pag
     await rm(data, { recursive: true, force: true });
   }
 });
+
+test('Two players share an invite, land the same chord within 90 ms of each other, and keep their duel badges', async ({ page, browser }, testInfo) => {
+  test.skip(!!live, 'Multiplayer sync uses the deterministic fixture.');
+  const data = await mkdtemp(join(tmpdir(), 'keyboard-duel-'));
+  const other = await browser.newContext({ viewport: { width: 360, height: 800 } });
+  const guest = await other.newPage();
+  let server: Awaited<ReturnType<typeof launch>> | undefined;
+  try {
+    server = await launch(data);
+    const { url } = server;
+    const created = await page.request.post(url + '/api/generations', {
+      headers, data: { prompt: 'Duel sync test', durationSeconds: 30, key: 'duel-fixture-once' },
+    });
+    const job = await created.json() as Job;
+    await expect.poll(async () => {
+      const status = await (await page.request.get(`${url}/api/generations/${job.id}`, { headers })).json() as Job;
+      if (status.stage === 'failed') throw new Error(status.error);
+      return status.stage;
+    }, { timeout: 140_000 }).toBe('ready');
+    const { chart } = await (await page.request.get(`${url}/api/songs/${job.id}`, { headers })).json() as { chart: Chart };
+
+    await page.goto(url);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    const forged = await page.request.put(url + '/api/profile', {
+      headers, data: { name: 'Riff Captain', palette: 'Neon', avatar: 'Lightning', speed: 1900, badge: 'winner' },
+    });
+    expect(forged.status()).toBe(400);
+    await page.getByText('Player profile', { exact: true }).click();
+    await page.getByLabel('Display name').fill('Riff Captain');
+    await page.getByLabel('Lane palette').selectOption('Neon');
+    await page.getByLabel('Avatar').selectOption('Lightning');
+    await page.getByRole('button', { name: 'Save profile' }).click();
+    await expect(page.getByText('Profile saved.')).toBeVisible();
+    await page.getByRole('button', { name: 'Head-to-head' }).click();
+    await page.getByRole('combobox', { name: /^Track/ }).selectOption(job.id);
+    await page.getByRole('button', { name: 'Create invite' }).click();
+    const invite = await page.getByLabel('Invite link').inputValue();
+    const id = new URL(invite).searchParams.get('duel')!;
+    const guestHeaders = { Authorization: 'Bearer test-guest' };
+    expect((await guest.request.get(`${url}/api/duels/${id}/audio`, { headers: guestHeaders })).status()).toBe(404);
+    await guest.goto(invite + '&player=test-guest');
+    await expect(guest.getByText('Riff Captain', { exact: true })).toBeVisible();
+    await expect(page.getByText('Guitarist', { exact: true })).toBeVisible();
+    for (const endpoint of ['track', 'audio']) {
+      const hostAsset = await page.request.get(`${url}/api/duels/${id}/${endpoint}`, { headers });
+      const guestAsset = await guest.request.get(`${url}/api/duels/${id}/${endpoint}`, { headers: guestHeaders });
+      expect(await guestAsset.body()).toEqual(await hostAsset.body());
+    }
+    await guest.screenshot({ path: testInfo.outputPath('duel-lobby-phone.png'), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath('duel-lobby-dark.png'), fullPage: true });
+    expect(await guest.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+    await page.getByRole('button', { name: 'Ready up' }).click();
+    await expect(page.getByRole('button', { name: 'Ready', exact: true })).toBeDisabled();
+    await guest.getByRole('button', { name: 'Ready up' }).click();
+    const chord = chart.events.normal.find(event => event.lanes.length > 1 && event.timeMs > 800)!;
+    const startTimes = await Promise.all([page, guest].map(async client => {
+      const observed = await client.getByRole('progressbar', { name: 'Track progress' }).evaluate((element, target) =>
+        new Promise<{ elapsed: number; wall: number }>((resolve, reject) => {
+          const end = performance.now() + 20_000;
+          const wait = () => {
+            const elapsed = (element as HTMLProgressElement).value;
+            if (elapsed >= target) resolve({ elapsed, wall: Date.now() });
+            else if (performance.now() > end) reject(new Error('The shared track did not reach the chord.'));
+            else requestAnimationFrame(wait);
+          };
+          wait();
+        }), chord.timeMs - 30);
+      await Promise.all(chord.lanes.map(lane => client.keyboard.down(keys[lane])));
+      await Promise.all(chord.lanes.map(lane => client.keyboard.up(keys[lane])));
+      return observed.wall - observed.elapsed;
+    }));
+    const skew = Math.abs(startTimes[0] - startTimes[1]);
+    await testInfo.attach('playback-skew-ms', { body: String(skew), contentType: 'text/plain' });
+    expect(skew).toBeLessThan(90);
+    console.log(`Two-client playback skew: ${skew.toFixed(1)} ms`);
+    for (const client of [page, guest]) {
+      await expect(client.getByLabel('Duel scoreboard').getByText(/^(70|100) pts$/)).toHaveCount(2);
+    }
+    const beforeReconnect = Number(await guest.getByRole('progressbar', { name: 'Track progress' }).getAttribute('value'));
+    await guest.reload();
+    await guest.getByRole('button', { name: 'Join playback' }).click();
+    await expect.poll(() => guest.getByRole('progressbar', { name: 'Track progress' }).getAttribute('value').then(Number))
+      .toBeGreaterThan(beforeReconnect);
+    await expect(guest.getByLabel('Duel scoreboard').getByText(/^(70|100) pts$/)).toHaveCount(2);
+    for (const client of [page, guest]) {
+      await expect(client.getByText(/Earned badges: First duel/)).toBeVisible({ timeout: 45_000 });
+    }
+    await page.getByRole('button', { name: 'Set up rematch' }).click();
+    await expect(page.getByRole('button', { name: 'Ready up' })).toBeVisible();
+    await guest.reload();
+    await expect(guest.getByRole('button', { name: 'Ready up' })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to studio' }).click();
+    await page.getByText('Player profile', { exact: true }).click();
+    await page.getByLabel('Featured badge').selectOption('debut');
+    await page.getByRole('button', { name: 'Save profile' }).click();
+    await expect(page.getByText('Profile saved.')).toBeVisible();
+    await stop(server.child);
+    server = await launch(data);
+    await page.goto(server.url);
+    await page.getByText('Player profile', { exact: true }).click();
+    await expect(page.getByLabel('Lane palette')).toHaveValue('Neon');
+    await expect(page.getByLabel('Featured badge')).toHaveValue('debut');
+    await expect(page.locator('.player-card').getByText('First duel', { exact: true })).toBeVisible();
+    await expect(page.getByText(/1 completed duels/)).toBeVisible();
+  } finally {
+    try { await other.close(); }
+    finally {
+      if (server) await stop(server.child);
+      await rm(data, { recursive: true, force: true });
+    }
+  }
+});

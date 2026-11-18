@@ -8,7 +8,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   workers: 1,
   reporter: 'list',
-  use: { screenshot: 'only-on-failure', trace: 'retain-on-failure' },
+  use: { actionTimeout: 15_000, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   projects: process.env.LIVE_MUSIC_SECONDS
     ? [{ name: 'chromium', use: { browserName: 'chromium' } }]
     : [{ name: 'chromium', use: { browserName: 'chromium' } }, { name: 'firefox', use: { browserName: 'firefox' } }],
