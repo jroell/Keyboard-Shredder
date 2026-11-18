@@ -663,7 +663,7 @@ export class Highway {
       if (tailDepth > depth) {
         for (const lane of event.lanes) {
           const column = layout.column(lane);
-          const color = missed ? '#666672' : boosting ? BOOST_COLOR : layout.color(lane);
+          const color = missed ? '#666672' : layout.color(lane);
           const jitter = sustaining ? Math.sin(now / 28 + lane) * unit * (0.03 + 0.16 * this.whammy) : 0;
           const x0 = this.px(column, depth, timeMs) + jitter;
           const x1 = this.px(column, tailDepth, timeMs);

@@ -372,7 +372,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       wpm: typing ? wpm(scoring.hits, Math.max(1000, game.wait ? game.playedMs : span)) : undefined, won: partyWin, lessonId: setup.typing?.lesson?.id, genre: song.genre,
     };
     const typingAccuracy = typing ? scoring.accuracy : undefined;
-    const counted = bot === undefined && !matchRef.current && !setup.practice;
+    // Slow-mo is practice: it earns nothing and leaves records alone.
+    const counted = bot === undefined && !matchRef.current && !setup.practice && playbackRate(setup.mods) === 1;
     const outcome = counted ? completeRun(summary, {
       tourAccuracy: setup.tour ? Math.floor(100 * scoring.hits / Math.max(1, events.length + scoring.wrongKeys)) : undefined,
       lesson: setup.typing?.lesson, typingAccuracy, keyStats, daily: setup.daily,
@@ -469,7 +470,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     } else if (event.type === 'boost') {
       sfx.play('boost-on', { pan });
       sfx.play('crowd-roar', { intensity: 0.8 });
-      callout(setup.party && !setup.party.coop ? 'Overdrive attack!' : 'Overdrive ×2', 'boost', player);
+      if (setup.party && !setup.party.coop) callout('Overdrive attack!', 'boost', player);
       if (setup.party && !setup.party.coop) sfx.play('attack', { pan: -pan });
     }
   }
@@ -634,14 +635,14 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
               const size = chart.durationMs / SECTIONS;
               const on = setup.practice!.startMs < (index + 1) * size - 1 && setup.practice!.endMs > index * size + 1;
               return <button key={index} type="button" className={on ? 'on' : ''} aria-pressed={on}
-                onClick={() => retune({ ...setup, practice: { ...setup.practice!, startMs: Math.round(index * size), endMs: Math.round((index + 1) * size) } })}>{index + 1}</button>;
+                onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, startMs: Math.round(index * size), endMs: Math.round((index + 1) * size) } }); }}>{index + 1}</button>;
             })}
             <button type="button" className={setup.practice.startMs === 0 && setup.practice.endMs >= chart.durationMs ? 'on' : ''}
-              onClick={() => retune({ ...setup, practice: { ...setup.practice!, startMs: 0, endMs: chart.durationMs } })}>All</button>
+              onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, startMs: 0, endMs: chart.durationMs } }); }}>All</button>
           </div>
           <div className="segments" role="group" aria-label="Speed">
             {[0.5, 0.75, 1].map(rate => <button key={rate} type="button" className={setup.practice!.rate === rate ? 'on' : ''} aria-pressed={setup.practice!.rate === rate}
-              onClick={() => retune({ ...setup, practice: { ...setup.practice!, rate } })}>{rate * 100}% speed</button>)}
+              onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, rate } }); }}>{rate * 100}% speed</button>)}
           </div>
           <p className="muted">The section loops until you stop. Nothing here is scored or ranked.</p>
         </div>}
