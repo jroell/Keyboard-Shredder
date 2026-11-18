@@ -6,7 +6,8 @@ import type { Difficulty } from '../../shared/song';
 import { useApp } from '../App';
 import { stageArt } from '../lib/stage-art';
 import { sfx } from '../game/sfx';
-import { saveStore, settingsStore, tourStore, useCell } from '../state/store';
+import { saveStore, setStore, settingsStore, tourStore, useCell } from '../state/store';
+import { Disc3 } from 'lucide-react';
 import { Screen, Stars } from './common';
 
 export default function TourScreen() {
@@ -14,6 +15,11 @@ export default function TourScreen() {
   const progress = useCell(tourStore);
   const settings = useCell(settingsStore);
   const save = useCell(saveStore);
+  const sets = useCell(setStore);
+  const headline = (name: string, ids: string[]) => {
+    sfx.play('ui-select');
+    void app.launch(ids[0], { mode: 'tour', difficulty: settings.difficulty, mods: [], tour: true, set: { name, ids, index: 0, score: 0, ratings: [] } }, { name: 'tour' });
+  };
   const nextId = tourStart(progress);
   const next = TOUR_TRACKS.find(track => track.id === nextId);
   const cleared = TOUR_TRACKS.filter(track => isTourSongCleared(track.id, progress)).length;
@@ -64,6 +70,13 @@ export default function TourScreen() {
               </li>;
             })}
           </ul>
+          {venue.tracks.length > 1 && <div className="venue-set">
+            <button disabled={!done} onClick={() => headline(venue.name, venue.tracks.map(track => track.id))}
+              title={done ? 'Play every song here back to back for one score' : 'Clear every song here to unlock the headline set'}>
+              <Disc3 size={15} aria-hidden="true" />Headline set</button>
+            {sets[venue.name] ? <span className={sets[venue.name].rating >= 80 ? 'gold' : ''}>{sets[venue.name].rating >= 80 ? 'Gold record · ' : ''}{sets[venue.name].score.toLocaleString()}</span>
+              : <span>{done ? `${venue.tracks.length} songs, one score` : 'Clear the venue to unlock'}</span>}
+          </div>}
         </li>;
       })}
     </ol>

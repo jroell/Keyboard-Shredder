@@ -103,6 +103,11 @@ export const keyStatsStore = cell<KeyStats>('ks:keystats', record((entry): entry
   const item = entry as KeyStats[string];
   return !!item && finite(item.attempts) && finite(item.hits) && finite(item.timingTotal);
 }));
+/** Best result for each venue's headline set: total score and average timing rating. */
+export const setStore = cell<Record<string, { score: number; rating: number }>>('ks:sets', record((entry): entry is { score: number; rating: number } => {
+  const item = entry as { score: number; rating: number };
+  return !!item && finite(item.score) && finite(item.rating);
+}));
 export const wpmStore = cell<WpmEntry[]>('ks:wpm', value => Array.isArray(value)
   ? value.filter(entry => entry && finite(entry.at) && finite(entry.wpm) && finite(entry.accuracy)).slice(-80) : []);
 

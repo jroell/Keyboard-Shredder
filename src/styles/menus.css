@@ -144,6 +144,9 @@
 .venue-tracks button { width: 100%; justify-content: flex-start; border-radius: 10px; min-height: 44px; background: #ffffff0a; border-color: transparent; font-weight: 600; }
 .venue-tracks button span:first-of-type { flex: 1; text-align: left; }
 .venue-tracks button.current { border-color: var(--pink); background: #ff2d7526; }
+.venue-set { display: flex; gap: .7rem; align-items: center; padding: 0 .8rem .8rem; font-size: .82rem; color: var(--muted); }
+.venue-set button { min-height: 40px; font-size: .88rem; padding: .3rem .9rem; }
+.venue-set .gold { color: var(--gold); font-weight: 700; }
 .venue-tracks small { color: var(--muted); }
 
 /* Academy */

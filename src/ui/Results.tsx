@@ -247,6 +247,14 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         {!typing && <div className="grade" data-grade={summary.grade[0]} aria-label={`Grade ${summary.grade}`}>{summary.grade}</div>}
       </div>}
 
+      {setup.set && <p className={`challenge-result ${failed ? 'lost' : 'won'}`} role="status">
+        {failed ? `The set ends here, ${setup.set.index + 1} of ${setup.set.ids.length} songs in. Set total ${(setup.set.score + summary.score).toLocaleString()}.`
+          : setup.set.index + 1 < setup.set.ids.length ? `Set total ${(setup.set.score + summary.score).toLocaleString()} after ${setup.set.index + 1} of ${setup.set.ids.length} songs.`
+          : (() => {
+            const ratings = [...setup.set.ratings, summary.rating];
+            const average = ratings.reduce((total, value) => total + value, 0) / ratings.length;
+            return `Set complete: ${(setup.set.score + summary.score).toLocaleString()} points, ${average.toFixed(1)}% average timing rating. ${average >= 80 ? 'Gold record earned!' : 'Average 80% for the gold record.'}`;
+          })()}</p>}
       {challenge && <p className={`challenge-result ${beat ? 'won' : 'lost'}`} role="status">
         {beat ? `You beat ${challenge.name} by ${(summary.score - challenge.score).toLocaleString()}. Send the challenge back!`
           : `${challenge.name} still leads by ${(challenge.score - summary.score).toLocaleString()}. One more try?`}</p>}

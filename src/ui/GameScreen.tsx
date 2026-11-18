@@ -28,6 +28,8 @@ export type RunSetup = {
   mods: ModId[];
   typing?: { options: TypingOptions; lesson?: TypingLesson };
   party?: { coop: boolean; cpu?: number; names: [string, string]; difficulties?: [Difficulty, Difficulty] };
+  /** Several songs played back to back as one set, with a running total. */
+  set?: { name: string; ids: string[]; index: number; score: number; ratings: number[] };
   /** Loop one part of the song at a chosen speed. Nothing is saved or ranked. */
   practice?: { startMs: number; endMs: number; rate: number };
   tour?: boolean;
@@ -612,10 +614,12 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
 
     {(state === 'ready' || state === 'starting') && !result && <div className="stage-cover">
       <div className="ready-card">
-        <p className="eyebrow">{setup.practice ? 'Section practice' : setup.challenge ? 'Challenge' : setup.tutorial ? 'Warm-up' : setup.daily ? 'Daily challenge'
+        <p className="eyebrow">{setup.set ? `${setup.set.name} · song ${setup.set.index + 1} of ${setup.set.ids.length}` : setup.practice ? 'Section practice' : setup.challenge ? 'Challenge' : setup.tutorial ? 'Warm-up' : setup.daily ? 'Daily challenge'
           : setup.party ? (setup.party.coop ? 'Party co-op' : 'Party battle')
           : typing ? 'Typing academy' : setup.tour ? 'Tour' : match ? 'Online' : 'Quick play'}</p>
         <h2>{song.title}</h2>
+        {setup.set && setup.set.index > 0 && <p className="ready-challenge">Set total so far: <strong>{setup.set.score.toLocaleString()}</strong></p>}
+        {setup.set && setup.set.index === 0 && <p className="ready-goal">A headline set: {setup.set.ids.length} songs back to back, one running score. Average an 80% timing rating for a gold record. Being booed off ends the set.</p>}
         {setup.challenge && <p className="ready-challenge">Beat {setup.challenge.name}: <strong>{setup.challenge.score.toLocaleString()}</strong></p>}
         <p className="ready-mode">{modeLine} · {chart.bpm} BPM</p>
         <p className="ready-counts">{players.map((player, index) => {

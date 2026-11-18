@@ -12,7 +12,7 @@ import { loadRecording, type Recording } from './lib/recording';
 import { previewSong, stopPreview } from './lib/preview';
 import { sfx } from './game/sfx';
 import { startMenuPad } from './game/gamepad';
-import { saveStore, settingsStore, tourStore, useCell } from './state/store';
+import { saveStore, setStore, settingsStore, tourStore, useCell } from './state/store';
 import GameScreen, { type RunResult, type RunSetup } from './ui/GameScreen';
 import Title from './ui/Title';
 import MainMenu from './ui/MainMenu';
@@ -231,10 +231,26 @@ export default function App() {
 
   const api: AppApi = { config, auth, user, songs, profile, go, launch, startLesson, refreshSongs, saveProfile, refreshProfile, loading, error, setError };
 
+  const recorded = useRef<RunResult>(null);
   const next = useCallback((result: RunResult) => {
     if (route.name !== 'play') return undefined;
     const { setup, recording, back } = route;
     if (setup.practice) return undefined;
+    if (setup.set) {
+      const { set } = setup;
+      const score = set.score + result.summary.score;
+      const ratings = [...set.ratings, result.summary.rating];
+      const last = set.index + 1 >= set.ids.length || result.summary.failed;
+      if (!last) return { label: `Next song: ${songs.find(song => song.id === set.ids[set.index + 1])?.title ?? 'next'}`,
+        run: () => void launch(set.ids[set.index + 1], { ...setup, set: { ...set, index: set.index + 1, score, ratings } }, back) };
+      if (!result.summary.failed && recorded.current !== result) {
+        recorded.current = result;
+        const rating = ratings.reduce((total, value) => total + value, 0) / ratings.length;
+        const previous = setStore.get()[set.name];
+        if (!previous || score > previous.score) setStore.set(all => ({ ...all, [set.name]: { score, rating: Math.max(rating, previous?.rating ?? 0) } }));
+      }
+      return undefined;
+    }
     if (setup.tutorial) return { label: 'Pick a song', run: () => go({ name: 'songs' }) };
     if (result.summary.failed && !setup.typing && !setup.party && !setup.daily && !setup.challenge) {
       const easier = DIFFICULTIES[DIFFICULTIES.indexOf(setup.difficulty) - 1];
@@ -264,7 +280,7 @@ export default function App() {
 
   let view: ReactNode;
   if (route.name === 'play') {
-    view = <GameScreen key={`${route.recording.song.id}:${route.setup.mode}:${route.setup.difficulty}:${route.setup.typing?.lesson?.id ?? ''}:${JSON.stringify(route.setup.practice ?? '')}`}
+    view = <GameScreen key={`${route.recording.song.id}:${route.setup.set?.index ?? ''}:${route.setup.mode}:${route.setup.difficulty}:${route.setup.typing?.lesson?.id ?? ''}:${JSON.stringify(route.setup.practice ?? '')}`}
       retune={setup => setRoute({ ...route, setup })}
       recording={route.recording} setup={route.setup} onExit={() => go(route.back)} next={next}
       exitLabel={route.back.name === 'tour' ? 'Back to tour' : route.back.name === 'party' ? 'Change song or players' : route.back.name === 'academy' ? 'Back to academy' : route.back.name === 'songs' ? 'Back to songs' : 'Back to menu'} />;
