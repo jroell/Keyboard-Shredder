@@ -346,3 +346,6 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
   .songs-screen { padding-bottom: 60px; }
   .song-list { max-height: calc(100vh - 130px); }
 }
+
+.menu-player { display: flex; gap: .5rem; align-items: center; }
+@media (max-width: 520px) { .menu-player .ghost { display: none; } }

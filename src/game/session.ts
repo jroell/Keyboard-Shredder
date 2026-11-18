@@ -400,7 +400,8 @@ export class GameSession {
       if (shifted || plain || this.options.strayCodes?.has(event.code)) { scoring.stray(waited.timeMs); this.confused.push(waited.lanes[0]); return true; }
       return false;
     }
-    if (this.wait && this.transport && !event.repeat && this.transport.inputTimeMs(event.timeStamp) >= this.offset) {
+    // The last half second of the count-in already accepts the first letter, so an eager start is not lost.
+    if (this.wait && this.transport && !event.repeat && this.transport.inputTimeMs(event.timeStamp) >= this.offset - 500) {
       // A quick typist may run ahead of the song: the next letter counts as soon as it is typed.
       const scoring = this.scorings[0];
       const events = this.options.players[0].events;

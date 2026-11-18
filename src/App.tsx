@@ -218,7 +218,7 @@ export default function App() {
 
   const startLesson = useCallback((lesson: TypingLesson, back: Route = { name: 'academy' }) => launch(lesson.songId, {
     mode: 'typing', difficulty: lesson.difficulty, mods: [],
-    typing: { lesson, options: { keys: lesson.keys, newKeys: lesson.newKeys, kind: lesson.kind, difficulty: lesson.difficulty, seed: Date.now() % 100_000 } },
+    typing: { lesson, options: { keys: lesson.keys, newKeys: lesson.newKeys, kind: lesson.kind, difficulty: lesson.difficulty, seed: Date.now() % 100_000, minLength: lesson.id === 'longer-words' ? 5 : undefined } },
   }, back), [launch]);
 
   const saveProfile = useCallback(async (value: Profile) => {

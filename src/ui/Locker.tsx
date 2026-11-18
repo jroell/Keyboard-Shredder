@@ -23,7 +23,10 @@ export default function Locker() {
   const app = useApp();
   const save = useCell(saveStore);
   const settings = useCell(settingsStore);
-  const [tab, setTab] = useState<typeof TABS[number]>('Style');
+  const [tab, setTab] = useState<typeof TABS[number]>(() => {
+    try { const wanted = sessionStorage.getItem('ks:lockerTab'); sessionStorage.removeItem('ks:lockerTab'); return wanted === 'Profile' ? 'Profile' : 'Style'; }
+    catch { return 'Style'; }
+  });
   const [name, setName] = useState(save.name);
   const [status, setStatus] = useState('');
   const [newName, setNewName] = useState('');

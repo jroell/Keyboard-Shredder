@@ -99,7 +99,7 @@ const units: { name: string; lessons: LessonRow[] }[] = [
     ['all-letter-words', 'All letter words', 'Bring each finger back to the home row between reaches.', '', 'words', 'blacktop-sparks', 28],
   ] },
   { name: 'Fluency', lessons: [
-    ['common-words', 'Common words', 'Keep your fingers relaxed and tap Space with a thumb.', '', 'words', 'blacktop-sparks', 30],
+    ['common-words', 'Word mix', 'Keep your fingers relaxed and tap Space with a thumb.', '', 'words', 'blacktop-sparks', 30],
     ['longer-words', 'Longer words', 'Let each finger take its own column through the whole word.', '', 'words', 'midnight-switch', 33],
     ['sentences', 'Sentences', 'Keep your fingers near the home row and use a thumb between words.', '', 'sentences', 'copper-moon', 36],
     ['speed-run', 'Speed run', 'Use light taps and return your fingers to the home row as you pick up speed.', '', 'sentences', 'voltage-parade', 40],
@@ -228,6 +228,8 @@ export type TypingOptions = {
   kind: LessonKind;
   difficulty: Difficulty;
   seed: number;
+  /** Only use words at least this long. */
+  minLength?: number;
 };
 export type TypingChart = {
   keys: string[];
@@ -292,7 +294,7 @@ function typingGroups(length: number, options: TypingOptions): { groups: string[
   const isTypeable = (phrase: string) => Array.from(phrase).every(char => char === ' ' || allowed.has(char));
   const plain = (phrase: string) => Array.from(phrase).every(char => char === ' ' || allowed.has(char));
   const sentences = options.kind === 'sentences' ? SENTENCES.filter(plain) : [];
-  const words = options.kind !== 'drill' && !sentences.length ? WORDS.filter(plain) : [];
+  const words = options.kind !== 'drill' && !sentences.length ? WORDS.filter(word => plain(word) && word.length >= (options.minLength ?? 0)) : [];
   const vim = options.kind === 'drill' && options.keys.length <= 9 && ['KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyW', 'KeyB'].every(code => options.keys.includes(code));
   const cased = options.keys.some(needsShift);
   const marks = ['.', '?', '!'].filter(mark => allowed.has(mark));

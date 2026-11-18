@@ -73,7 +73,10 @@ export default function MainMenu() {
     <div className="menu-art" key={current.id} aria-hidden="true" />
     <header className="menu-head">
       <div className="brand"><Guitar aria-hidden="true" /><span>Keyboard Shredder</span></div>
-      <PlayerChip onClick={() => app.go({ name: 'locker' })} />
+      <div className="menu-player">
+        <button className="ghost" onClick={() => { try { sessionStorage.setItem('ks:lockerTab', 'Profile'); } catch { /* optional */ } app.go({ name: 'locker' }); }}>Switch player</button>
+        <PlayerChip onClick={() => app.go({ name: 'locker' })} />
+      </div>
     </header>
     <nav className="menu-list" aria-label="Main menu">
       {items.map((item, itemIndex) => <button key={item.id} className={itemIndex === index ? 'active' : ''}

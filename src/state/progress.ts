@@ -64,7 +64,9 @@ export function completeRun(summary: RunSummary, extras: RunExtras = {}): Outcom
       at: now.getTime(), wpm: summary.wpm!, accuracy: extras.typingAccuracy ?? summary.rating, lesson: extras.lesson?.title ?? 'Free typing',
     }].slice(-80));
   }
-  const outcome = applyRun(saveStore.get(), summary, now.getTime(), {
+  // A run that earned no stars is not a clear: it earns its notes but no clear bonus and sets no record.
+  const judged = summary.stars === 0 && !summary.failed && ['quickplay', 'tour', 'daily', 'challenge'].includes(summary.mode) ? { ...summary, failed: true } : summary;
+  const outcome = applyRun(saveStore.get(), judged, now.getTime(), {
     dateKey: localDateKey(now), hour: now.getHours(), tourCleared: tourClearedCount(), lessonsPassed: lessonsPassedCount(),
     dailyKey: extras.daily,
   });

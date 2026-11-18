@@ -293,7 +293,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       {outcome.tour && !setup.set && <p className="challenge-result won" role="status">
         {outcome.tour.firstClear ? 'Song cleared. The next show is unlocked.' : outcome.tour.cleared ? 'Song cleared.' : 'Hit 60% of the notes to clear this song.'}</p>}
       {outcome.lesson && <p className={`challenge-result ${outcome.lesson.passed ? 'won' : 'lost'}`} role="status">
-        {outcome.lesson.passed ? `${outcome.lesson.stars === 3 ? 'Three stars. Nothing left to prove here.' : 'Reach 97% accuracy for three stars.'}${outcome.lesson.firstPass && outcome.lesson.next ? ` Unlocked: ${outcome.lesson.next.title}.` : ''}`
+        {outcome.lesson.passed ? `${outcome.lesson.stars === 3 ? ((summary.wpm ?? 0) >= setup.typing!.lesson!.goal.wpm ? 'Three stars, and up to speed.' : `Three stars for accuracy. Next goal: ${setup.typing!.lesson!.goal.wpm} words per minute.`) : 'Reach 97% accuracy for three stars.'}${outcome.lesson.firstPass && outcome.lesson.next ? ` Unlocked: ${outcome.lesson.next.title}.` : ''}`
           : `Reach ${setup.typing!.lesson!.goal.accuracy}% accuracy to pass. You hit ${result.typingAccuracy}%.`}</p>}
 
       {!party && result.waited && <dl className="results-stats">
