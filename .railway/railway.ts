@@ -7,7 +7,7 @@ export default defineRailway(() => {
     healthcheck: "/healthz",
     healthcheckTimeout: 60,
     replicas: { "sfo": 1 },
-    domains: [{ domain: "shredder.jasonroell.com", port: 3000 }],
+    domains: [{ domain: "shredder.jasonroell.com", port: 8080 }],
     volumeMounts: { "/app/data": keyboardShredderVolume },
   });
 
