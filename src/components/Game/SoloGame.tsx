@@ -22,6 +22,10 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
   const offset = useRef(0);
   const active = useRef(true);
   const pending = useRef(false);
+  const primaryAction = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (state !== 'playing') primaryAction.current?.focus();
+  }, [state]);
   const pauseAction = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -77,7 +81,7 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
     const pause = () => {
       offset.current = Math.min(playback.buffer.duration * 1000 - 1, Math.max(offset.current, playback.timeMs()));
       playback.stop();
-      scoring.current.clearInput();
+      scoring.current.pause(offset.current - calibration);
       setState('paused');
     };
     pauseAction.current = pause;
@@ -89,7 +93,11 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
       const lane = keys.indexOf(event.code);
       if (lane === -1 || event.altKey || event.metaKey || event.ctrlKey) return;
       event.preventDefault();
-      if (!event.repeat) scoring.current.press(lane, playback.timeMs(event.timeStamp) - calibration);
+      if (event.repeat) return;
+      const inputTime = playback.timeMs(event.timeStamp);
+      if (inputTime >= offset.current || scoring.current.sustaining.size) {
+        scoring.current.press(lane, Math.max(inputTime, offset.current) - calibration);
+      }
     };
     const keyup = (event: KeyboardEvent) => {
       const lane = keys.indexOf(event.code);
@@ -106,13 +114,13 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
         void playback.context.close().catch(() => {});
         transport.current = null;
         context.current = null;
-        scoring.current.clearInput();
         offset.current = Math.max(offset.current, now);
+        scoring.current.pause(offset.current - calibration);
         setError('Audio stopped advancing. Press Resume to reconnect playback.');
         setState('paused');
         return;
       }
-      scoring.current.tick(now - calibration);
+      if (now >= offset.current) scoring.current.tick(now - calibration);
       setTime(now);
       if (now >= playback.buffer.duration * 1000 + Math.max(calibration, 0)) {
         scoring.current.finish();
@@ -141,16 +149,15 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
   const timing = feedback?.offsetMs
     ? `${Math.abs(feedback.offsetMs)} ms ${feedback.offsetMs < 0 ? 'early' : 'late'}`
     : feedback?.offsetMs === 0 ? 'On time' : '';
-  const missed = feedback?.judgement === 'Miss' || feedback?.judgement === 'Sustain dropped';
+  const missed = feedback?.judgement === 'Miss' || feedback?.judgement === 'Sustain dropped' || feedback?.judgement === 'Wrong key';
   if (state === 'results') {
-    const accuracy = Math.round(game.hits * 100 / events.length);
     return <section className="panel results">
       <h1>Track complete</h1><p>{song.title}</p>
-      <dl><div><dt>Score</dt><dd>{game.score}</dd></div><div><dt>Accuracy</dt><dd>{accuracy}%</dd></div>
+      <dl><div><dt>Score</dt><dd>{game.score}</dd></div><div><dt>Accuracy</dt><dd>{game.accuracy}%</dd></div>
         <div><dt>Best combo</dt><dd>{game.bestCombo}</dd></div></dl>
-      <p>{game.hits} hits · {game.misses} misses</p>
+      <p>{game.hits} hits · {game.misses} misses{game.wrongKeys > 0 && ` · ${game.wrongKeys} extra presses`}</p>
       {error && <p role="alert">{error}</p>}
-      <button className="primary" disabled={starting} onClick={() => void play(true)}>Replay</button>
+      <button ref={primaryAction} className="primary" disabled={starting} onClick={() => void play(true)}>Replay</button>
       <button onClick={leave}>Back to studio</button>
     </section>;
   }
@@ -179,10 +186,11 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
       </div>
       {state !== 'playing' && <div className="board-cover">
         <p>{state === 'paused' ? 'Paused' : 'Press the lane keys at the line. Press chords together and hold long notes.'}</p>
+        {state === 'paused' && game.sustaining.size > 0 && <p>Hold the sustain keys again as playback resumes.</p>}
         {state === 'ready' && <div className="ready-keys" aria-label="Lane keys">{keys.map(key =>
           <kbd key={key}>{key.replace(/^(Key|Digit)/, '')}</kbd>)}</div>}
         {error && <p role="alert">{error}</p>}
-        <button className="primary" disabled={starting} onClick={() => void play()}>
+        <button ref={primaryAction} className="primary" disabled={starting} onClick={() => void play()}>
           {starting ? 'Loading audio…' : state === 'paused' ? 'Resume' : 'Play'}
         </button>
       </div>}

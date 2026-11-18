@@ -1,6 +1,6 @@
 import type { SongEvent } from '../../shared/song';
 
-export type Judgement = 'Perfect' | 'Good' | 'Miss' | 'Sustain dropped';
+export type Judgement = 'Perfect' | 'Good' | 'Miss' | 'Sustain dropped' | 'Wrong key';
 type Feedback = { judgement: Judgement; timeMs: number; lanes: number[]; offsetMs?: number };
 
 export const DEFAULT_KEYS = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG'];
@@ -12,6 +12,7 @@ export class Scoring {
   score = 0;
   hits = 0;
   misses = 0;
+  wrongKeys = 0;
   combo = 0;
   bestCombo = 0;
   feedback: Feedback | null = null;
@@ -19,6 +20,12 @@ export class Scoring {
   get judgement() {
     return this.feedback?.judgement ?? null;
   }
+  get accuracy() {
+    const attempts = this.hits + this.misses + this.wrongKeys;
+    return attempts ? Math.round(this.hits * 100 / attempts) : 0;
+  }
+
+  private regripUntil = -Infinity;
   private cursor = 0;
   private chord: { event: SongEvent; lanes: Set<number>; firstMs: number; offsetMs: number } | null = null;
 
@@ -34,7 +41,10 @@ export class Scoring {
       if (!this.consumed.has(event.id)) this.miss(event, timeMs);
     }
     for (const [id, event] of this.sustaining) {
-      if (timeMs >= event.timeMs + event.durationMs) {
+      const ended = timeMs >= event.timeMs + event.durationMs;
+      if (!event.lanes.every(lane => this.held.has(lane))) {
+        if (ended || timeMs > this.regripUntil) this.dropSustain(event, timeMs);
+      } else if (ended) {
         this.score += 30;
         this.sustaining.delete(id);
       }
@@ -46,7 +56,13 @@ export class Scoring {
     this.tick(timeMs);
     this.held.add(lane);
     const event = this.chord?.event ?? this.nearest(lane, timeMs);
-    if (!event || this.consumed.has(event.id) || !event.lanes.includes(lane)) return;
+    if (!event || this.consumed.has(event.id) || !event.lanes.includes(lane)) {
+      if (timeMs <= this.regripUntil && [...this.sustaining.values()].some(held => held.lanes.includes(lane))) return;
+      this.wrongKeys++;
+      this.combo = 0;
+      this.feedback = { judgement: 'Wrong key', lanes: [lane], timeMs };
+      return;
+    }
     const offset = timeMs - event.timeMs;
     if (!this.chord) this.chord = { event, firstMs: timeMs, lanes: new Set(), offsetMs: offset };
     if (Math.abs(offset) > Math.abs(this.chord.offsetMs)) this.chord.offsetMs = offset;
@@ -69,21 +85,27 @@ export class Scoring {
     this.held.delete(lane);
     for (const [id, event] of this.sustaining) {
       if (event.lanes.includes(lane)) {
-        if (timeMs >= event.timeMs + event.durationMs - 50) this.score += 30;
-        else {
-          this.combo = 0;
-          this.feedback = { judgement: 'Sustain dropped', lanes: [lane], timeMs };
-        }
-        this.sustaining.delete(id);
+        if (timeMs <= this.regripUntil) continue;
+        if (timeMs >= event.timeMs + event.durationMs - 50) {
+          this.score += 30;
+          this.sustaining.delete(id);
+        } else this.dropSustain(event, timeMs);
       }
     }
   }
 
-  clearInput() {
+  pause(timeMs: number) {
+    this.tick(timeMs);
     this.held.clear();
     this.chord = null;
-    this.sustaining.clear();
     this.feedback = null;
+    this.regripUntil = timeMs + 150;
+  }
+
+  private dropSustain(event: SongEvent, timeMs: number) {
+    this.sustaining.delete(event.id);
+    this.combo = 0;
+    this.feedback = { judgement: 'Sustain dropped', lanes: event.lanes, timeMs };
   }
 
   finish() {

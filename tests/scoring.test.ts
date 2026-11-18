@@ -9,7 +9,6 @@ test('A two-key chord scores once when both keys arrive within 55 ms', () => {
   assert.equal(game.score, 0);
   game.press(1, 1010);
   assert.equal(game.score, 100);
-  game.release(1, 1020);
   game.press(1, 1040);
   game.finish();
   assert.deepEqual([game.hits, game.misses, game.score], [1, 0, 100]);
@@ -39,19 +38,6 @@ test('Holding a 400 ms sustain earns its bonus and early release drops it', () =
   assert.equal(released.judgement, 'Sustain dropped');
 });
 
-test('Clearing inputs on pause prevents held keys from scoring a sustain or a later note', () => {
-  const game = new Scoring([
-    { id: 'hold', timeMs: 1000, lanes: [0], durationMs: 400 },
-    { id: 'after', timeMs: 1500, lanes: [0], durationMs: 0 },
-  ]);
-  game.press(0, 1000);
-  game.clearInput();
-  game.tick(1450);
-  game.press(0, 1500);
-  game.finish();
-  assert.deepEqual([game.hits, game.score, game.held.size], [2, 200, 1]);
-});
-
 test('Overlapping 95 ms windows credit the attack closest to the press', () => {
   const game = new Scoring([
     { id: 'earlier', timeMs: 1000, lanes: [0], durationMs: 0 },
@@ -73,4 +59,32 @@ test('An expired chord identifies both missed lanes after the 95 ms hit window',
   const game = new Scoring([{ id: 'chord', timeMs: 1000, lanes: [0, 3], durationMs: 0 }]);
   game.tick(1096);
   assert.deepEqual(game.feedback, { judgement: 'Miss', lanes: [0, 3], timeMs: 1096 });
+});
+
+test('A stray lane press breaks a combo and counts against accuracy', () => {
+  const game = new Scoring([{ id: 'note', timeMs: 1000, lanes: [2], durationMs: 0 }]);
+  game.press(2, 1000);
+  game.press(4, 1005);
+  assert.equal(game.combo, 0);
+  assert.equal(game.accuracy, 50);
+  assert.equal(game.judgement, 'Wrong key');
+});
+
+test('A sustain re-held within 150 ms of resuming still earns its bonus', () => {
+  const game = new Scoring([{ id: 'hold', timeMs: 1000, lanes: [0], durationMs: 500 }]);
+  game.press(0, 1000);
+  game.pause(1100);
+  game.press(0, 1220);
+  game.tick(1500);
+  assert.equal(game.score, 130);
+  assert.equal(game.accuracy, 100);
+});
+
+test('An unheld sustain drops when the 150 ms resume grace expires', () => {
+  const game = new Scoring([{ id: 'hold', timeMs: 1000, lanes: [0], durationMs: 500 }]);
+  game.press(0, 1000);
+  game.pause(1100);
+  game.tick(1251);
+  assert.equal(game.judgement, 'Sustain dropped');
+  assert.equal(game.combo, 0);
 });
