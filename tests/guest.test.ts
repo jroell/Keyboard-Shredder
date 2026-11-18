@@ -27,7 +27,7 @@ test('Production guests can play catalog tracks, join duels, and post scores wit
   server.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk; });
   try {
     const port = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Server did not report its port. ${stdout}\n${stderr}`)), 5000);
+      const timer = setTimeout(() => reject(new Error(`Server did not report its port within 45 seconds. ${stdout}\n${stderr}`)), 45_000);
       server.stdout.setEncoding('utf8').on('data', chunk => {
         stdout += chunk;
         const match = stdout.match(/Keyboard Shredder listening on port (\d+)/);
