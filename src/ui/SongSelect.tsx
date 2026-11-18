@@ -14,6 +14,7 @@ import { saveStore, settingsStore, useCell } from '../state/store';
 import { formatLength, Screen, Stars, useMenuKeys } from './common';
 import fallbackArt from '../assets/concert-stage.webp';
 
+export const count = (value: number, word: string) => `${value} ${word}${value === 1 ? '' : 's'}`;
 const charts = new Map<string, Chart>();
 /** The song last highlighted, so coming back from a run lands on it. */
 const last = { songId: '', genre: 'All' };
@@ -145,7 +146,7 @@ export default function SongSelect() {
             <strong>{difficultyNames[difficulty]}</strong>
             <span className="difficulty-pips" aria-hidden="true">{DIFFICULTIES.map((level, i) => <i key={level} className={i <= DIFFICULTIES.indexOf(difficulty) ? 'on' : ''} />)}</span>
             <small>{difficultyBlurbs[difficulty]}</small>
-            <small className="chart-counts">{counts ? `${counts.notes} notes · ${counts.chords} chords · ${counts.holds} holds` : '\u00a0'}</small>
+            <small className="chart-counts">{counts ? [count(counts.notes, 'note'), count(counts.chords, 'chord'), count(counts.holds, 'hold')].join(' · ') : '\u00a0'}</small>
           </div>
           <button className="icon-button" aria-label="Harder" disabled={difficulty === DIFFICULTIES.at(-1)} onClick={event => { event.currentTarget.blur(); setDifficulty(1); }}><ChevronRight aria-hidden="true" /></button>
         </div>

@@ -202,7 +202,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
     : typing ? (drillStars > 0 ? 'Drill complete' : 'Keep practicing')
     : setup.set && !failed && outcome.tour && !outcome.tour.cleared ? 'Set over'
     : setup.set && !failed ? (setup.set.index + 1 < setup.set.ids.length ? `Song ${setup.set.index + 1} of ${setup.set.ids.length} cleared` : 'Headline set complete')
-    : summary.fullCombo ? 'Full combo!' : summary.stars >= 5 ? 'Standing ovation' : summary.stars >= 3 ? 'Set complete' : 'Rough night';
+    : summary.fullCombo ? 'Full combo!' : summary.stars >= 5 ? 'Standing ovation' : summary.stars >= 3 ? 'Song cleared' : 'Rough night';
   const challenge = setup.challenge;
   const beat = challenge && !failed && summary.score > challenge.score;
   const weak = result.keyStats ? weakestKeys(result.keyStats, 3, 3).filter(code => {

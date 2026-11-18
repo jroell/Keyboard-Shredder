@@ -41,7 +41,7 @@ class ScreenBoundary extends Component<{ onMenu: () => void; children: ReactNode
       <h2>This screen did not load</h2>
       <p>Check your connection, then try again.</p>
       <div className="modal-actions">
-        <button className="primary" onClick={() => this.setState({ failed: false })}>Try again</button>
+        <button className="primary" onClick={() => location.reload()}>Reload and try again</button>
         <button onClick={() => { this.setState({ failed: false }); this.props.onMenu(); }}>Back to menu</button>
       </div>
     </section></main>;

@@ -286,3 +286,10 @@
 .results-layer { background-attachment: fixed; }
 .results { margin-bottom: 2rem; }
 .stage[data-typing] .hud-right { padding-left: 2.2rem; }
+
+@media (max-height: 520px) {
+  .results-actions { position: sticky; bottom: -1rem; margin: 0 -1rem; padding: .5rem 1rem; background: #120a1ff5; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; }
+  .results-actions button, .results-actions button.big { min-height: 44px; font-size: 1rem; padding: .3rem .9rem; white-space: nowrap; }
+  .results-actions .hint { display: none; }
+}
+.stage[data-typing] .hud-right { padding-left: 3rem; }

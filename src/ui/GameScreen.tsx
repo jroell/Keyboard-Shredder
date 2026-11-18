@@ -634,8 +634,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         <p className="ready-counts">{players.map((player, index) => {
           const chords = player.events.filter(event => event.lanes.length > 1).length;
           const holds = player.events.filter(event => event.durationMs > 0).length;
-          return <span key={index}>{players.length > 1 ? `${setup.party!.names[index]}: ` : ''}{player.events.length} notes
-            {chords ? ` · ${chords} chords` : ''}{holds ? ` · ${holds} holds` : ''}</span>;
+          return <span key={index}>{players.length > 1 ? `${setup.party!.names[index]}: ` : ''}{player.events.length} {player.events.length === 1 ? 'note' : 'notes'}
+            {chords ? ` · ${chords} ${chords === 1 ? 'chord' : 'chords'}` : ''}{holds ? ` · ${holds} ${holds === 1 ? 'hold' : 'holds'}` : ''}</span>;
         })}</p>
         {setup.practice && retune && <div className="practice-pick">
           <div className="segments" role="group" aria-label="Section">

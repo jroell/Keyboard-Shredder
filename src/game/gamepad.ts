@@ -211,7 +211,8 @@ export function startMenuPad(getMap: () => PadMap) {
     if (input.strumDown) send('ArrowDown');
     if (input.strumUp) send('ArrowUp');
     if (input.pressed.includes(0)) send('Enter');
-    if (input.pressed.includes(1)) send('Escape');
+    // On the guitar settings panel the red fret only lights its test lamp.
+    if (input.pressed.includes(1) && !document.querySelector('.guitar-setup')) send('Escape');
     if (input.pressed.includes(2)) send('ArrowLeft');
     if (input.pressed.includes(3)) send('ArrowRight');
   };

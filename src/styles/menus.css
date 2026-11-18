@@ -322,3 +322,16 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
 .players em { font-style: normal; color: var(--green); font-size: .82rem; font-weight: 700; }
 .players button { margin-top: 0 !important; min-height: 38px; }
 .profile-form h2 { margin-top: 1.2rem; }
+
+@media (max-width: 860px), (max-height: 640px) {
+  .song-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: .6rem 1rem max(.6rem, env(safe-area-inset-bottom)); background: #120a1ff5; border-top: 1px solid var(--edge); }
+  .songs-screen { padding-bottom: 96px; }
+  .song-panel { max-height: none; overflow: visible; backdrop-filter: none; background: var(--panel-solid); }
+}
+@media (max-width: 480px) {
+  .kb-compact span { width: 22px; height: 26px; font-size: .62rem; }
+  .kb-compact .kb-row { gap: 3px; margin-left: calc(var(--indent, 0) * 7px); }
+  .kb-compact .kb-space span { width: 130px; }
+  .academy-top { grid-template-columns: 1fr; }
+}
+.profile-form .badge-list { margin-bottom: .9rem; }
