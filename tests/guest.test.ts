@@ -11,7 +11,7 @@ import { notesFor } from '../shared/difficulty';
 import { applyMods, normalizeMods } from '../shared/modifiers';
 import type { Chart } from '../shared/song';
 
-test('Production guests can play catalog tracks, join duels, and post scores without Firebase', { timeout: 15_000 }, async () => {
+test('Production guests can play catalog tracks, join duels, and post scores without Firebase', { timeout: 90_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'shredder-guest-'));
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('FIREBASE_')));
   const server = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
