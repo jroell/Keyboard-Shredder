@@ -68,12 +68,45 @@ export const TOUR_VENUES: readonly TourVenue[] = [
   {
     id: 'skybridge', name: 'Skybridge Festival',
     scene: 'You have the closing slot on a stage above the rail yard. The mechanic from your first show is in the front row for your festival set.',
-    sendoff: 'The workshop crew asks you to stay for an after-hours encore.',
+    sendoff: 'A promoter in the crowd books you on a tour abroad, starting with a cruise out of the harbor.',
     tracks: [
       { id: 'voltage-parade', title: 'Voltage Parade' },
       { id: 'copper-moon', title: 'Copper Moon' },
       { id: 'big-rock', title: 'Big Rock' },
       { id: 'end-of-days', title: 'End Of Days' },
+    ],
+  },
+  {
+    id: 'harbor-lights', name: 'Harbor Lights Cruise',
+    scene: 'You board a music cruise ship as it leaves the harbor. You start at a laid-back deck party at sunset, then you move to the ballroom and the late-night lounge.',
+    sendoff: 'You leave the ship and head to the Crossroads Fairground.',
+    tracks: [
+      { id: 'sunday-skank', title: 'Sunday Skank' },
+      { id: 'glitter-engine', title: 'Glitter Engine' },
+      { id: 'lantern-lofi', title: 'Lantern Lo-fi' },
+      { id: 'velvet-detective', title: 'Velvet Detective' },
+    ],
+  },
+  {
+    id: 'crossroads', name: 'Crossroads Fairground',
+    scene: 'You arrive at a huge summer fair with four stages and a storm on the horizon. You play the rodeo arena, a street party and the stadium stage.',
+    sendoff: 'You leave the fair and travel to the Aurora Dome.',
+    tracks: [
+      { id: 'banjo-lightning', title: 'Banjo Lightning' },
+      { id: 'neon-rodeo', title: 'Neon Rodeo' },
+      { id: 'havana-voltage', title: 'Havana Voltage' },
+      { id: 'kings-of-saturday', title: 'Kings of Saturday' },
+    ],
+  },
+  {
+    id: 'aurora-dome', name: 'Aurora Dome',
+    scene: 'You play a futuristic arena under the northern lights. You face the biggest crowd of the tour in the final show before you go home.',
+    sendoff: 'You return home to the courtyard for the Sunrise Encore.',
+    tracks: [
+      { id: 'pixel-comet', title: 'Pixel Comet' },
+      { id: 'midnight-monsoon', title: 'Midnight Monsoon' },
+      { id: 'iron-harvest', title: 'Iron Harvest' },
+      { id: 'tidal-cathedral', title: 'Tidal Cathedral' },
     ],
   },
   {

@@ -52,7 +52,7 @@ test('Production guests can play catalog tracks, join duels, and post scores wit
     const library = await request('/api/songs');
     assert.equal(library.status, 200);
     const songs = await library.json() as { id: string; title: string; genre: string }[];
-    assert.equal(songs.length, 25);
+    assert.equal(songs.length, 37);
     assert.equal((await request('/api/songs', undefined, 'guest-0123')).status, 401);
     for (const path of ['/api/generations', '/api/generations/missing/retry']) {
       const generation = await request(path, {});

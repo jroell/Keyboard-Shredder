@@ -37,7 +37,7 @@ export default function Title({ ready, onStart }: { ready: boolean; onStart: () 
     <div className="title-content">
       <p className="title-kicker"><Guitar aria-hidden="true" size={18} /> The rhythm game you play on your keyboard</p>
       <h1 className="logo" aria-label="Keyboard Shredder"><span>Keyboard</span><span>Shredder</span></h1>
-      <p className="title-tag">Shred 25 songs. Battle your friends. Type faster without noticing.</p>
+      <p className="title-tag">Shred 37 songs. Battle your friends. Type faster without noticing.</p>
     </div>
     <button className="press-start" disabled={!ready} onClick={begin}>{ready ? 'Press any key' : 'Plugging in…'}</button>
     <footer className="title-foot"><span>1 or 2 players</span><span>Keyboard or touch</span><span>Free to play</span></footer>

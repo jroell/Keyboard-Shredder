@@ -315,7 +315,7 @@ const ACHIEVEMENT_LIST = [
   { id: 'genres-5', name: 'Five genres', blurb: 'Play songs from five different genres.', xp: 50 },
   { id: 'genres-10', name: 'Ten genres', blurb: 'Play songs from ten different genres.', xp: 100 },
   { id: 'tour-first-venue', name: 'First venue', blurb: 'Clear all four songs at the first tour venue.', xp: 75 },
-  { id: 'tour-complete', name: 'Tour complete', blurb: 'Clear all 25 songs on the tour.', xp: 300 },
+  { id: 'tour-complete', name: 'Tour complete', blurb: 'Clear every song on the tour.', xp: 300 },
   { id: 'typing-20-wpm', name: '20 words per minute', blurb: 'Reach 20 words per minute while typing.', xp: 25 },
   { id: 'typing-40-wpm', name: '40 words per minute', blurb: 'Reach 40 words per minute while typing.', xp: 50 },
   { id: 'typing-60-wpm', name: '60 words per minute', blurb: 'Reach 60 words per minute while typing.', xp: 100 },

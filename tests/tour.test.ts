@@ -6,8 +6,8 @@ import {
 } from '../shared/tour';
 import { catalogTracks } from '../backend/catalog-data';
 
-test('The six tour sets and encore contain every playable catalog track once', () => {
-  assert.equal(TOUR_VENUES.length, 7);
+test('The nine tour venues and the encore contain every playable catalog track once', () => {
+  assert.equal(TOUR_VENUES.length, 10);
   for (const venue of TOUR_VENUES) assert.equal(venue.tracks.length, venue.id === 'sunrise-encore' ? 1 : 4);
   assert.deepEqual(TOUR_TRACKS.map(track => track.id).sort(), catalogTracks.map(([id]) => id).sort());
   for (const track of TOUR_TRACKS) {
@@ -30,7 +30,7 @@ test('A 59% result leaves the next song locked and 60% opens it', () => {
   assert.equal(recordTourResult(cleared, first.id, 40), cleared);
 });
 
-test('Clearing every song in order opens the next venue and completes the tour after 25 clears', () => {
+test('Clearing every song in order opens the next venue and completes the tour after 37 clears', () => {
   let progress: TourProgress = {};
   for (const [index, track] of TOUR_TRACKS.entries()) {
     assert.equal(tourStart(progress), track.id);
@@ -38,7 +38,7 @@ test('Clearing every song in order opens the next venue and completes the tour a
     progress = recordTourResult(progress, track.id, 60);
   }
   assert.equal(tourStart(progress), null);
-  assert.equal(Object.keys(progress).length, 25);
+  assert.equal(Object.keys(progress).length, 37);
 });
 
 test('Restoring account progress drops impossible clears and keeps the best valid attempt', () => {

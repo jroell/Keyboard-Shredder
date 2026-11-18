@@ -5,7 +5,7 @@ Keyboard Shredder is a browser rhythm game. Gems slide down a 3D guitar neck, an
 ## Game modes
 
 - **Quick play:** Pick a song, a difficulty and optional modifiers. The list plays a preview of the highlighted song and shows your best stars and grade.
-- **World tour:** Play six venues and a sunrise encore across 25 songs. Hit 60% of the notes to clear a song and unlock the next. Tour with a friend is an online co-op tour with one team target.
+- **World tour:** Play nine venues and a sunrise encore across 37 songs. Hit 60% of the notes to clear a song and unlock the next. Tour with a friend is an online co-op tour with one team target.
 - **Typing academy:** Study 30 lessons in seven units, including capitals, coder keys and a Vim lesson. Finger columns are colour coded, and an on-screen keyboard lights the next key and names the finger. Pass key drills at 80% accuracy and words and sentences at 85%. Results show words per minute, accuracy and a heat map of missed keys.
 - **Party mode:** Two players share one keyboard. Player 1 uses A S D F G and Space. Player 2 uses H J K L ; and Enter. Battle is highest score wins, and overdrive shakes the other player's neck. Co-op uses one team score, and solo play can battle the computer at three skill levels.
 - **Play online:** Create an invite link, send it to a friend, and both press Ready. Choose head-to-head play or a co-op tour. The server keeps both players in sync and scores both, and duels award badges.
