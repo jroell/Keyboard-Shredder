@@ -13,7 +13,7 @@ import { previewSong, stopPreview } from './lib/preview';
 import { sfx } from './game/sfx';
 import { startMenuPad } from './game/gamepad';
 import { saveStore, setStore, settingsStore, tourStore, useCell } from './state/store';
-import GameScreen, { type RunResult, type RunSetup } from './ui/GameScreen';
+import GameScreen, { weakestSection, type RunResult, type RunSetup } from './ui/GameScreen';
 import Title from './ui/Title';
 import MainMenu from './ui/MainMenu';
 
@@ -251,9 +251,9 @@ export default function App() {
       const score = set.score + result.summary.score;
       const ratings = [...set.ratings, result.summary.rating];
       const last = set.index + 1 >= set.ids.length || result.summary.failed;
-      if (result.summary.failed || !songCleared(result.summary)) return { label: 'Restart the set', run: () => void launch(set.ids[0], { ...setup, set: { ...set, index: 0, score: 0, ratings: [], scores: [] } }, back) };
+      if (result.summary.failed || !songCleared(result.summary)) return { label: 'Restart the set', run: () => void launch(set.ids[0], { ...setup, set: { ...set, index: 0, score: 0, ratings: [], scores: [], weak: [] } }, back) };
       if (!last) return { label: `Next song: ${songs.find(song => song.id === set.ids[set.index + 1])?.title ?? 'next'}`,
-        run: () => void launch(set.ids[set.index + 1], { ...setup, set: { ...set, index: set.index + 1, score, ratings, scores: [...(set.scores ?? []), result.summary.score] } }, back) };
+        run: () => void launch(set.ids[set.index + 1], { ...setup, set: { ...set, index: set.index + 1, score, ratings, scores: [...(set.scores ?? []), result.summary.score], weak: [...(set.weak ?? []), weakestSection(result, recording.chart.durationMs)] } }, back) };
       if (!result.summary.failed && recorded.current !== result) {
         recorded.current = result;
         const rating = ratings.reduce((total, value) => total + value, 0) / ratings.length;
@@ -264,7 +264,7 @@ export default function App() {
           setStore.set(all => ({ ...all, [key]: { score: Math.max(score, previous?.score ?? 0), rating: Math.max(rating, previous?.rating ?? 0), ...(platinum ? { platinum } : {}) } }));
         }
       }
-      return { label: 'Play the set again', run: () => void launch(set.ids[0], { ...setup, set: { ...set, index: 0, score: 0, ratings: [], scores: [] } }, back) };
+      return { label: 'Play the set again', run: () => void launch(set.ids[0], { ...setup, set: { ...set, index: 0, score: 0, ratings: [], scores: [], weak: [] } }, back) };
     }
     if (setup.tutorial) return { label: 'Pick a song', run: () => go({ name: 'songs' }) };
     if (result.summary.failed && !setup.typing && !setup.party && !setup.daily && !setup.challenge) {

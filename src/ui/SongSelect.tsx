@@ -48,7 +48,6 @@ export default function SongSelect() {
     if (!song) return;
     sfx.play('ui-select');
     stopPreview();
-    try { localStorage.setItem(`ks:recent:${currentPlayer}`, JSON.stringify([song.id, ...recent.filter(id => id !== song.id)].slice(0, 6))); } catch { /* optional */ }
     void app.launch(song.id, { mode: 'quickplay', difficulty, mods }, { name: 'songs' });
   };
   useMenuKeys({ count: songs.length, index, setIndex, onPick: play, onSide: setDifficulty });

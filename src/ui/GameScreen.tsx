@@ -31,7 +31,8 @@ export type RunSetup = {
   /** `seats` holds the saved player id in each seat, or null for a guest or the computer. Each saved player earns their own XP. */
   party?: { coop: boolean; cpu?: number; names: [string, string]; difficulties?: [Difficulty, Difficulty]; seats?: [string | null, string | null] };
   /** Several songs played back to back as one set, with a running total. */
-  set?: { name: string; ids: string[]; index: number; score: number; ratings: number[]; scores?: number[] };
+  /** `weak` holds each finished song's costliest section, so the set summary can open practice there. */
+  set?: { name: string; ids: string[]; index: number; score: number; ratings: number[]; scores?: number[]; weak?: number[] };
   /** Loop one part of the song at a chosen speed. Nothing is saved or ranked. */
   practice?: { startMs: number; endMs: number; rate: number };
   tour?: boolean;
@@ -76,6 +77,18 @@ export const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.fl
 
 /** A song is split into this many sections for practice and for the results timeline. */
 export const SECTIONS = 8;
+
+/** The section of a finished run that cost the most: missed notes, stray presses and holds let go early. */
+export function weakestSection(result: Pick<RunResult, 'events' | 'scorings' | 'troubles'>, durationMs: number) {
+  const size = durationMs / SECTIONS;
+  const scoring = result.scorings[0];
+  const cost = Array.from({ length: SECTIONS }, (_, index) => {
+    const inside = (timeMs: number) => timeMs >= index * size && timeMs < (index + 1) * size;
+    const judged = result.events.filter(event => inside(event.timeMs) && scoring.consumed.has(event.id));
+    return judged.filter(event => !scoring.hitOffsets.has(event.id)).length + result.troubles.filter(item => item.kind !== 'miss' && inside(item.timeMs)).length;
+  });
+  return cost.indexOf(Math.max(...cost));
+}
 type PracticePass = { hits: number; total: number; rating: number; drops: number };
 
 const TUTORIAL_TIPS: [number, string][] = [
@@ -545,12 +558,20 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       const previous = setup.party && bot === undefined ? session.current?.scorings.map(scoring => scoring.bestCombo) : undefined;
       if (previous) setTimeout(() => previous.forEach((streak, index) => {
         if (index === 1 && setup.party!.cpu !== undefined) return;
-        callout(streak > 0 ? `Beat your ${streak} streak` : 'Land your first streak', 'streak', index);
+        callout(streak >= players[index].events.length && streak > 0 ? 'Match your full combo' : streak > 0 ? `Beat your ${streak} streak` : 'Land your first streak', 'streak', index);
       }), 3600);
       setResult(undefined);
     }
+    // A song counts as recently played once it starts, not when its ready card opens.
+    if (!replay && setup.mode === 'quickplay' && !setup.practice && bot === undefined) {
+      try {
+        const key = `ks:recent:${currentPlayer}`;
+        const recent: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+        localStorage.setItem(key, JSON.stringify([song.id, ...recent.filter(id => id !== song.id)].slice(0, 6)));
+      } catch { /* optional */ }
+    }
     void session.current?.start(replay);
-  }, [typing, setup.party, bot, callout]);
+  }, [typing, setup.party, setup.mode, setup.practice, bot, callout, players, song.id]);
 
   // A fresh typing chart after "Play again" starts on its own.
   const autostart = useRef(false);
@@ -648,11 +669,22 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   }, [state]);
   const mixed = setup.party?.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1] ? setup.party.difficulties : undefined;
   const modeLine = [typing ? setup.typing?.lesson?.title ?? 'Free typing' : mixed ? `${difficultyNames[mixed[0]]} vs ${difficultyNames[mixed[1]]}` : difficultyNames[setup.difficulty],
-    ...setup.mods.map(id => MODS[id].name), ...(setup.practice ? [setup.practice.endMs - setup.practice.startMs >= chart.durationMs - 1 ? 'Whole song' : Math.abs(setup.practice.endMs - setup.practice.startMs - chart.durationMs / SECTIONS) > 5 || (setup.practice.startMs % (chart.durationMs / SECTIONS)) > 5 ? `${clock(setup.practice.startMs)} to ${clock(setup.practice.endMs)}` : names[Math.round(setup.practice.startMs / (chart.durationMs / SECTIONS))], `${setup.practice.rate * 100}% speed`, 'looping'] : [])].join(' · ');
+    ...setup.mods.map(id => MODS[id].name), ...(setup.practice ? [setup.practice.endMs - setup.practice.startMs >= chart.durationMs - 1 ? 'Whole song' : Math.abs(setup.practice.endMs - setup.practice.startMs - chart.durationMs / SECTIONS) > 5 || (setup.practice.startMs % (chart.durationMs / SECTIONS)) > 5 ? `${fineClock(setup.practice.startMs)} to ${fineClock(setup.practice.endMs)}` : names[Math.round(setup.practice.startMs / (chart.durationMs / SECTIONS))], `${setup.practice.rate * 100}% speed`, 'looping'] : [])].join(' · ');
   const single = players.length === 1;
   const waitingForMatch = !!match && match.ready && match.startAt === null;
   const startLabel = state === 'starting' ? 'Loading audio…' : match ? match.startAt ? 'Join playback' : match.ready ? 'Ready' : 'Ready up' : 'Start';
 
+  // Practice spells out the first two-key move in the loop, so a player new to chords knows what to try.
+  const firstMove = useMemo(() => {
+    if (!setup.practice) return '';
+    const events = players[0].events;
+    const chord = events.find(event => event.lanes.length > 1);
+    if (!chord) return '';
+    const label = (lane: number) => layouts[0].targets[lane]?.label ?? keyLabel(players[0].keys[lane]);
+    const keys = chord.lanes.map(label).join(' and ');
+    const over = chord.durationMs > 0 ? events.find(event => event.timeMs > chord.timeMs && event.timeMs < chord.timeMs + chord.durationMs) : undefined;
+    return `First chord: land ${keys} together${over ? `, then keep them held while you hit ${over.lanes.map(label).join(' and ')}` : ''}.`;
+  }, [setup.practice, players, layouts]);
   const practicePick = setup.practice && retune ? <div className="practice-pick">
           <div className="segments" role="group" aria-label="Section">
             {Array.from({ length: SECTIONS }, (_, index) => {
@@ -685,6 +717,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
               onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, rate } }); }}>{rate * 100}% speed</button>)}
           </div>
           <p className="muted">The section loops until you stop. Practice scores are shown for feedback only: nothing is saved or ranked. A full combo means every note hit and no stray press. A hold let go early keeps the combo but loses its bonus.</p>
+          {firstMove && <p className="ready-goal">{firstMove}</p>}
         </div> : null;
   // The stage never scrolls. Focus moving to an off-screen control can still scroll a hidden-overflow box, which would push the results heading out of view.
   return <section className="stage" ref={stage} onScroll={event => { if (event.target === event.currentTarget) event.currentTarget.scrollTo(0, 0); }} data-state={state} data-boost="off" data-heat="cool" data-players={players.length}

@@ -13,7 +13,7 @@ import { fetchBoard, submitScore, type Board, type Submitted } from '../lib/api'
 import { sfx } from '../game/sfx';
 import { saveStore, settingsStore, useCell } from '../state/store';
 import { songCleared, useApp } from '../App';
-import { clock, SECTIONS, type RunResult, type RunSetup } from './GameScreen';
+import { clock, SECTIONS, weakestSection, type RunResult, type RunSetup } from './GameScreen';
 import KeyboardGuide, { fingerName } from './KeyboardGuide';
 import confetti from 'canvas-confetti';
 
@@ -304,16 +304,23 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         const scores = [...(setup.set.scores ?? []), summary.score];
         const average = ratings.reduce((total, value) => total + value, 0) / ratings.length;
         const platinum = ratings.every(value => value >= 85);
+        const weak = [...(setup.set.weak ?? []), weakestSection(result, recording.chart.durationMs)];
         return <div className="set-summary" data-gold={average >= 80 ? 'true' : undefined} data-platinum={platinum ? 'true' : undefined}>
           <div className="record" aria-hidden="true"><i /></div>
           <div>
             <h2>{platinum ? 'Platinum record' : average >= 80 ? 'Gold record' : 'Set finished'}: {setup.set.name}</h2>
             <ol>{setup.set.ids.map((id, index) => <li key={id} data-short={!platinum && (ratings[index] ?? 0) < 85 ? 'true' : undefined}><span>{songTitles[id] ?? `Song ${index + 1}`}
-              {!platinum && (ratings[index] ?? 0) < 85 && <> <button type="button" title="Practice this song. It is under the 85% platinum mark."
-                onClick={() => { const song = app.songs.find(item => item.id === id); if (song) void app.launch(id, { mode: 'quickplay', difficulty: setup.difficulty, mods: [], practice: { startMs: 0, endMs: song.durationMs, rate: 1 } }, { name: 'tour' }); }}>Practice</button></>}
+              {!platinum && (ratings[index] ?? 0) < 85 && <> <button type="button" title="Loop the section of this song that cost you the most, at 75% speed. Choose All on the practice card for the whole song."
+                onClick={() => {
+                  const target = app.songs.find(item => item.id === id);
+                  if (!target) return;
+                  const part = weak[index] ?? 0;
+                  const size = target.durationMs / SECTIONS;
+                  void app.launch(id, { mode: 'quickplay', difficulty: setup.difficulty, mods: [], practice: { startMs: Math.round(part * size), endMs: Math.round((part + 1) * size), rate: 0.75 } }, { name: 'tour' });
+                }}>Practice the weak part</button></>}
             </span><em>{(scores[index] ?? 0).toLocaleString()}</em><b>{(ratings[index] ?? 0).toFixed(1)}%</b></li>)}</ol>
             <p>Total {scores.reduce((total, value) => total + value, 0).toLocaleString()} · average timing rating {average.toFixed(1)}% on {difficultyNames[setup.difficulty]}</p>
-            {average >= 80 && !platinum && <p className="set-goal">Extra goal: 85% or better on every song for a platinum record. Lowest song here: {Math.min(...ratings).toFixed(1)}%. Songs under 85% have a Practice button.</p>}
+            {average >= 80 && !platinum && <p className="set-goal">Extra goal: 85% or better on every song for a platinum record. Lowest song here: {Math.min(...ratings).toFixed(1)}%. Songs under 85% have a button to practice their weak part.</p>}
             {average < 80 && <p className="set-goal">A gold record needs an 80% average timing rating. You were {(80 - average).toFixed(1)} points short.</p>}
           </div>
         </div>;

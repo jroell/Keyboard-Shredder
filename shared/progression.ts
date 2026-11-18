@@ -240,7 +240,7 @@ export function xpForRun(run: RunSummary, context: XpContext): XpAward {
   } else {
     parts.push({ label: 'Notes hit', xp: hitXp }, { label: 'Stars', xp: run.stars * 20 });
     if (run.fullCombo) parts.push({ label: 'Full combo', xp: 100 });
-    if (context.firstClear) parts.push({ label: 'First clear', xp: 75 });
+    if (context.firstClear) parts.push({ label: 'First time finishing this song', xp: 75 });
     else if (context.newBest) parts.push({ label: 'New best', xp: 40 });
     if (context.firstRunToday) parts.push({ label: 'Day streak', xp: Math.min(context.streakDays, 7) * 15 });
     if (run.won) parts.push({ label: 'Win', xp: 60 });
