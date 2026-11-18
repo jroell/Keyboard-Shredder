@@ -476,7 +476,7 @@ test('A missed note leaves the guitar silent while a hit brings it into the back
 
     const { url } = server;
     const { chart } = await (await page.request.get(url + '/api/songs/blacktop-sparks', { headers })).json() as { chart: Chart };
-    const [miss, hit] = chart.events.easy!.filter(event => event.timeMs > 300 && !event.durationMs);
+    const [miss, hit, followingMiss] = chart.events.easy!.filter(event => event.timeMs > 300 && !event.durationMs);
     await page.goto(url);
     await page.getByRole('combobox', { name: 'Difficulty', exact: true }).selectOption('easy');
     await page.getByRole('button', { name: 'Play Blacktop Sparks' }).click();
@@ -485,7 +485,9 @@ test('A missed note leaves the guitar silent while a hit brings it into the back
       const progress = document.querySelector<HTMLProgressElement>('progress[aria-label="Track progress"]')!;
       const samples = (window as unknown as { stemSamples(): number[] }).stemSamples;
       const peaks = [0, 0];
+      const deadline = performance.now() + 4000;
       while (progress.value < time + 110) {
+        if (performance.now() > deadline) throw new Error(`Playback did not reach ${time + 110} ms.`);
         if (progress.value >= time + 30) {
           samples().forEach((level, index) => { peaks[index] = Math.max(peaks[index], level); });
         }
@@ -502,6 +504,9 @@ test('A missed note leaves the guitar silent while a hit brings it into the back
     const [hitBacking, hitLead] = await audioAt(hit.timeMs);
     expect(hitBacking).toBeGreaterThan(.003);
     expect(hitLead).toBeGreaterThan(.003);
+    const [followingBacking, followingLead] = await audioAt(followingMiss.timeMs);
+    expect(followingBacking).toBeGreaterThan(.003);
+    expect(followingLead).toBeLessThan(.0001);
     await expect(page.getByText(/^Score (70|100)$/)).toBeVisible();
   } finally {
     if (server) await stop(server.child);
