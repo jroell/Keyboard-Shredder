@@ -29,7 +29,9 @@ The game works with Guitar Hero and Rock Band guitars and ordinary gamepads thro
 
 ## Practice tools
 
-Start section practice from song select ("Practice") or the results song map at 50%, 75% or 100% speed, for one of eight sections or the whole song. The section loops until you stop, with nothing scored or ranked. "Slow-mo" modifier plays a song at three-quarter speed; not ranked. Also new: each venue has a headline set once every song there is cleared: its songs back to back with one running score, and an average timing rating of 80% earns a gold record. Also new: each player picks their own difficulty, and the battle is decided by timing rating when difficulties differ, so a beginner can beat an expert.
+Start from song select ("Practice") or the results song map at 50%, 75% or 100% speed, for the whole song or one of eight sections: Intro, Verse, Chorus, Build, Breakdown, Solo, Finale, with repeats numbered such as "Verse 2". Names show on the song map and practice card, where Start and End move one beat at a time. The loop runs at least four beats until you stop. A panel shows the last and best passes, with notes hit, timing rating and holds dropped. Practice shows "Chord landed" and "Hold paid +N". On Medium and harder, an unscored song offers "Drill the busiest part at 75% speed" on the section with the most chords and holds. The song map caption names the costliest section, counting missed notes, stray presses and holds let go early. Nothing is saved or ranked. Headline sets earn gold at an 80% average timing rating and platinum at 85% or better on every song.
+
+"Slow-mo" modifier plays a song at three-quarter speed; not ranked. Each venue has a headline set once every song there is cleared: its songs back to back with one running score. Each player picks their own difficulty, and the battle is decided by timing rating when difficulties differ, so a beginner can beat an expert.
 
 ## Typing academy
 
