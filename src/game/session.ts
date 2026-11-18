@@ -479,9 +479,9 @@ export class GameSession {
     }
     // Online, the song must stay on the shared clock. If audio fell behind (a stalled tab or a busy machine), jump back in step.
     const match = this.match();
-    if (match?.startAt && clock - this.lastSync > 2000) {
+    if (match?.startAt && clock - this.lastSync > 1500) {
       const expected = clock - match.startAt;
-      if (expected > 0 && Math.abs(expected - now) > 300) {
+      if (expected > 0 && Math.abs(expected - now) > 110) {
         this.lastSync = clock;
         void playback.start(0, 0, match.startAt).then(() => { if (this.options.openLead) playback.openLead(); }).catch(() => {});
         return;

@@ -42,7 +42,7 @@ export default function PartySetup() {
   return <Screen title="Party mode" eyebrow="Two players, one keyboard" onBack={() => app.go({ name: 'menu' })} className="party-screen">
     <div className="party-modes" role="radiogroup" aria-label="Game type">
       <button role="radio" aria-checked={!coop} className={!coop ? 'on' : ''} onClick={() => { sfx.play('ui-toggle'); setCoop(false); }}>
-        <Swords aria-hidden="true" /><strong>Battle</strong><span>Highest score wins. Fire your overdrive to shake the other player's neck.</span></button>
+        <Swords aria-hidden="true" /><strong>Battle</strong><span>{levels[0] === levels[1] ? 'Highest score wins.' : 'Best timing rating wins, so different difficulties are a fair fight.'} Fire your overdrive to shake the other player's neck.</span></button>
       <button role="radio" aria-checked={coop} className={coop ? 'on' : ''} onClick={() => { sfx.play('ui-toggle'); setCoop(true); }}>
         <Handshake aria-hidden="true" /><strong>Co-op</strong><span>Share the stage. Your scores add up to one team total.</span></button>
     </div>

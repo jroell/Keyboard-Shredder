@@ -224,8 +224,8 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
           return <div key={index} className={winner ? 'winner' : ''}>
             {winner && <Crown aria-hidden="true" />}
             <h2>{party.names[index]}</h2>
-            <strong>{finalScore(scoring.score, setup.mods).toLocaleString()}</strong>
-            <p>{fairParty ? <b>{scoring.rating.toFixed(1)}% timing rating</b> : `${Math.round(scoring.rating)}%`}{party.difficulties ? ` · ${difficultyNames[party.difficulties[index]]}` : ''} · best streak {scoring.bestCombo}</p>
+            <strong>{fairParty ? `${scoring.rating.toFixed(1)}%` : finalScore(scoring.score, setup.mods).toLocaleString()}</strong>
+            <p>{fairParty ? `timing rating · ${finalScore(scoring.score, setup.mods).toLocaleString()} points` : `${Math.round(scoring.rating)}%`}{party.difficulties ? ` · ${difficultyNames[party.difficulties[index]]}` : ''} · best streak {scoring.bestCombo}</p>
             <p>{scoring.perfects} perfect · {scoring.misses} missed</p>
           </div>;
         })}

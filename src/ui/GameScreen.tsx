@@ -677,7 +677,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
           {canFail[setup.difficulty] && !setup.tutorial && !setup.practice && <p className="ready-goal">Keep the crowd happy. An empty crowd meter ends the set.</p>}
           {setup.mods.includes('sudden') && <p className="ready-goal">Sudden death: one missed note ends the set.</p>}
         </>}
-        {guitar && !typing && <p className="ready-goal">{guitar} connected. {settings.pad.mode === 'strum' ? 'Hold the frets and strum on each note.' : 'Press a fret on each note.'} Tilt or press Select for overdrive.</p>}
+        {guitar && !typing && <p className="ready-goal">{guitar} connected{setup.party ? ` and plays for ${setup.party.names[pads().length > 1 ? 0 : 1]}${pads().length > 1 ? ' and ' + setup.party.names[1] : ''}, in place of the keys shown` : ''}. {settings.pad.mode === 'strum' ? 'Hold the frets and strum on each note.' : 'Press a fret on each note.'} Tilt or press Select for overdrive.</p>}
         {readyExtra}
         {error && <p role="alert" className="error">{error}</p>}
         <button className="primary big" autoFocus disabled={state === 'starting' || waitingForMatch} onClick={() => start()}>{startLabel}</button>

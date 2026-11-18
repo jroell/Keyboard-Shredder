@@ -155,7 +155,7 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
   if (!duel) {
     return <Screen title={coop ? 'Tour together' : 'Play online'} eyebrow="Send a link, play in sync" onBack={() => void leave()} className="online-screen">
       {!connected && <p role="status" className="muted">Connecting… <button className="link" onClick={() => socket.current?.connect()}>Retry</button></p>}
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && !invite && <p role="alert" className="error">{error}</p>}
       {!invite && <>
         <div className="party-modes" role="radiogroup" aria-label="Game type">
           <button role="radio" aria-checked={!coop} className={!coop ? 'on' : ''} onClick={() => { sfx.play('ui-toggle'); setCoop(false); }}>
@@ -177,8 +177,8 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
       </>}
       {invite && !error && <p role="status">Joining the game…</p>}
       {invite && error && <section className="panel notice">
-        <h2>This invite did not work</h2>
-        <p>The game was not found or has ended. Ask your friend for a new link, or start your own game.</p>
+        <h2>{/two players/.test(error) ? 'This game is full' : 'This invite did not work'}</h2>
+        <p>{/two players/.test(error) ? 'Two players are already in this game.' : 'The game was not found or has ended.'} Ask your friend for a new link, or start your own game.</p>
         <button className="primary" onClick={() => app.go({ name: 'online', invite: '', coop: false })}>Start my own game</button>
       </section>}
     </Screen>;
