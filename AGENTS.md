@@ -2,28 +2,24 @@
 
 ## Project Structure
 
-Keyboard Shredder is a React and TypeScript rhythm game. `src/main.tsx` mounts the app, and `src/App.tsx` handles screens, gameplay, and multiplayer client state. Feature components live in `src/components/Game/` and `src/components/Chat/`. Integration and utility modules live in `src/lib/`. Shared styles and Tailwind CSS live in `src/index.css`.
+Keyboard Shredder is a React 19 + TypeScript rhythm game built with Vite. `src/main.tsx` mounts the app, and `src/App.tsx` owns routing between screens (title, menu, songs, tour, academy, party, online, locker, settings, create, play), sign-in state and the shared app context.
 
-`server.ts` runs Express and Socket.IO, manages multiplayer rooms in memory, and mounts Vite in development. Firebase configuration, the data blueprint, and Firestore rules live at the repository root.
+`src/ui/` has one file per screen plus `GameScreen.tsx` (the stage during a song), `Results.tsx`, `PlayerHud.tsx` and `KeyboardGuide.tsx`. `src/game/` is the engine: `session.ts` (playback, input, fail rules, input log), `renderer.ts` (canvas neck, gems, particles, crowd), `sfx.ts` (synthesized sound effects), `themes.ts` and `layouts.ts`. `src/state/` holds browser storage: `store.ts` (settings, save data, tour and lesson progress in localStorage keys starting with `ks:`) and `progress.ts` (records a finished run). `src/lib/` holds `api.ts` (guest token, fetch helpers, leaderboards), `transport.ts` (audio clock), `preview.ts` (song previews and menu music) and `recording.ts`. `src/styles/` holds `base.css`, `menus.css` and `stage.css`. Plain CSS, no Tailwind.
+
+`shared/` holds rules used by both browser and server: `scoring.ts`, `difficulty.ts`, `modifiers.ts`, `rating.ts`, `typing.ts`, `progression.ts`, `daily.ts`, `tour.ts`, `duel.ts` and `song.ts`. `server.ts` runs Express and Socket.IO. `backend/` holds `duels.ts` (online rooms in memory), `leaderboard.ts` (replays a run's key presses to verify the score), `profiles.ts`, `jobs.ts`, `music.ts` (track generation) and `catalog.ts` (the 25 starter songs under `catalog/`).
 
 ## Build and Development
 
-- `npm ci` installs dependencies from `package-lock.json`.
-- `npm run dev` starts the app and multiplayer server at `http://localhost:3000`.
-- `npm run lint` runs the TypeScript checker without emitting files.
-- `npm run build` builds the frontend into `dist/`.
-- `npm run preview` serves the built frontend. Use the dev command for checks that need the Socket.IO server.
-
-Use `.env.example` as a template for local configuration. Keep local environment files out of Git. Vite substitutes `GEMINI_API_KEY` into the frontend bundle, so use a dedicated development key for local Gemini checks.
+Run `npm ci` to install dependencies. Run `npm run dev:fixture` for the local server on http://localhost:3000 with test sign-in and fake music. Run `npm run build` for the production build.
 
 ## Coding Style
 
-Use two-space indentation and follow the surrounding file's quote style. Use PascalCase for React components and their filenames, and camelCase for functions and variables. Keep Socket.IO event names in kebab-case and update the client and server together when changing an event or its payload.
+Use two-space indent and single quotes. Use PascalCase component files and camelCase functions. Socket.IO event names are kebab-case; change client (`src/ui/Online.tsx`) and server (`backend/duels.ts`) together. A change to scoring must keep browser and server in agreement, because the server re-scores runs for leaderboards and duels with the same `shared/scoring.ts`.
 
 ## Testing
 
-The project has no automated test script or coverage threshold. Run the type check and build before submitting changes. For gameplay changes, play through a song and check input, scoring, and the results screen. For multiplayer changes, join the same room from two browser windows and check readiness, score updates, and disconnect behavior.
+Run `npm run lint` for the TypeScript check. Run `npm test` for unit tests in `tests/*.test.ts`, run with node:test through tsx. Run `npm run test:e2e` for the Playwright suite `tests/game.spec.ts` against the production build. `tests/helpers/player.ts` plays a song through real key events for browser tests. For gameplay changes, play a song and check input, scoring and the results screen. For online changes, open the invite in a second browser context.
 
-## Commits and Pull Requests
+## Commits
 
-Write short, action-oriented commit subjects. History includes plain subjects such as `Add image to README` and prefixed subjects such as `feat: Initialize project structure and dependencies`. In pull requests, describe what changed and how you verified it. Link related issues when available and attach screenshots for visible changes.
+Commit subjects use `type(scope): short description`, lowercase, at most 72 characters.
