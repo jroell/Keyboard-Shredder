@@ -39,6 +39,7 @@ def create_fixture(folder, seconds, asset):
         beat += 0.5 if beat < seconds / 2 else 0.44
     folder.mkdir(parents=True, exist_ok=True)
     if asset == "--stem-only":
+        write(folder / "backing-drums.audio", rate, drums)
         stem = folder / "guitar.partial"
         write(stem, rate, guitar)
         stem.replace(folder / "guitar.audio")

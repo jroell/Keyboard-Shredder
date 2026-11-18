@@ -1,4 +1,11 @@
-export const catalogTracks = [
+import type { SongCredit } from '../shared/song';
+
+type CatalogTrack = readonly [id: string, title: string, genre: string, prompt: string, long?: {
+  seconds: number;
+  credit?: SongCredit & { download: string };
+}];
+
+export const catalogTracks: readonly CatalogTrack[] = [
   ['blacktop-sparks', 'Blacktop Sparks', 'Hard rock', 'Crunchy highway hard rock, chunky palm-muted riff, rising pentatonic turnaround, 128 BPM, anthemic snare'],
   ['redline-radio', 'Redline Radio', 'Hard rock', 'Bright glam hard rock, swaggering half-time chorus riff, wide open chords, 110 BPM'],
   ['river-amp', 'River Amp', 'Blues', 'Slow electric blues shuffle, call-and-response bends, dry tube-amp lead, 94 BPM'],
@@ -19,4 +26,16 @@ export const catalogTracks = [
   ['marigold-run', 'Marigold Run', 'Latin fusion', 'Warm Latin rock with sustained electric guitar bends, steady backbeat and auxiliary congas, 99 BPM'],
   ['paper-antenna', 'Paper Antenna', 'Indie rock', 'Jangly indie guitar rock, chiming electric lead in a wistful repeated motif with live drums, 124 BPM'],
   ['midnight-switch', 'Midnight Switch', 'Indie rock', 'Moody post-punk lead guitar, bright staccato groove, dry bass and a simple escalating hook, 136 BPM'],
-] as const;
+  ['voltage-parade', 'Voltage Parade', 'Pop punk', 'Driving pop punk at 148 BPM, palm-muted verse, octave chorus hook, half-time bridge and a melodic eight-bar solo', { seconds: 92 }],
+  ['copper-moon', 'Copper Moon', 'Latin fusion', 'Warm Latin rock at 106 BPM, call-and-response guitar hook, live congas and drums, a quieter breakdown and a soaring sustained electric solo', { seconds: 104 }],
+  ['big-rock', 'Big Rock', 'Hard rock', '', { seconds: 231, credit: {
+    artist: 'Kevin MacLeod', license: 'CC BY 4.0', licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+    source: 'https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100305&Search=Search',
+    download: 'https://incompetech.com/music/royalty-free/mp3-royaltyfree/Big%20Rock.mp3',
+  } }],
+  ['end-of-days', 'End Of Days', 'Metal', '', { seconds: 193, credit: {
+    artist: 'Severed Fifth', license: 'CC BY-SA 3.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0/',
+    source: 'https://www.jonobacon.com/creative/#liberate',
+    download: 'https://audio.lugradio.org/severedfifth/liberate/severedfifth-endofdays.mp3',
+  } }],
+];

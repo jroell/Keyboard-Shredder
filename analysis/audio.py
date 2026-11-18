@@ -4,12 +4,13 @@ import numpy as np
 from scipy.signal import correlate, correlation_lags
 
 
-def decode(path, rate):
+def decode(path, rate, channels=1):
     audio = subprocess.check_output([
-        "ffmpeg", "-nostdin", "-v", "error", "-i", str(path), "-t", "181",
-        "-vn", "-ac", "1", "-ar", str(rate), "-f", "f32le", "pipe:1",
+        "ffmpeg", "-nostdin", "-v", "error", "-i", str(path), "-t", "241",
+        "-vn", "-ac", str(channels), "-ar", str(rate), "-f", "f32le", "pipe:1",
     ], timeout=30)
-    return np.frombuffer(audio, dtype="<f4")
+    samples = np.frombuffer(audio, dtype="<f4")
+    return samples if channels == 1 else samples.reshape(-1, channels)
 
 
 def alignment_error_ms(master, guitar, rate):

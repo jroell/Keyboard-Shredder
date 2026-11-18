@@ -1,4 +1,5 @@
-import type { Chart, Difficulty, SongEvent } from '../shared/song';
+import { easyChart } from '../shared/difficulty';
+import type { Chart, SongEvent } from '../shared/song';
 
 export interface Analysis {
   durationMs: number;
@@ -8,7 +9,7 @@ export interface Analysis {
 }
 
 export function buildChart({ durationMs, beatsMs, downbeatsMs, notes }: Analysis): Chart {
-  if (durationMs < 5_000 || durationMs > 180_000 || beatsMs.length < 4) {
+  if (durationMs < 5_000 || durationMs > 240_000 || beatsMs.length < 4) {
     throw new Error('The recording did not contain enough usable rhythm information.');
   }
   const filtered = notes.filter(note => note.strength >= 0.25 &&
@@ -25,7 +26,7 @@ export function buildChart({ durationMs, beatsMs, downbeatsMs, notes }: Analysis
     const next = beatsMs[i + 1];
     return next === undefined ? [beat] : [0, 1, 2, 3].map(n => beat + n * (next - beat) / 4);
   });
-  const events = (difficulty: Difficulty): SongEvent[] => {
+  const events = (difficulty: 'normal' | 'hard'): SongEvent[] => {
     const chart: SongEvent[] = [];
     const normal = difficulty === 'normal';
     for (const group of groups) {
@@ -56,8 +57,10 @@ export function buildChart({ durationMs, beatsMs, downbeatsMs, notes }: Analysis
   };
   const intervals = beatsMs.slice(1).map((beat, i) => beat - beatsMs[i]).filter(value => value > 0).sort((a, b) => a - b);
   if (!intervals.length) throw new Error('The beat tracker did not return a usable tempo.');
-  return {
+  const chart: Chart = {
     version: 1, durationMs, bpm: Math.round(60_000 / intervals[Math.floor(intervals.length / 2)]),
     beatsMs, downbeatsMs, events: { normal: events('normal'), hard: events('hard') },
   };
+  chart.events.easy = easyChart(chart);
+  return chart;
 }

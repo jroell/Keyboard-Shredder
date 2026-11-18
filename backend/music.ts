@@ -54,7 +54,7 @@ export async function compose(dir: string, prompt: string, duration: number) {
 }
 
 export function guitarBrief(prompt: string, duration: number) {
-  const structure = duration === 90
+  const structure = duration >= 60
     ? 'Introduce a memorable riff immediately, repeat it as a hook, then play a short solo and bring back the hook. End cleanly.'
     : 'Play one immediately recognizable riff, vary it, then end cleanly.';
   return `Original instrumental in this style: ${prompt}. Prominent, clearly articulated electric lead guitar centered in the mix. Use real single notes, power chords and ringing sustains, with a clear drum backbeat. ${structure} Keep the lead louder than the rhythm guitar. Avoid competing melodic instruments and fade-ins.`;
@@ -77,13 +77,20 @@ export async function separate(dir: string, duration: number) {
   body.set('file', new Blob([file], { type: 'audio/mpeg' }), 'master.mp3');
   body.set('stem_variation_id', 'six_stems_v1');
   const zip = await musicRequest('/stem-separation', body, 100 * 1024 * 1024);
-  const files = unzipSync(zip, {
-    filter: entry => entry.originalSize <= 48 * 1024 * 1024 &&
-      /(?:^|[/_ -])guitars?\.(mp3|wav|flac)$/i.test(entry.name),
-  });
-  const stems = Object.values(files);
-  if (stems.length !== 1) throw new Error('The music service did not return a usable guitar stem.');
-  await atomicWrite(join(dir, 'guitar.audio'), stems[0]);
+  const validStem = /(?:^|[/_ -])(vocals?|bass|drums?|piano|other|guitars?)\.(mp3|wav|flac)$/i;
+  const files = unzipSync(zip, { filter: entry => entry.originalSize <= 48 * 1024 * 1024 && validStem.test(entry.name) });
+  const stems = Object.entries(files).map(([name, bytes]) => ({
+    part: name.match(validStem)![1].toLowerCase().replace(/^guitars$/, 'guitar'),
+    bytes,
+  }));
+  if (stems.filter(stem => stem.part === 'guitar').length !== 1 || !stems.some(stem => stem.part !== 'guitar')) {
+    throw new Error('The music service did not return usable guitar and backing stems.');
+  }
+  for (const { part, bytes } of stems.filter(stem => stem.part !== 'guitar')) {
+    await atomicWrite(join(dir, `backing-${part}.audio`), bytes);
+  }
+  await atomicWrite(join(dir, 'guitar.audio'), stems.find(stem => stem.part === 'guitar')!.bytes);
+
 }
 
 async function fixture(dir: string, duration: number, stemOnly = false) {
@@ -105,5 +112,16 @@ export async function analyze(dir: string) {
     if (message) throw new Error(message);
     console.error(stderr.trim().slice(-1600));
     throw new Error('Audio analysis failed. Check the server setup or try another prompt.');
+  }
+}
+
+export async function preparePlaybackStems(dir: string) {
+  try {
+    await exec(process.env.UV_BIN || 'uv', [
+      'run', '--project', 'analysis', '--locked', '--no-sync', 'python', 'analysis/prepare_stems.py', dir,
+    ], { timeout: 180_000, maxBuffer: 2 * 1024 * 1024 });
+  } catch (error) {
+    const stderr = (error as { stderr?: string }).stderr || '';
+    throw new Error(stderr.match(/^CHART_ERROR: (.+)$/m)?.[1] || 'Could not render the guitar and backing audio.');
   }
 }

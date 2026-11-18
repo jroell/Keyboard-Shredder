@@ -1,11 +1,12 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Chart, Job, Song } from '../shared/song';
+import { loadCatalog, playbackStems } from './catalog';
 import { buildChart } from './charts';
-import { analyze, atomicWrite, compose, model, separate } from './music';
+import { analyze, atomicWrite, compose, model, preparePlaybackStems, separate } from './music';
 
 type Row = {
   id: string; owner: string; prompt: string; seconds: number; request_key: string;
@@ -17,6 +18,7 @@ const digest = (data: Buffer | string) => createHash('sha256').update(data).dige
 export function createJobStore() {
   const root = resolve(process.env.SONG_DATA_DIR || '.song-data');
   mkdirSync(root, { recursive: true, mode: 0o700 });
+  const catalog = loadCatalog();
   const db = new DatabaseSync(join(root, 'library.sqlite'));
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -34,7 +36,7 @@ export function createJobStore() {
   const summary = (row: Row): Job => ({ id: row.id, stage: row.stage, ...(row.error ? { error: row.error, canRetryChart: existsSync(join(dir(row.id), 'master.mp3')) } : {}) });
   const song = (row: Row): Song => ({
     id: row.id, title: row.prompt.length > 65 ? row.prompt.slice(0, 62) + '…' : row.prompt,
-    prompt: row.prompt, durationMs: row.duration_ms!, model: row.model,
+    prompt: row.prompt, durationMs: row.duration_ms!, model: row.model, hasStemMix: !!playbackStems(dir(row.id)),
   });
 
   for (const row of db.prepare("SELECT * FROM jobs WHERE stage IN ('composing', 'charting')").all() as Row[]) {
@@ -63,7 +65,9 @@ export function createJobStore() {
             composedAt = performance.now();
           }
           stage(row.id, 'charting');
-          if (!existsSync(join(folder, 'guitar.audio'))) {
+          const hasGuitar = existsSync(join(folder, 'guitar.audio'));
+          const hasBacking = (await readdir(folder)).some(file => /^backing-.*\.audio$/.test(file));
+          if (!hasGuitar || !hasBacking) {
             db.prepare('UPDATE jobs SET separating = 1 WHERE id = ?').run(row.id);
             await separate(folder, row.seconds);
             db.prepare('UPDATE jobs SET separating = 0 WHERE id = ?').run(row.id);
@@ -73,6 +77,7 @@ export function createJobStore() {
           if (Math.abs(chart.durationMs - row.seconds * 1000) > 4_000) {
             throw new Error('The recording length differed from the requested duration.');
           }
+          await preparePlaybackStems(folder);
           await saveChart(row.id, chart);
           console.info('Track ready', JSON.stringify({
             id: row.id, model: row.model, durationMs: chart.durationMs,
@@ -129,12 +134,15 @@ export function createJobStore() {
       return row && summary(row);
     },
     library(owner: string) {
-      return (db.prepare("SELECT * FROM jobs WHERE owner = ? AND stage = 'ready' ORDER BY rowid DESC").all(owner) as Row[]).map(song);
+      const saved = (db.prepare("SELECT * FROM jobs WHERE owner = ? AND stage = 'ready' ORDER BY rowid DESC").all(owner) as Row[]).map(song);
+      return [...saved, ...Array.from(catalog.values(), track => track.song)];
     },
     assets(owner: string, id: string) {
+      const starter = catalog.get(id);
+      if (starter) return starter;
       const row = get(owner, id);
       if (row?.stage !== 'ready') return undefined;
-      return { song: song(row), chart: () => readFile(join(dir(id), 'chart.json'), 'utf8'), audio: join(dir(id), 'master.mp3') };
+      return { song: song(row), chart: () => readFile(join(dir(id), 'chart.json'), 'utf8'), audio: join(dir(id), 'master.mp3'), stems: playbackStems(dir(id)) };
     },
   };
 }
