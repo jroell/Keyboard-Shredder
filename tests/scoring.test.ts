@@ -2,16 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scoring } from '../shared/scoring';
 
-test('A two-key chord scores once when both keys arrive within 55 ms', () => {
+test('A two-key chord scores once, at 100 points per key, when both keys arrive within 55 ms', () => {
   const game = new Scoring([{ id: 'chord', timeMs: 1000, lanes: [0, 1], durationMs: 0 }]);
   game.press(0, 980);
   game.press(0, 985);
   assert.equal(game.score, 0);
   game.press(1, 1010);
-  assert.equal(game.score, 100);
+  assert.equal(game.score, 200);
   game.press(1, 1040);
   game.finish();
-  assert.deepEqual([game.hits, game.misses, game.score], [1, 0, 100]);
+  assert.deepEqual([game.hits, game.misses, game.score], [1, 0, 200]);
 });
 
 test('A chord that arrives 56 ms apart misses and resets the combo', () => {
@@ -49,10 +49,23 @@ test('Overlapping 95 ms windows credit the attack closest to the press', () => {
   assert.deepEqual([game.hits, game.misses], [1, 1]);
 });
 
-test('A good hit 70 ms early reports its signed timing and successful lane', () => {
+test('A hit 70 ms early is Great for 75 points and reports its signed timing and lane', () => {
   const game = new Scoring([{ id: 'note', timeMs: 1000, lanes: [2], durationMs: 0 }]);
   game.press(2, 930);
-  assert.deepEqual(game.feedback, { judgement: 'Good', offsetMs: -70, lanes: [2], timeMs: 930, points: 70 });
+  assert.deepEqual(game.feedback, { judgement: 'Great', offsetMs: -70, lanes: [2], timeMs: 930, points: 75 });
+});
+
+test('Hits 30, 70 and 90 ms off are Perfect, Great and Good, and rate 78 out of 100', () => {
+  const game = new Scoring([0, 1, 2].map(i => ({ id: String(i), timeMs: 1000 + 1000 * i, lanes: [0], durationMs: 0 })));
+  const seen: string[] = [];
+  game.onEvent = event => { if (event.type === 'hit') seen.push(event.judgement); };
+  for (const [index, offset] of [30, -70, 90].entries()) {
+    game.press(0, 1000 + 1000 * index + offset);
+    game.release(0, 1000 + 1000 * index + offset + 10);
+  }
+  assert.deepEqual(seen, ['Perfect', 'Great', 'Good']);
+  assert.deepEqual([game.perfects, game.greats, game.goods, game.score], [1, 1, 1, 225]);
+  assert.equal(game.rating, 78.3);
 });
 
 test('An expired chord identifies both missed lanes after the 95 ms hit window', () => {
@@ -106,24 +119,29 @@ test('The resume count-in restores only active sustain lanes without scoring new
   assert.equal(game.accuracy, 100);
 });
 
-test('Ten perfect hits charge the amp and boost only doubles multipliers for 6 seconds', () => {
-  const game = new Scoring(Array.from({ length: 12 }, (_, i) => ({
-    id: String(i), timeMs: i < 11 ? 1000 + 250 * i : 9600, lanes: [0], durationMs: 0,
+test('Seventeen perfect hits charge the amp and boost doubles multipliers for 8 seconds only', () => {
+  const game = new Scoring(Array.from({ length: 19 }, (_, i) => ({
+    id: String(i), timeMs: i < 18 ? 1000 + 250 * i : 20_000, lanes: [0], durationMs: 0,
   })));
+  let charged = 0;
+  game.onEvent = event => { if (event.type === 'charged') charged++; };
   assert.equal(game.activateBoost(0), false);
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 17; i++) {
     game.press(0, 1000 + 250 * i);
     game.release(0, 1001 + 250 * i);
   }
-  assert.equal(game.score, 1000);
+  assert.equal(game.score, 2400);
   assert.equal(game.ampCharge, 100);
-  assert.equal(game.activateBoost(3500), true);
+  assert.equal(charged, 1);
+  assert.equal(game.activateBoost(5200), true);
   assert.equal(game.ampCharge, 0);
-  assert.equal(game.activateBoost(3501), false);
-  game.press(0, 3500);
-  game.release(0, 3501);
-  assert.equal(game.score, 1400);
-  game.press(0, 9600);
-  assert.equal(game.score, 1600);
+  assert.equal(game.activateBoost(5201), false);
+  game.press(0, 5250);
+  game.release(0, 5251);
+  assert.equal(game.score, 2800);
+  assert.equal(game.boosting(13_199), true);
+  assert.equal(game.boosting(13_200), false);
+  game.press(0, 20_000);
+  assert.equal(game.score, 3000);
   assert.equal(game.boostHits, 1);
 });
