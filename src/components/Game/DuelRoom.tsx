@@ -1,0 +1,180 @@
+import { useEffect, useRef, useState } from 'react';
+import { io, type Socket } from 'socket.io-client';
+import { badgeNames, palettes, type Duel, type LaneInput, type Profile, type Reply } from '../../../shared/duel';
+import type { Chart, Difficulty, Song } from '../../../shared/song';
+import { PlayerCard } from '../PlayerProfile';
+import SoloGame from './SoloGame';
+
+type Track = { song: Song; chart: Chart; audio: ArrayBuffer };
+type Props = {
+  invite: string; token: () => Promise<string | undefined>; call: (path: string, options?: RequestInit) => Promise<Response>;
+  songs: Song[]; difficulty: Difficulty; profile?: Profile; keys: string[]; calibration: number;
+  exit: () => void; refresh: () => void;
+};
+
+export default function DuelRoom(props: Props) {
+  const [duel, setDuel] = useState<Duel>();
+  const [slot, setSlot] = useState<number>();
+  const [songId, setSongId] = useState(props.songs[0]?.id || '');
+  const [level, setLevel] = useState(props.difficulty);
+  const [track, setTrack] = useState<Track>();
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [syncing, setSyncing] = useState(true);
+  const socket = useRef<Socket>(null);
+  const roomId = useRef(props.invite);
+  const serverOffset = useRef(0);
+  const current = useRef(props);
+  current.current = props;
+
+  useEffect(() => {
+    let active = true;
+    const client = io({ reconnectionAttempts: 8, transports: ['websocket'], auth: async callback => {
+      try { callback({ token: await current.current.token() }); }
+      catch { callback({ token: '' }); }
+    } });
+    socket.current = client;
+    client.on('connect', async () => {
+      setConnected(true);
+      setSyncing(true);
+      setError('');
+      try {
+        let best = Infinity;
+        for (let i = 0; i < 5; i++) {
+          const before = Date.now();
+          const remote = await client.timeout(2500).emitWithAck('clock') as number;
+          const after = Date.now();
+          if (after - before < best) {
+            best = after - before;
+            serverOffset.current = remote - (before + after) / 2;
+          }
+        }
+        if (active && roomId.current) await request(client, 'join-duel', roomId.current);
+      } catch (reason) {
+        if (active) setError(reason instanceof Error ? reason.message : 'Could not join the duel.');
+      } finally { if (active) setSyncing(false); }
+    });
+    client.on('connect_error', (reason: Error) => { setConnected(false); setError(reason.message); });
+    client.on('disconnect', () => setConnected(false));
+    client.on('duel', (next: Duel) => {
+      setDuel(next);
+      if (next.phase === 'finished') current.current.refresh();
+    });
+    client.on('duel-expired', () => { setDuel(undefined); setError('This invite has expired.'); });
+    return () => { active = false; client.disconnect(); socket.current = null; };
+  }, []);
+
+  async function request(client: Socket, event: string, ...args: unknown[]) {
+    const reply = await client.timeout(5000).emitWithAck(event, ...args) as Reply;
+    if (reply.error) throw new Error(reply.error);
+    if (reply.id) {
+      roomId.current = reply.id;
+      setSlot(reply.slot);
+      history.replaceState(null, '', `?duel=${reply.id}`);
+    }
+  }
+
+  const activeId = duel?.id;
+  const fetchTrack = useRef(0);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    if (!activeId) return;
+    const serial = ++fetchTrack.current;
+    const api = current.current.call;
+    Promise.all([
+      api(`/duels/${activeId}/track`).then(response => response.json()),
+      api(`/duels/${activeId}/audio`).then(response => response.arrayBuffer()),
+    ]).then(([manifest, audio]) => {
+      if (serial === fetchTrack.current) setTrack({ ...manifest, audio });
+    }).catch(() => {
+      if (serial === fetchTrack.current) setError('Could not load the shared track. Try again.');
+    });
+    return () => { fetchTrack.current++; };
+  }, [activeId, reload]);
+
+  async function send(event: string, ...args: unknown[]) {
+    if (!socket.current?.connected) throw new Error('Reconnecting to the duel.');
+    await request(socket.current, event, ...args);
+  }
+  function action(event: string, ...args: unknown[]) {
+    setError('');
+    void send(event, ...args).catch(reason => setError(reason.message));
+  }
+  async function leave() {
+    try {
+      if (socket.current?.connected) await send('leave-duel');
+      else if (roomId.current) await props.call(`/duels/${roomId.current}/leave`, { method: 'POST' });
+    } catch {
+      setError('Could not reach the room to leave.');
+    } finally { props.exit(); }
+  }
+  function copy() {
+    const link = new URL(location.href);
+    link.search = `?duel=${duel!.id}`;
+    if (!navigator.clipboard) { setStatus('Select and copy the invite link below.'); return; }
+    void navigator.clipboard.writeText(link.href).then(() => setStatus('Invite copied.')).catch(() => setStatus('Select and copy the invite link below.'));
+  }
+  const me = duel?.players.find(player => player.slot === slot);
+  const scheduled = useRef<{ epoch: number; perf: number }>(null);
+  if (duel?.startAt && scheduled.current?.epoch !== duel.startAt) {
+    scheduled.current = { epoch: duel.startAt, perf: performance.now() + duel.startAt - Date.now() - serverOffset.current };
+  }
+
+  return <main className="studio duel-studio">
+    <header className="masthead"><h1>Head-to-head</h1><button onClick={() => void leave()}>Back to studio</button></header>
+    {!connected && <p role="status">Connecting to the duel… <button onClick={() => socket.current?.connect()}>Retry connection</button></p>}
+    {error && <p role="alert" className="error">{error}</p>}
+    {!duel && !props.invite && <section className="panel settings">
+      <h2>Host an invite</h2>
+      {!props.songs.length && <p>Generate a track in the studio to host a duel.</p>}
+      <label>Track<select value={songId} onChange={event => setSongId(event.target.value)}>
+        <option value="">Choose a track</option>{props.songs.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
+      </select></label>
+      <label>Duel difficulty<select value={level} onChange={event => setLevel(event.target.value as Difficulty)}>
+        <option value="normal">Normal</option><option value="hard">Hard</option>
+      </select></label>
+      <button className="primary" disabled={!songId || syncing || !connected} onClick={() => action('create-duel', { songId, difficulty: level })}>Create invite</button>
+    </section>}
+    {duel && <>
+      <div className="duel-scoreboard" aria-label="Duel scoreboard">
+        {duel.players.map(player => <section key={player.slot} className="panel duel-player">
+          <PlayerCard profile={player.profile} />
+          <p>{player.slot === slot ? 'You' : 'Opponent'} · {!player.connected ? 'Disconnected' : duel.phase === 'lobby' ? player.ready ? 'Ready' : 'Getting ready' : `${player.combo} combo`}</p>
+          <strong>{player.score.toLocaleString()} pts</strong>{duel.phase !== 'lobby' && <p>{player.accuracy}% accuracy</p>}
+          {duel.phase === 'playing' && <div className="duel-frets" aria-hidden="true">
+            {palettes[player.profile.palette].map((color, lane) => <i key={lane} style={{ color }}
+              className={player.strike?.lanes.includes(lane) ? player.strike.missed ? 'missed' : 'active' : player.frets.includes(lane) ? 'active' : ''} />)}
+          </div>}
+        </section>)}
+        {duel.players.length < 2 && <section className="panel">Waiting for an opponent</section>}
+      </div>
+      {duel.phase === 'lobby' && <div className="duel-invite">
+        {slot === duel.host && <details className="panel" open={duel.players.length < 2}>
+          <summary>Share this duel</summary>
+          <label>Invite link<input readOnly value={`${location.origin}${location.pathname}?duel=${duel.id}`} onFocus={event => event.target.select()} /></label>
+          <button onClick={copy}>Copy invite</button><p role="status">{status}</p>
+        </details>}
+        <p>Ready up to start. Playback continues if you switch tabs.</p>
+      </div>}
+      {duel.phase === 'finished' && <section className="panel results" aria-live="polite">
+        <h2>{duel.winner === null ? 'Draw' : duel.winner === slot ? 'You won' : 'Your opponent won'}</h2>
+        {me && <p>{me.hits} notes hit · Best combo {me.bestCombo}</p>}
+        {duel.reason && <p role="status">{duel.reason}</p>}
+        {me?.profile.badges.length > 0 && <p>Earned badges: {me.profile.badges.map(badge => badgeNames[badge]).join(', ')}</p>}
+        {slot === duel.host && <button className="primary" disabled={!duel.players.every(player => player.connected) || !connected}
+          onClick={() => action('rematch')}>Set up rematch</button>}
+        {slot !== duel.host && <p>The host can set up a rematch.</p>}
+      </section>}
+      {duel.phase === 'canceled' && <p role="status">{duel.reason}</p>}
+      {(duel.phase === 'lobby' || duel.phase === 'playing') && (track
+        ? <SoloGame key={duel.id} {...track} difficulty={duel.difficulty} keys={props.keys} calibration={props.calibration}
+          profile={props.profile} leave={() => void leave()} match={{
+            startAt: duel.startAt ? scheduled.current?.perf ?? null : null, ready: !!me?.ready,
+            onReady: () => send('duel-ready', true),
+            onInput: (input: LaneInput) => { if (socket.current?.connected) socket.current.emit('duel-input', input); },
+          }} />
+        : <div className="panel"><p role="status">Loading the shared track…</p>{error && <button onClick={() => { setError(''); setReload(count => count + 1); }}>Retry track</button>}</div>)}
+    </>}
+  </main>;
+}

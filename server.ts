@@ -1,11 +1,18 @@
 import 'dotenv/config';
 import express from 'express';
+import { createServer as createHttpServer } from 'node:http';
+import { attachDuels } from './backend/duels';
+import { createProfileStore } from './backend/profiles';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeApp } from 'firebase-admin/app';
 import { resolve } from 'node:path';
 import { createJobStore } from './backend/jobs';
 
 const localTest = process.env.LOCAL_TEST_AUTH === '1';
+const authEmulator = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+if (authEmulator && (!/^(localhost|127\.0\.0\.1):[0-9]{1,5}$/.test(authEmulator) || localTest)) {
+  throw new Error('Use the Firebase Auth emulator on loopback without test auth.');
+}
 const projectId = process.env.FIREBASE_PROJECT_ID;
 const apiKey = process.env.FIREBASE_WEB_API_KEY;
 const authDomain = process.env.FIREBASE_AUTH_DOMAIN;
@@ -14,29 +21,51 @@ const admin = firebase && !localTest ? getAuth(initializeApp({ projectId })) : n
 if (process.env.FIXTURE_MUSIC === '1' && !localTest) throw new Error('Fixture music requires loopback test auth.');
 const app = express();
 const store = createJobStore();
+const profiles = createProfileStore();
+const server = createHttpServer(app);
+async function authenticate(token: string) {
+  if (localTest && /^test-[a-z0-9]{1,40}$/.test(token)) return token;
+  if (admin && token) {
+    try { return (await admin.verifyIdToken(token)).uid; }
+    catch { return undefined; }
+  }
+}
+const duels = attachDuels(server, authenticate, store, profiles);
 app.disable('x-powered-by');
 app.use(express.json({ limit: '8kb' }));
 app.get('/api/config', (_request, response) => {
-  response.json({ firebase, localTest, musicEnabled: !!process.env.ELEVENLABS_API_KEY || process.env.FIXTURE_MUSIC === '1',
+  response.json({ firebase, localTest, ...(authEmulator ? { authEmulator: 'http://' + authEmulator } : {}), musicEnabled: !!process.env.ELEVENLABS_API_KEY || process.env.FIXTURE_MUSIC === '1',
     legacyDatabaseId: process.env.FIREBASE_LEGACY_DATABASE_ID || null });
 });
 
 app.use('/api', async (request, response, next) => {
   response.set('Cache-Control', 'private, no-store');
   const token = request.get('authorization')?.match(/^Bearer (.+)$/)?.[1] || '';
-  if (localTest && /^test-[a-z0-9]{1,40}$/.test(token)) {
-    response.locals.uid = token;
-    return next();
-  }
-  if (admin && token) {
-    try {
-      response.locals.uid = (await admin.verifyIdToken(token)).uid;
-      return next();
-    } catch {
-      // Invalid or expired credentials return the same response.
-    }
-  }
-  return response.status(401).json({ error: 'Sign in to access your songs.' });
+  const uid = await authenticate(token);
+  if (!uid) return response.status(401).json({ error: 'Sign in to access your studio.' });
+  response.locals.uid = uid;
+  next();
+});
+app.get('/api/profile', (_request, response) => response.json(profiles.get(response.locals.uid)));
+app.put('/api/profile', (request, response) => {
+  const profile = profiles.save(response.locals.uid, request.body);
+  if (!profile) return response.status(400).json({ error: 'Check your profile options and select an earned badge.' });
+  duels.profileChanged(response.locals.uid, profile);
+  return response.json(profile);
+});
+app.post('/api/duels/:id/leave', (request, response) => {
+  duels.leave(request.params.id, response.locals.uid);
+  return response.sendStatus(204);
+});
+app.get('/api/duels/:id/track', async (request, response, next) => {
+  const assets = duels.assets(request.params.id, response.locals.uid);
+  if (!assets) return response.status(404).json({ error: 'Join this duel to access the track.' });
+  try { return response.json({ song: assets.song, chart: JSON.parse(await assets.chart()) }); }
+  catch (error) { return next(error); }
+});
+app.get('/api/duels/:id/audio', (request, response) => {
+  const assets = duels.assets(request.params.id, response.locals.uid);
+  return assets ? response.sendFile(assets.audio) : response.status(404).json({ error: 'Join this duel to access the track.' });
 });
 app.post('/api/generations', (request, response) => {
   const { prompt, durationSeconds, key } = request.body ?? {};
@@ -81,7 +110,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const port = Number(process.env.PORT || 3000);
-const server = app.listen(port, localTest ? '127.0.0.1' : process.env.HOST || '0.0.0.0', () => {
+server.listen(port, localTest || authEmulator ? '127.0.0.1' : process.env.HOST || '0.0.0.0', () => {
   const address = server.address();
   if (address && typeof address !== 'string') console.log(`Keyboard Shredder listening on port ${address.port}`);
 });

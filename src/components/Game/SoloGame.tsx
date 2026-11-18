@@ -1,20 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Chart, Difficulty, Song } from '../../../shared/song';
-import { Scoring } from '../../lib/scoring';
+import { Scoring } from '../../../shared/scoring';
+import { palettes, type LaneInput, type Profile } from '../../../shared/duel';
 import { Transport, withAudioDeadline } from '../../lib/transport';
 
-const laneColors = ['#ff8757', '#ffc66b', '#87dcae', '#78b9ff', '#e0a2ff'];
-const lookahead = 1900;
+type Match = {
+  startAt: number | null; ready: boolean; onReady: () => Promise<void>; onInput: (input: LaneInput) => void;
+};
 
-export default function SoloGame({ song, chart, difficulty, audio, keys, calibration, leave }: {
+export default function SoloGame({ song, chart, difficulty, audio, keys, calibration, leave, profile, match }: {
   song: Song; chart: Chart; difficulty: Difficulty; audio: ArrayBuffer; keys: string[];
-  calibration: number; leave: () => void;
+  calibration: number; leave: () => void; profile?: Profile; match?: Match;
 }) {
   const [state, setState] = useState<'ready' | 'playing' | 'paused' | 'results'>('ready');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
   const [time, setTime] = useState(0);
   const events = chart.events[difficulty];
+  const laneColors = palettes[profile?.palette ?? 'Sunset'];
+  const lookahead = profile?.speed ?? 1900;
+  const matchRef = useRef(match);
+  matchRef.current = match;
   const scoring = useRef<Scoring>(null);
   scoring.current ??= new Scoring(events, difficulty === 'hard' ? 80 : 95);
   const context = useRef<AudioContext>(null);
@@ -23,6 +29,11 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
   const active = useRef(true);
   const pending = useRef(false);
   const primaryAction = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!match?.startAt || state !== 'ready' || !transport.current || pending.current) return;
+    void play();
+  }, [match?.startAt, state, starting]);
+
   useEffect(() => {
     if (state !== 'playing') primaryAction.current?.focus();
   }, [state]);
@@ -58,7 +69,12 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
         offset.current = 0;
         setTime(0);
       }
-      await transport.current.start(offset.current);
+      const currentMatch = matchRef.current;
+      if (currentMatch && currentMatch.startAt === null) {
+        await currentMatch.onReady();
+        return;
+      }
+      await transport.current.start(offset.current, 650, currentMatch?.startAt ?? undefined);
       if (active.current) setState('playing');
     } catch (reason) {
       transport.current?.stop();
@@ -79,6 +95,14 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
     let lastAudioTime = playback.context.currentTime;
     let lastAudioUpdate = performance.now();
     const pause = () => {
+      if (matchRef.current) {
+        const timeMs = Math.max(0, playback.timeMs() - calibration);
+        for (const lane of scoring.current.held) {
+          scoring.current.release(lane, timeMs);
+          matchRef.current.onInput({ lane, down: false, timeMs });
+        }
+        return;
+      }
       offset.current = Math.min(playback.buffer.duration * 1000 - 1, Math.max(offset.current, playback.timeMs()));
       playback.stop();
       scoring.current.pause(offset.current - calibration);
@@ -95,12 +119,19 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
       event.preventDefault();
       if (event.repeat) return;
       const inputTime = playback.timeMs(event.timeStamp);
-      if (inputTime >= offset.current) scoring.current.press(lane, inputTime - calibration);
-      else scoring.current.regrip(lane);
+      if (inputTime >= offset.current) {
+        const timeMs = inputTime - calibration;
+        scoring.current.press(lane, timeMs);
+        matchRef.current?.onInput({ lane, down: true, timeMs });
+      } else scoring.current.regrip(lane);
     };
     const keyup = (event: KeyboardEvent) => {
       const lane = keys.indexOf(event.code);
-      if (lane >= 0) scoring.current.release(lane, playback.timeMs(event.timeStamp) - calibration);
+      if (lane >= 0) {
+        const timeMs = playback.timeMs(event.timeStamp) - calibration;
+        scoring.current.release(lane, timeMs);
+        matchRef.current?.onInput({ lane, down: false, timeMs });
+      }
     };
     const visibility = () => { if (document.hidden) pause(); };
     const animate = () => {
@@ -113,8 +144,13 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
         void playback.context.close().catch(() => {});
         transport.current = null;
         context.current = null;
-        offset.current = Math.max(offset.current, now);
-        scoring.current.pause(offset.current - calibration);
+        if (matchRef.current) {
+          for (const lane of scoring.current.held) {
+            matchRef.current.onInput({ lane, down: false, timeMs: Math.max(0, now - calibration) });
+          }
+        }
+        offset.current = matchRef.current ? 0 : Math.max(offset.current, now);
+        scoring.current.pause(now - calibration);
         setError('Audio stopped advancing. Press Resume to reconnect playback.');
         setState('paused');
         return;
@@ -150,6 +186,7 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
     : feedback?.offsetMs === 0 ? 'On time' : '';
   const missed = feedback?.judgement === 'Miss' || feedback?.judgement === 'Sustain dropped' || feedback?.judgement === 'Wrong key';
   if (state === 'results') {
+    if (match) return <p role="status">Waiting for final duel scores…</p>;
     return <section className="panel results">
       <h1>Track complete</h1><p>{song.title}</p>
       <dl><div><dt>Score</dt><dd>{game.score}</dd></div><div><dt>Accuracy</dt><dd>{game.accuracy}%</dd></div>
@@ -164,8 +201,8 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
   return <section className="play">
     <header className="game-header"><div><h1>{song.title}</h1><p>{difficulty === 'normal' ? 'Normal' : 'Hard'} · {chart.bpm} BPM</p></div>
       <div className="game-actions">
-        {state === 'playing' && <button onClick={() => pauseAction.current()}>Pause</button>}
-        <button onClick={leave}>Exit track</button>
+        {state === 'playing' && !match && <button onClick={() => pauseAction.current()}>Pause</button>}
+        {!match && <button onClick={leave}>Exit track</button>}
       </div></header>
     <div className="hud"><strong>Score {game.score}</strong><span className="hit-feedback">{feedback?.judgement}{timing && <small>{timing}</small>}</span><strong>{game.combo} combo</strong></div>
     <div className="board">
@@ -189,8 +226,8 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
         {state === 'ready' && <div className="ready-keys" aria-label="Lane keys">{keys.map(key =>
           <kbd key={key}>{key.replace(/^(Key|Digit)/, '')}</kbd>)}</div>}
         {error && <p role="alert">{error}</p>}
-        <button ref={primaryAction} className="primary" disabled={starting} onClick={() => void play()}>
-          {starting ? 'Loading audio…' : state === 'paused' ? 'Resume' : 'Play'}
+        <button ref={primaryAction} className="primary" disabled={starting || !!(match?.ready && match.startAt === null)} onClick={() => void play()}>
+          {starting ? 'Loading audio…' : state === 'paused' ? 'Resume' : match ? match.startAt ? 'Join playback' : match.ready ? 'Ready' : 'Ready up' : 'Play'}
         </button>
       </div>}
       {state === 'playing' && time < offset.current && <div className="count-in">Get ready</div>}

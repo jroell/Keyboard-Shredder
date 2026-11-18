@@ -17,7 +17,7 @@ export class Transport {
 
   constructor(readonly context: AudioContext, readonly buffer: AudioBuffer) {}
 
-  async start(offset = 0, countInMs = 650) {
+  async start(offset = 0, countInMs = 650, scheduledAt?: number) {
     if (this.context.state !== 'running') {
       await withAudioDeadline(this.context.resume(), 'Audio did not resume. Press Play to try again.');
     }
@@ -27,9 +27,13 @@ export class Transport {
     source.buffer = this.buffer;
     source.connect(this.context.destination);
     this.source = source;
-    this.offset = offset;
-    this.contextStart = this.context.currentTime + countInMs / 1000;
-    source.start(this.contextStart, offset / 1000);
+    const current = this.context.currentTime;
+    const latency = scheduledAt === undefined ? 0 : (this.context.baseLatency || 0) + (this.context.outputLatency || 0);
+    const delay = scheduledAt === undefined ? countInMs : scheduledAt - performance.now();
+    const target = current + delay / 1000 - latency;
+    this.contextStart = Math.max(current, target);
+    this.offset = offset + Math.max(0, current - target) * 1000;
+    source.start(this.contextStart, Math.min(this.buffer.duration, this.offset / 1000));
   }
 
   timeMs(now = performance.now()) {

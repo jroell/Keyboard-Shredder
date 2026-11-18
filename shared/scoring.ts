@@ -1,4 +1,4 @@
-import type { SongEvent } from '../../shared/song';
+import type { SongEvent } from './song';
 
 export type Judgement = 'Perfect' | 'Good' | 'Miss' | 'Sustain dropped' | 'Wrong key';
 type Feedback = { judgement: Judgement; timeMs: number; lanes: number[]; offsetMs?: number };

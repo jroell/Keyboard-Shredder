@@ -1,12 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { FirebaseOptions } from 'firebase/app';
 import type { Auth, User } from 'firebase/auth';
 import { Guitar, Headphones, Library, Music2, SlidersHorizontal } from 'lucide-react';
+import AccountAccess from './components/AccountAccess';
+import PlayerProfile from './components/PlayerProfile';
+import type { Profile } from '../shared/duel';
 import SoloGame from './components/Game/SoloGame';
-import { DEFAULT_KEYS } from './lib/scoring';
+import { DEFAULT_KEYS } from '../shared/scoring';
 import type { Chart, Difficulty, Job, Song } from '../shared/song';
 
-type Config = { firebase: FirebaseOptions | null; localTest: boolean; musicEnabled: boolean; legacyDatabaseId: string | null };
+const DuelRoom = lazy(() => import('./components/Game/DuelRoom'));
+
+type Config = { authEmulator?: string; firebase: FirebaseOptions | null; localTest: boolean; musicEnabled: boolean; legacyDatabaseId: string | null };
 type Recording = { song: Song; chart: Chart; audio: ArrayBuffer };
 type LegacySong = { id: string; title: string; prompt?: string };
 const defaultPrompt = 'Punchy blues rock with a gritty electric guitar riff and a tight backbeat';
@@ -31,6 +36,9 @@ async function apiError(response: Response) {
 }
 
 export default function App() {
+  const [duelInvite, setDuelInvite] = useState<string | null>(() => new URLSearchParams(location.search).get('duel'));
+  const [profile, setProfile] = useState<Profile>();
+  const [profileError, setProfileError] = useState('');
   const [config, setConfig] = useState<Config>();
   const [auth, setAuth] = useState<Auth>();
   const [user, setUser] = useState<User | null>();
@@ -60,20 +68,27 @@ export default function App() {
       if (!active) return;
       setConfig(next);
       if (!next.firebase || next.localTest) return;
-      const [{ initializeApp }, { getAuth, onAuthStateChanged }] = await Promise.all([import('firebase/app'), import('firebase/auth')]);
+      const [{ initializeApp }, { connectAuthEmulator, getAuth, onAuthStateChanged }] = await Promise.all([import('firebase/app'), import('firebase/auth')]);
       if (!active) return;
       const firebase = initializeApp(next.firebase);
       const client = getAuth(firebase);
+      if (next.authEmulator) connectAuthEmulator(client, next.authEmulator, { disableWarnings: true });
       setAuth(client);
       unsubscribe = onAuthStateChanged(client, setUser);
     }).catch(() => { if (active) setError('Could not connect to the studio. Reload the page to try again.'); });
     return () => { active = false; unsubscribe?.(); };
   }, []);
 
+  const token = async () => {
+    if (!config?.localTest) return user?.getIdToken();
+    const key = new URLSearchParams(location.search).get('player');
+    if (key && /^test-[a-z0-9]{1,40}$/.test(key)) sessionStorage.setItem('shredder-local-player', key);
+    return sessionStorage.getItem('shredder-local-player') || 'test-player';
+  };
   const call = async (path: string, options: RequestInit = {}) => {
-    const token = config?.localTest ? 'test-player' : await user?.getIdToken();
+    const bearer = await token();
     const response = await fetch('/api' + path, { ...options, headers: {
-      ...options.headers, Authorization: `Bearer ${token || ''}`,
+      ...options.headers, Authorization: `Bearer ${bearer || ''}`,
     }, signal: AbortSignal.timeout(45_000) });
     if (!response.ok) throw await apiError(response);
     return response;
@@ -82,6 +97,7 @@ export default function App() {
   useEffect(() => {
     if (!canUseLibrary) {
       setSongs([]);
+      setProfile(undefined);
       setLegacy([]);
       setJob(undefined);
       setRecording(undefined);
@@ -89,6 +105,8 @@ export default function App() {
       return;
     }
     let active = true;
+    call('/profile').then(response => response.json()).then(value => { if (active) setProfile(value); })
+      .catch(() => { if (active) setProfileError('Player profile unavailable. Reload to retry.'); });
     call('/songs').then(response => response.json()).then(items => { if (active) setSongs(items); })
       .catch(reason => { if (active) setError(reason.message); });
     if (user && auth && config?.legacyDatabaseId) {
@@ -224,32 +242,32 @@ export default function App() {
     }
   };
 
-  const signIn = async () => {
-    if (!auth || busy.current) return;
-    busy.current = true;
-    setLoading(true);
-    setError('');
-    try {
-      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
-      await signInWithPopup(auth, new GoogleAuthProvider());
-    }
-    catch { setError('Google sign-in failed. Try again.'); }
-    finally { busy.current = false; setLoading(false); }
-  };
+  async function saveProfile(value: Profile) {
+    const response = await call('/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+    const saved: Profile = await response.json();
+    setProfile(saved);
+    return saved;
+  }
+
+  if (canUseLibrary && duelInvite !== null) return <Suspense fallback={<main className="studio"><p role="status">Opening duel…</p></main>}><DuelRoom key={user?.uid ?? 'local'} invite={duelInvite}
+    token={token} call={call} songs={songs} difficulty={difficulty} profile={profile} {...settings}
+    refresh={() => { void call('/profile').then(response => response.json()).then(setProfile).catch(() => {}); }}
+    exit={() => { history.replaceState(null, '', location.pathname); setDuelInvite(null); }} /></Suspense>;
 
   const generating = !!job && job.stage !== 'ready' && job.stage !== 'failed';
   if (recording) return <main className="studio">
-    <SoloGame key={recording.song.id} {...recording} difficulty={difficulty} {...settings} leave={() => setRecording(undefined)} />
+    <SoloGame key={recording.song.id} {...recording} difficulty={difficulty} profile={profile} {...settings} leave={() => setRecording(undefined)} />
   </main>;
 
   return <main className="studio">
     <header className="masthead"><div className="brand"><Guitar aria-hidden="true" /><span>Keyboard Shredder</span></div>
+      {canUseLibrary && <button disabled={generating || loading} onClick={() => setDuelInvite('')}>Head-to-head</button>}
       {user && <button disabled={generating || loading} onClick={() => void import('firebase/auth').then(({ signOut }) => signOut(auth!))}>Sign out</button>}</header>
     <section className="hero"><h1>Make a track.<br />Play the guitar.</h1>
       <p>Generate an original guitar track and play its riffs, chords, and solos on your keyboard.</p></section>
     {!config && !error && <p role="status">Connecting to the studio…</p>}
     {config && !canUseLibrary && (auth
-      ? <button className="primary" disabled={loading} onClick={() => void signIn()}>{loading ? 'Signing in…' : 'Sign in with Google'}</button>
+      ? <AccountAccess auth={auth} invite={duelInvite !== null} />
       : <p role="status">The studio needs a Firebase sign-in configuration.</p>)}
     {error && <p className="error" role="alert">{error}</p>}
     {canUseLibrary && <div className="studio-grid">
@@ -276,6 +294,8 @@ export default function App() {
             {job.canRetryChart && <button type="button" disabled={loading} onClick={() => void retryChart()}>Retry chart analysis</button>}
           </div>}
         </form>
+        {profile && <PlayerProfile key={user?.uid ?? 'local'} profile={profile} save={saveProfile} />}
+        {profileError && <p role="status">{profileError}</p>}
         <details className="panel settings">
           <summary><SlidersHorizontal aria-hidden="true" /> Controls and timing</summary>
           <p>Choose a lane, then press a letter or number to remap it. Press Escape to cancel.</p>

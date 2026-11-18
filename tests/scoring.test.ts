@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Scoring } from '../src/lib/scoring';
+import { Scoring } from '../shared/scoring';
 
 test('A two-key chord scores once when both keys arrive within 55 ms', () => {
   const game = new Scoring([{ id: 'chord', timeMs: 1000, lanes: [0, 1], durationMs: 0 }]);
