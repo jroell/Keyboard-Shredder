@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { SessionState } from '../../src/game/session';
 import type { SongEvent } from '../../shared/song';
 
@@ -8,7 +8,6 @@ type PlayerOptions = {
   offsetMs?: number;
   until?: number;
   from?: number;
-  useBoost?: boolean;
   hold?: boolean;
 };
 
@@ -20,16 +19,24 @@ export type ShredderWindow = Window & {
       wait: boolean;
       rawTime(): number;
       time(): number;
-      scorings: { ampCharge: number; score: number; misses: number }[];
+      scorings: {
+        boostsUsed: number;
+        combo: number;
+        score: number;
+        misses: number;
+        hitOffsets: Map<string, number>;
+      }[];
     };
     chart: { durationMs: number };
-    players: { events: SongEvent[]; keys: string[]; boostKey: string }[];
+    players: { events: SongEvent[]; keys: string[] }[];
   };
 };
 
-export async function waitForState(page: Page, state: SessionState, timeoutMs = 10_000) {
-  await page.waitForFunction(expected => (window as ShredderWindow).__shredder?.session.state === expected,
-    state, { timeout: timeoutMs });
+export async function waitForState(page: Page, state: SessionState, timeoutMs = 30_000) {
+  await expect.poll(
+    () => page.evaluate(() => (window as ShredderWindow).__shredder?.session.state),
+    { timeout: timeoutMs, message: `The game session should be ${state}` },
+  ).toBe(state);
 }
 
 export async function chartTime(page: Page) {
@@ -38,13 +45,13 @@ export async function chartTime(page: Page) {
 
 // Call after the stage opens, for example: await playSong(page, { accuracy: 0.5, until: 12_000 });
 export async function playSong(page: Page, options: PlayerOptions = {}) {
-  const { player = 0, accuracy = 1, offsetMs = 0, until, from = 0, useBoost = false, hold = true } = options;
+  const { player = 0, accuracy = 1, offsetMs = 0, until, from = 0, hold = true } = options;
   if (!Number.isFinite(accuracy) || accuracy < 0 || accuracy > 1) {
     throw new RangeError('Accuracy must be between 0 and 1.');
   }
-  await page.evaluate(({ player, accuracy, offsetMs, until, from, useBoost, hold }) => {
+  await page.evaluate(({ player, accuracy, offsetMs, until, from, hold }) => {
     const { session, players, chart } = (window as ShredderWindow).__shredder!;
-    const { events, keys, boostKey } = players[player];
+    const { events, keys } = players[player];
     const releases = new Map<string, number>();
     const deadline = performance.now() + chart.durationMs * 2 + 15_000;
     let index = from;
@@ -78,10 +85,6 @@ export async function playSong(page: Page, options: PlayerOptions = {}) {
           releases.delete(code);
         }
         if (until !== undefined && now > until) return finish();
-        if (useBoost && session.scorings[player].ampCharge === 100) {
-          send('keydown', boostKey);
-          send('keyup', boostKey);
-        }
         const aim = session.wait ? offsetMs : offsetMs - 8;
         while (index < events.length && events[index].timeMs + aim <= now) {
           const note = events[index++];
@@ -99,5 +102,5 @@ export async function playSong(page: Page, options: PlayerOptions = {}) {
       };
       requestAnimationFrame(frame);
     });
-  }, { player, accuracy, offsetMs, until, from, useBoost, hold });
+  }, { player, accuracy, offsetMs, until, from, hold });
 }

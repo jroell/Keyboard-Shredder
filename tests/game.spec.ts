@@ -90,9 +90,10 @@ const button = (page: Page, name: string | RegExp) => page.getByRole('button', {
 const heading = (page: Page, name: string | RegExp) => page.getByRole('heading', { name, exact: typeof name === 'string' });
 const score = (page: Page) => page.getByTestId('score').first();
 const songRow = (page: Page, title: string) => page.getByRole('option').filter({ has: page.getByText(title, { exact: true }) });
-const results = (page: Page) => page.getByRole('region', { name: /Full combo!|Set complete|Standing ovation|Rough night|Booed off stage|Lesson passed|Keep practicing|Drill complete|Dead heat|wins!/ });
+const results = (page: Page) => page.getByRole('region').filter({ has: page.locator('#results-title') });
 const points = (value: string | null) => Number(value?.replace(/,/g, ''));
 const hudPoints = async (page: Page) => points(await score(page).textContent());
+const scoredPoints = (page: Page) => page.evaluate(() => (window as ShredderWindow).__shredder!.session.scorings[0].score);
 
 async function seedPlayer(page: Page, name = 'Tester') {
   await page.addInitScript(name => {
@@ -133,7 +134,7 @@ async function selectChart(page: Page, title: string, difficulty: Difficulty = '
     await group.getByRole('button', { name: delta > 0 ? 'Harder' : 'Easier' }).click();
   }
   await expect(group).toContainText(difficultyNames[difficulty]);
-  await expect(group.getByText(/^\d+ notes · \d+ chords · \d+ holds$/)).toBeVisible();
+  await expect(group.getByText(/^\d+ notes? · \d+ chords? · \d+ holds?$/)).toBeVisible();
 }
 
 async function chooseSong(page: Page, title: string, difficulty: Difficulty = 'easy') {
@@ -212,19 +213,19 @@ test('A first-time guest clears River Amp on Easy and keeps five stars and a gra
   await expect(button(page, 'Start')).toBeFocused();
   await page.keyboard.press('Enter');
   await waitForState(page, 'playing');
-  const last = (await noteTimes(page)).at(-1)!;
-  await playSong(page, { until: last.timeMs + last.durationMs + 450 });
-  const hud = await score(page).textContent();
+  await playSong(page);
   await waitForResults(page, 'Full combo!');
+  const final = (await scoredPoints(page)).toLocaleString();
+  await expect(score(page)).toHaveText(final);
   await expect(stat(page, 'Missed')).toHaveText('0');
   await expect(results(page).getByRole('img', { name: /^5 out of 5 stars/ })).toBeVisible();
-  await expect(page.getByTestId('final-score')).toHaveText(hud!);
+  await expect(page.getByTestId('final-score')).toHaveText(final);
   await expect(results(page).getByText('First clear!', { exact: true })).toBeVisible();
   await expect(results(page).getByText(/^\+[1-9][\d,]* XP$/)).toBeVisible();
   await expect(results(page).getByRole('heading', { name: 'Leaderboard You are #1' })).toBeVisible();
   const entry = results(page).getByRole('listitem').filter({ hasText: 'Riff Captain' });
   await expect(entry.locator('span')).toHaveText('1');
-  await expect(entry).toContainText(hud!);
+  await expect(entry).toContainText(final);
   const grade = await results(page).locator('[aria-label^="Grade "]').innerText();
   await page.reload();
   await enterMenu(page);
@@ -281,7 +282,7 @@ test('Escape freezes playback for 500 ms and a re-held sustain scores after the 
   const frozen = await chartTime(page);
   await new Promise(resolve => setTimeout(resolve, 500));
   expect(await chartTime(page)).toBe(frozen);
-  const before = await hudPoints(page);
+  const before = await scoredPoints(page);
   expect(before).toBeGreaterThan(0);
   await pause.getByRole('button', { name: 'Resume' }).click();
   await expect(page.locator('.count-in')).toHaveText(/^[1-4]$/);
@@ -291,6 +292,9 @@ test('Escape freezes playback for 500 ms and a re-held sustain scores after the 
   } finally {
     await page.keyboard.up(code);
   }
+  await waitForResults(page);
+  await expect(results(page).getByText(/^Paused runs stay off the leaderboard\./)).toBeVisible();
+  expect(await leaderboardEntries(page, game)).toEqual([]);
 });
 
 test('A Blacktop Sparks hit brings the lead guitar into the mix and adjacent missed notes stay silent.', async ({ browserName, page, game }) => {
@@ -360,69 +364,67 @@ test('Space leaves an uncharged amp alone and doubles the next note award when t
   test.skip(browserName === 'firefox', 'Headless Firefox drops timed hits on this runner before the amp reaches full charge for the comparison note.');
   await quickPlay(page, game.url);
   const notes = await noteTimes(page);
-  const target = notes[20].timeMs;
+  const target = notes[20];
+  expect(target.durationMs).toBe(0);
+  expect(notes[19].timeMs + notes[19].durationMs).toBeLessThan(target.timeMs - 150);
   const amp = page.getByRole('meter', { name: 'Amp charge' });
 
-  const measure = async (useBoost: boolean) => {
-    const [, snapshot] = await Promise.all([
-      playSong(page, { until: target + 250, useBoost }),
-      page.evaluate(({ target, useBoost }) => {
-        const { session } = (window as ShredderWindow).__shredder!;
-        const meter = document.querySelector<HTMLElement>('[aria-label="Amp charge"]')!;
-        const hud = document.querySelector('[data-testid="score"]')!;
-        const multiplier = document.querySelector<HTMLElement>('[aria-label="Score multiplier"]')!;
-        const readScore = () => Number(hud.textContent!.replace(/,/g, ''));
-        let earlyBoost: boolean | undefined;
-        let before: number | undefined;
-        let streakMultiplier = 0;
-        let ready = false;
-        let boosting = false;
+  const measure = async (boost: boolean) => {
+    if (boost) await expect(amp).toHaveAttribute('data-ready', 'true');
+    const sample = await page.evaluate(async ({ target, boost }) => {
+      const { session, players } = (window as ShredderWindow).__shredder!;
+      const scoring = session.scorings[0];
+      const press = (code: string) => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+        window.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
+      };
 
-        return new Promise<{ award: number; streakMultiplier: number; earlyBoost?: boolean; ready: boolean; boosting: boolean }>(resolve => {
-          const frame = () => {
-            const time = session.time();
-            if (!useBoost && time >= 500 && earlyBoost === undefined) {
-              window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }));
-              window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', bubbles: true }));
-              earlyBoost = false;
-            }
-            if (earlyBoost !== undefined && time < 5000 && meter.dataset.boost === 'true') earlyBoost = true;
-            const displayed = readScore();
-            const settled = displayed === session.scorings[0].score;
-            if (time >= target - 300 && time < target && settled) {
-              before = displayed;
-              streakMultiplier = Number(multiplier.dataset.level);
-              ready = meter.dataset.ready === 'true';
-              boosting = meter.dataset.boost === 'true';
-            }
-            if (time >= target + 260 && settled) {
-              return resolve({ award: displayed - (before ?? NaN), streakMultiplier, earlyBoost, ready, boosting });
-            }
-            requestAnimationFrame(frame);
-          };
-          requestAnimationFrame(frame);
-        });
-      }, { target, useBoost }),
-    ]);
-    return snapshot;
+      if (boost) press('Space');
+      while (session.time() < target.timeMs - 8 && session.state === 'playing') {
+        await new Promise(requestAnimationFrame);
+      }
+      const before = scoring.score;
+      const combo = scoring.combo;
+      press(players[0].keys[target.lanes[0]]);
+      return {
+        award: scoring.score - before,
+        combo,
+        boostsUsed: scoring.boostsUsed,
+        offset: scoring.hitOffsets.get(target.id),
+      };
+    }, { target, boost });
+    expect(sample.offset, 'The comparison note must score').toBeDefined();
+    expect(Math.abs(sample.offset!)).toBeLessThanOrEqual(45);
+    return sample;
   };
 
   await start(page);
+  await Promise.all([
+    playSong(page, { until: target.timeMs - 350 }),
+    (async () => {
+      await waitForPosition(page, 450);
+      await expect(amp).toHaveAttribute('data-ready', 'false');
+      await page.keyboard.press('Space');
+      const used = await page.evaluate(() => (window as ShredderWindow).__shredder!.session.scorings[0].boostsUsed);
+      expect(used).toBe(0);
+      await expect(amp).toHaveAttribute('data-boost', 'false');
+    })(),
+  ]);
+  await expect(amp).toHaveAttribute('data-ready', 'true');
   const normal = await measure(false);
-  expect(normal.earlyBoost).toBe(false);
-  expect(normal.ready).toBe(true);
-  expect(normal.boosting).toBe(false);
+  expect(normal.boostsUsed).toBe(0);
   expect(normal.award).toBeGreaterThan(0);
 
   await page.keyboard.press('Escape');
   await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'Restart' }).click();
   await waitForState(page, 'playing');
+  await playSong(page, { until: target.timeMs - 350 });
   const boosted = await measure(true);
-  expect(boosted.ready).toBe(false);
-  expect(boosted.boosting).toBe(true);
-  expect(boosted.streakMultiplier).toBeGreaterThan(0);
-  expect(normal.streakMultiplier).toBeGreaterThan(0);
-  expect(boosted.award / boosted.streakMultiplier).toBe(2 * normal.award / normal.streakMultiplier);
+  expect(boosted.boostsUsed).toBe(1);
+  expect(boosted.combo).toBe(normal.combo);
+  expect(boosted.award).toBe(2 * normal.award);
+  await expect(amp).toHaveAttribute('data-ready', 'false');
+  await expect(amp).toHaveAttribute('data-boost', 'true');
   await expect(amp).toHaveAttribute('data-boost', 'false', { timeout: 12_000 });
   await expect.poll(() => amp.evaluate(element => (element as HTMLElement).style.getPropertyValue('--level'))).toBe('0');
 });
@@ -494,7 +496,11 @@ for (const computer of [false, true]) {
     await openMenu(page, game.url, 'Player 1');
     await button(page, 'Party mode').click();
     await page.getByRole('combobox', { name: 'Song', exact: true }).selectOption('river-amp');
-    if (computer) await page.getByRole('combobox', { name: 'Opponent', exact: true }).selectOption({ label: 'Computer: legend' });
+    if (computer) {
+      const legend = 'Computer: legend';
+      const opponent = page.getByRole('combobox').filter({ has: page.getByRole('option', { name: legend, exact: true }) });
+      await opponent.selectOption({ label: legend });
+    }
     await button(page, 'Start').click();
     await expect(page.locator('.ready-party .ready-keys').first().locator('kbd')).toHaveText(['A', 'S', 'D', 'F', 'G']);
     await expect(page.locator('.ready-party .ready-keys').last().locator('kbd')).toHaveText(['H', 'J', 'K', 'L', ';']);
@@ -702,7 +708,7 @@ test('The generation API returns HTTP 403 for a guest requesting a 30-second tra
   expect(await response.json()).toEqual({ error: 'Sign in to create your own tracks.' });
 });
 
-async function configureSolo(page: Page, url: string, calibration?: number) {
+async function configureSolo(page: Page, url: string, song: string, calibration?: number) {
   await openMenu(page, url);
   await button(page, 'Settings').click();
   const remap = button(page, /^Remap lane 1, current key A$/).first();
@@ -716,13 +722,13 @@ async function configureSolo(page: Page, url: string, calibration?: number) {
   }
   await button(page, 'Back').click();
   await button(page, 'Quick play').click();
-  await chooseSong(page, 'Blacktop Sparks');
+  await chooseSong(page, song);
   await expect(page.getByLabel('Lane keys').locator('kbd').first()).toHaveText('Q');
 }
 
 test('Remapping lane 1 to Q scores with Q and leaves the former A key unable to hit the note.', async ({ browserName, page, game }) => {
   test.skip(browserName === 'firefox', 'Headless Firefox on this runner repeatedly missed the chart windows for the isolated remapped-key hits.');
-  await configureSolo(page, game.url);
+  await configureSolo(page, game.url, 'Blacktop Sparks');
   const [first, ...later] = (await noteTimes(page)).filter(note => note.lanes[0] === 0);
   await start(page);
   await page.evaluate(noteTime => new Promise<void>(resolve => {
@@ -758,28 +764,30 @@ test('Remapping lane 1 to Q scores with Q and leaves the former A key unable to 
 });
 
 test('A +100 ms timing offset makes a lane-1 press 100 ms after the audio beat Perfect.', async ({ page, game }) => {
-  await configureSolo(page, game.url, 100);
+  await configureSolo(page, game.url, 'Midnight Toll', 100);
   const notes = (await noteTimes(page)).filter(note => note.lanes[0] === 0);
+  expect(notes.length).toBeGreaterThan(0);
   await start(page);
-  const lateness = await page.evaluate(times => {
+  const shot = await page.evaluate(async notes => {
     const { session } = (window as ShredderWindow).__shredder!;
-    return new Promise<number | null>(resolve => {
-      let index = 0;
-      const frame = () => {
-        const time = session.rawTime();
-        while (index < times.length && time > times[index] + 130) index++;
-        if (index === times.length || session.state === 'finished') return resolve(null);
-        const late = time - times[index];
-        if (late < 100) return void requestAnimationFrame(frame);
-        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyQ', bubbles: true }));
-        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyQ', bubbles: true }));
-        resolve(late);
-      };
-      requestAnimationFrame(frame);
-    });
-  }, notes.map(note => note.timeMs));
-  expect(lateness).toBeGreaterThanOrEqual(100);
-  expect(lateness).toBeLessThanOrEqual(130);
+    for (const note of notes) {
+      const target = note.timeMs + 100;
+      while (session.rawTime() < target && session.state === 'playing') {
+        await new Promise(resolve => setTimeout(resolve, 4));
+      }
+      if (session.state !== 'playing') break;
+      const lateness = session.rawTime() - note.timeMs;
+      if (lateness > 130) continue;
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyQ', bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyQ', bubbles: true }));
+      return { lateness, judgedOffset: session.scorings[0].hitOffsets.get(note.id) };
+    }
+    throw new Error(`No lane-1 hit window was sampled. Last position: ${session.rawTime()} ms (${session.state}).`);
+  }, notes);
+  expect(shot.lateness).toBeGreaterThanOrEqual(100);
+  expect(shot.lateness).toBeLessThanOrEqual(130);
+  expect(shot.judgedOffset).toBeDefined();
+  expect(Math.abs(shot.judgedOffset!)).toBeLessThanOrEqual(45);
   await expect(score(page)).toHaveText('100');
   await waitForResults(page, 'Rough night');
   await expect(stat(page, 'Perfect')).toHaveText('1');
@@ -836,7 +844,8 @@ test('Typing wait mode holds the first letter for 5 seconds without a miss and p
   await expect(score(page)).toHaveText('0');
   await playSong(page);
   await waitForResults(page, 'Lesson passed');
-  await expect(stat(page, 'Missed')).toHaveText('0');
+  await expect(stat(page, 'Correct letters')).toHaveText(String(notes.length));
+  await expect(stat(page, 'Wrong keys')).toHaveText('0');
   await expect(stat(page, 'Accuracy')).toHaveText('100%');
   await expect(results(page).getByRole('img', { name: '3 out of 3 stars' })).toBeVisible();
 });
@@ -862,13 +871,13 @@ test('Capital letters scores a letter with Shift and counts the same letter with
   await playSong(page, { until: capital.index ? notes[capital.index - 1].timeMs + 50 : -1 });
   await waitForPosition(page, capital.timeMs);
   const letter = capital.key.slice('Shift+Key'.length);
-  const before = await hudPoints(page);
+  const before = await scoredPoints(page);
   await page.keyboard.press(`Key${letter}`);
-  expect(await hudPoints(page)).toBe(before);
+  expect(await scoredPoints(page)).toBe(before);
   await playSong(page, { from: capital.index });
   await waitForResults(page, 'Lesson passed');
-  await expect(stat(page, 'Notes hit')).toHaveText('100%');
-  await expect(stat(page, 'Stray presses')).toHaveText('1');
+  await expect(stat(page, 'Correct letters')).toHaveText(String(notes.length));
+  await expect(stat(page, 'Wrong keys')).toHaveText('1');
 });
 
 async function leaderboardEntries(page: Page, game: GameServer) {
@@ -895,19 +904,30 @@ test('Song map section 3 starts at 25% of the song, loops at 37.5%, and adds no 
   await expect(page.getByText('Song map', { exact: true })).toBeVisible();
   await button(page, /^Practice section 3\b/).click();
   await expect(page.getByText('Section practice', { exact: true })).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Section' }).getByRole('button', { name: '3', exact: true }))
+  await expect(page.getByRole('group', { name: 'Section' }).getByRole('button', { name: /^Section 3, / }))
     .toHaveAttribute('aria-pressed', 'true');
   await expect(button(page, '75% speed')).toHaveAttribute('aria-pressed', 'true');
   const duration = await page.evaluate(() => (window as ShredderWindow).__shredder!.chart.durationMs);
+  await expect.poll(() => chartTime(page)).toBe(Math.round(duration * 0.25));
+  await expect.poll(() => songProgress(page)).toBeCloseTo(0.25, 3);
   await start(page);
-  await waitForPosition(page, Math.round(duration / 4));
-  expect(await songProgress(page)).toBeCloseTo(0.25, 2);
-  await waitForPosition(page, Math.round(duration * 0.373));
-  expect(await songProgress(page)).toBeCloseTo(0.375, 2);
-  await waitForState(page, 'finished', 4000);
-  await waitForState(page, 'playing', 10_000);
-  await waitForPosition(page, Math.round(duration / 4));
-  expect(await songProgress(page)).toBeCloseTo(0.25, 2);
+  const [end] = await Promise.all([
+    page.waitForFunction(() => {
+      const session = (window as ShredderWindow).__shredder?.session;
+      return session?.state === 'finished' && { time: session.rawTime() };
+    }, undefined, { timeout: 20_000 }),
+    playSong(page),
+  ]);
+  expect(await end.jsonValue()).toEqual({ time: Math.round(duration * 0.375) });
+  await page.waitForFunction(() => (window as ShredderWindow).__shredder?.session.counting,
+    undefined, { timeout: 10_000 });
+  const restart = await page.waitForFunction(() => {
+    const session = (window as ShredderWindow).__shredder?.session;
+    return session?.state === 'playing' && !session.counting && { time: session.rawTime() };
+  }, undefined, { timeout: 10_000 });
+  const { time } = await restart.jsonValue();
+  expect(time).toBeGreaterThanOrEqual(Math.round(duration * 0.25));
+  expect(time).toBeLessThan(Math.round(duration * 0.25) + 150);
   await expect(page.locator('#results-title')).toHaveCount(0);
   await expect(page.getByLabel('Paused', { exact: true })).toHaveCount(0);
   expect(await leaderboardEntries(page, game)).toEqual(before);
@@ -954,12 +974,17 @@ test('A Beginner party player beats a higher-scoring Hard player by finishing wi
   await levels.nth(0).selectOption('beginner');
   await levels.nth(1).selectOption('hard');
   await button(page, 'Start').click();
+  await expect(page.getByText(/Click Start when you are both ready/)).toBeVisible();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Space');
+  await expect(page.locator('.stage')).toHaveAttribute('data-state', 'ready');
   await start(page);
   await Promise.all([playSong(page), playSong(page, { player: 1, accuracy: 0.85 })]);
   await waitForResults(page, 'Player 1 wins!');
   const players = page.locator('.party-results > div');
-  const [beginner, hard] = (await players.locator('strong').allTextContents()).map(points);
-  const [firstRating, secondRating] = (await players.getByText(/% timing rating/).allTextContents()).map(parseFloat);
+  const [firstRating, secondRating] = (await players.locator('strong').allTextContents()).map(parseFloat);
+  const [beginner, hard] = (await players.getByText(/timing rating · [\d,]+ points/).allTextContents())
+    .map(line => points(line.match(/([\d,]+) points/)![1]));
   expect(beginner).toBeGreaterThan(0);
   expect(beginner).toBeLessThan(hard);
   expect(firstRating).toBeGreaterThan(secondRating);
@@ -989,13 +1014,16 @@ test('The first headline set adds the scores from four songs and saves a gold re
     await expect(ready.getByText(`${venue.name} · song ${index + 1} of 4`)).toBeVisible();
     if (index > 0) await expect(ready.getByText(`Set total so far: ${total.toLocaleString()}`)).toBeVisible();
     await start(page);
-    await playSong(page);
-    await waitForResults(page);
-    const final = await score(page).innerText();
-    await expect(page.getByTestId('final-score')).toHaveText(final);
-    total += points(final);
-    ratings.push(parseFloat(await stat(page, 'Timing rating').innerText()));
+    // Earn gold without meeting the platinum requirement on every song.
+    await playSong(page, { accuracy: index === 0 ? 0.8 : 1 });
     const next = venue.tracks[index + 1];
+    await waitForResults(page, next ? `Song ${index + 1} of 4 cleared` : 'Headline set complete');
+    const final = await scoredPoints(page);
+    await expect(score(page)).toHaveText(final.toLocaleString());
+    total += final;
+    // The last song of a set shows the set total as the big number.
+    await expect(page.getByTestId('final-score')).toHaveText((next ? final : total).toLocaleString());
+    ratings.push(parseFloat(await stat(page, 'Timing rating').innerText()));
     if (next) {
       await expect(page.getByText(`Set total ${total.toLocaleString()} after ${index + 1} of 4 songs.`)).toBeVisible();
       await button(page, `Next song: ${next.title}`).click();
@@ -1004,30 +1032,42 @@ test('The first headline set adds the scores from four songs and saves a gold re
 
   const average = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
   expect(average).toBeGreaterThanOrEqual(80);
-  await expect(page.getByText(
-    `Set complete: ${total.toLocaleString()} points, ${average.toFixed(1)}% average timing rating. Gold record earned!`,
+  expect(ratings[0]).toBeLessThan(85);
+  await expect(results(page).getByRole('heading', { name: `Gold record: ${venue.name}` })).toBeVisible();
+  await expect(results(page).getByText(
+    `Total ${total.toLocaleString()} · average timing rating ${average.toFixed(1)}% on Beginner`, { exact: true },
   )).toBeVisible();
-  const saved = await page.evaluate(name => JSON.parse(localStorage.getItem('ks:sets') ?? '{}')[name], venue.name);
+  const saved = await page.evaluate(key => JSON.parse(localStorage.getItem('ks:sets') ?? '{}')[key], `${venue.name}:beginner`);
   expect(saved.score).toBe(total);
   expect(saved.rating).toBeCloseTo(average);
   await button(page, 'Back to tour').click();
-  await expect(venueCard.getByText(`Gold record · ${total.toLocaleString()}`)).toBeVisible();
+  await expect(venueCard.getByText(`Gold record · ${total.toLocaleString()} on Beginner`, { exact: true })).toBeVisible();
 });
 
-type GuitarWindow = typeof window & ShredderWindow & { setGuitarButtons(buttons: number[]): void };
+type GuitarSample = { buttons: number[]; timestamp: number };
+type GuitarWindow = typeof window & ShredderWindow & {
+  setGuitarButtons(buttons: number[]): void;
+  setGuitarSource(read: () => GuitarSample): void;
+};
 
 test('A standard guitar controller strums through the menu and hits every song note while counting a wrong-fret strum as one stray press.', async ({ page, game }) => {
   await page.addInitScript(() => {
     let held: number[] = [];
-    (window as GuitarWindow).setGuitarButtons = buttons => { held = buttons; };
-    Object.defineProperty(navigator, 'getGamepads', { value: () => [{
-      id: 'Test Guitar', index: 0, connected: true, mapping: 'standard', axes: [0, 0, 0, 0],
-      timestamp: performance.now(),
-      buttons: Array.from({ length: 17 }, (_, index) => {
-        const pressed = held.includes(index);
-        return { pressed, touched: pressed, value: Number(pressed) };
-      }),
-    }, null, null, null] });
+    let read = (): GuitarSample => ({ buttons: held, timestamp: performance.now() });
+    const guitar = window as GuitarWindow;
+    guitar.setGuitarButtons = buttons => { held = buttons; };
+    guitar.setGuitarSource = source => { read = source; };
+    Object.defineProperty(navigator, 'getGamepads', { value: () => {
+      const sample = read();
+      return [{
+        id: 'Test Guitar', index: 0, connected: true, mapping: 'standard', axes: [0, 0, 0, 0],
+        timestamp: sample.timestamp,
+        buttons: Array.from({ length: 17 }, (_, index) => {
+          const pressed = sample.buttons.includes(index);
+          return { pressed, touched: pressed, value: Number(pressed) };
+        }),
+      }, null, null, null];
+    } });
   });
   await openMenu(page, game.url);
   const guitarPress = (control: number) => page.evaluate(async control => {
@@ -1048,38 +1088,38 @@ test('A standard guitar controller strums through the menu and hits every song n
   await button(page, 'Quick play').click();
   await chooseSong(page, 'River Amp');
   await expect(page.getByText(/Test Guitar connected. Hold the frets and strum on each note./)).toBeVisible();
-  await start(page);
-
-  await page.evaluate(async () => {
-    const { __shredder, setGuitarButtons } = window as GuitarWindow;
+  await page.evaluate(() => {
+    const { __shredder, setGuitarSource } = window as GuitarWindow;
     const { session, players } = __shredder!;
     const fret = [0, 1, 3, 2, 4];
-    const frame = () => new Promise(requestAnimationFrame);
-    const until = async (time: number) => {
-      while (session.state === 'playing' && (session.counting || session.time() < time)) await frame();
-    };
-    const strum = async (frets: number[], time: number) => {
-      setGuitarButtons(frets);
-      await until(time - 8);
-      setGuitarButtons([...frets, 13]);
-      await frame();
-      await frame();
-      setGuitarButtons(frets);
-    };
+    const strokes = players[0].events.map(note => ({
+      at: note.timeMs, until: note.timeMs + note.durationMs, frets: note.lanes.map(lane => fret[lane]),
+    }));
+    const wrongAt = strokes[1].at - 200;
+    const wrongFret = fret.find(button => !strokes[0].frets.includes(button))!;
+    strokes.splice(1, 0, { at: wrongAt, until: wrongAt, frets: [wrongFret] });
 
-    const notes = players[0].events;
-    for (let index = 0; index < notes.length && session.state === 'playing'; index++) {
-      const note = notes[index];
-      await strum(note.lanes.map(lane => fret[lane]), note.timeMs);
-      await until(note.timeMs + Math.max(note.durationMs, 50));
-      if (index === 0) {
-        const wrongFret = fret.find((_, lane) => !note.lanes.includes(lane))!;
-        await strum([wrongFret], notes[1].timeMs - 200);
-        await frame();
+    let index = 0;
+    let active: GuitarSample | undefined;
+    let held: typeof strokes[number] | undefined;
+    setGuitarSource(() => {
+      const now = performance.now();
+      if (session.state !== 'playing' || session.counting) return { buttons: [], timestamp: now };
+      if (active) return active;
+      const time = session.time();
+      const next = strokes[index];
+      if (next && time >= next.at) {
+        index++;
+        held = next;
+        // The device reports when the strum happened, even if the browser polls it late.
+        active = { buttons: [...next.frets, 13], timestamp: now - (time - next.at) };
+        requestAnimationFrame(() => requestAnimationFrame(() => { active = undefined; }));
+        return active;
       }
-    }
-    setGuitarButtons([]);
+      return { buttons: held && time < held.until ? held.frets : [], timestamp: now };
+    });
   });
+  await start(page);
   await waitForResults(page, 'Standing ovation');
   await expect(stat(page, 'Notes hit')).toHaveText('100%');
   await expect(stat(page, 'Stray presses')).toHaveText('1');
@@ -1089,10 +1129,14 @@ test('A bad online invite shows why it failed and lets the guest start their own
   await seedPlayer(page);
   await page.goto(game.url + '/?duel=missing-room');
   await expect(heading(page, 'This invite did not work')).toBeVisible();
-  await expect(page.getByText('This game was not found or has ended.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/^The game was not found or has ended\./)).toBeVisible();
   await button(page, 'Start my own game').click();
-  await expect(button(page, 'Create invite')).toBeVisible();
   await expect(heading(page, 'This invite did not work')).toHaveCount(0);
+  await page.getByRole('combobox', { name: 'Track', exact: true }).selectOption('river-amp');
+  await button(page, 'Create invite').click();
+  const invite = new URL(await page.getByLabel('Invite link').inputValue());
+  expect(invite.searchParams.get('duel')).toBeTruthy();
+  expect(invite.searchParams.get('duel')).not.toBe('missing-room');
 });
 
 test('A bad challenge link shows Link not found and lets the guest pick a song or return to the main menu.', async ({ page, game }) => {
@@ -1102,6 +1146,9 @@ test('A bad challenge link shows Link not found and lets the guest pick a song o
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Main menu' })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Pick a song' }).click();
+  await expect(heading(page, 'Quick play')).toBeVisible();
+  // The title screen behind the dialog must not pull the guest back to the menu a moment later.
+  await page.waitForTimeout(700);
   await expect(heading(page, 'Quick play')).toBeVisible();
   await expect(dialog).toHaveCount(0);
 });
@@ -1115,7 +1162,9 @@ test('Going offline from the main menu opens Quick play or offers to reload the 
     const error = heading(page, 'This screen did not load');
     await expect(quick.or(error)).toBeVisible();
     if (await error.isVisible()) {
-      await expect(button(page, 'Reload the game')).toBeEnabled();
+      await expect(button(page, 'Reload and try again')).toBeEnabled();
+      await button(page, 'Back to menu').click();
+      await expect(page.getByRole('navigation', { name: 'Main menu' })).toBeVisible();
     } else {
       await expect(songRow(page, 'River Amp')).toBeVisible();
     }

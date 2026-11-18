@@ -8,7 +8,11 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   workers: 1,
   reporter: 'list',
-  use: { actionTimeout: 15_000, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
+  use: {
+    actionTimeout: 15_000,
+    screenshot: 'only-on-failure',
+    trace: { mode: 'retain-on-failure', screenshots: false },
+  },
   projects: process.env.LIVE_MUSIC_SECONDS
     ? [{ name: 'chromium', use: { browserName: 'chromium' } }]
     : [
@@ -19,7 +23,6 @@ export default defineConfig({
           browserName: 'firefox',
           viewport: { width: 960, height: 640 },
           reducedMotion: 'reduce',
-          trace: { mode: 'retain-on-failure', screenshots: false },
         },
       },
     ],
