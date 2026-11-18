@@ -46,6 +46,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [settings, setSettings] = useState(savedSettings);
   const [remapping, setRemapping] = useState<number>();
+  const [remapStatus, setRemapStatus] = useState('');
   const request = useRef<{ key: string; prompt: string; durationSeconds: number }>(null);
   const busy = useRef(false);
   const canUseLibrary = config?.localTest || !!user;
@@ -113,10 +114,20 @@ export default function App() {
   useEffect(() => {
     if (remapping === undefined) return;
     const remap = (event: KeyboardEvent) => {
-      if (event.code === 'Escape') return setRemapping(undefined);
-      if (!/^(Key[A-Z]|Digit[0-9])$/.test(event.code)) return;
+      if (event.code === 'Escape') {
+        setRemapping(undefined);
+        setRemapStatus('Key change canceled.');
+        return;
+      }
+      if (!/^(Key[A-Z]|Digit[0-9])$/.test(event.code) || event.altKey || event.ctrlKey || event.metaKey) return;
       event.preventDefault();
-      if (settings.keys.some((key, i) => i !== remapping && key === event.code)) return;
+      const label = event.code.replace(/^(Key|Digit)/, '');
+      const conflict = settings.keys.findIndex((key, i) => i !== remapping && key === event.code);
+      if (conflict >= 0) {
+        setRemapStatus(`${label} is already assigned to lane ${conflict + 1}. Choose another key.`);
+        return;
+      }
+      setRemapStatus(`Lane ${remapping + 1} now uses ${label}.`);
       setSettings(previous => ({ ...previous, keys: previous.keys.map((key, i) => i === remapping ? event.code : key) }));
       setRemapping(undefined);
     };
@@ -270,11 +281,12 @@ export default function App() {
           <p>Choose a lane, then press a letter or number to remap it. Press Escape to cancel.</p>
           <div className="key-settings">{settings.keys.map((key, lane) => <button key={lane} type="button"
             aria-label={`Remap lane ${lane + 1}, current key ${key}`} aria-pressed={remapping === lane}
-            onClick={() => setRemapping(lane)}>{remapping === lane ? '…' : key.replace(/^(Key|Digit)/, '')}</button>)}</div>
+            onClick={() => { setRemapping(lane); setRemapStatus(`Press a new key for lane ${lane + 1}.`); }}>{remapping === lane ? '…' : key.replace(/^(Key|Digit)/, '')}</button>)}</div>
+          <p role="status">{remapStatus}</p>
           <label>Timing offset (ms)<input type="number" min={-250} max={250} step={5} value={settings.calibration}
             onChange={event => setSettings(previous => ({ ...previous, calibration: Math.max(-250, Math.min(250, Number(event.target.value))) }))} /></label>
           <p>Increase the offset if your hits consistently register late.</p>
-          <button type="button" onClick={() => { setRemapping(undefined); setSettings({ keys: DEFAULT_KEYS, calibration: 0 }); }}>Reset controls</button>
+          <button type="button" onClick={() => { setRemapping(undefined); setRemapStatus('Default controls restored.'); setSettings({ keys: DEFAULT_KEYS, calibration: 0 }); }}>Reset controls</button>
         </details>
       </div>
       <section className="panel library"><h2><Library aria-hidden="true" /> Your tracks</h2>

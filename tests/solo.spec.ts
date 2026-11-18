@@ -74,7 +74,7 @@ test('A generated track becomes playable, scores a key press and replays after a
       if (status.stage === 'failed') throw new Error(status.error);
       return status.stage;
     }, { timeout: live ? 420_000 : 140_000 }).toBe('ready');
-    await expect(play).toBeVisible();
+    await expect(play).toBeFocused();
     const { chart, song } = await (await page.request.get(`${url}/api/songs/${job.id}`, { headers })).json() as { chart: Chart; song: Song };
     expect(song.model).toBe(live ? 'music_v2_5' : 'fixture');
     expect(Math.abs(chart.durationMs - (live || 30) * 1000)).toBeLessThanOrEqual(4000);
@@ -94,13 +94,14 @@ test('A generated track becomes playable, scores a key press and replays after a
     await expect(page.getByText(/^Score [1-9]/)).toBeVisible();
     if (!live) {
       await page.keyboard.press('Escape');
-      await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeFocused();
       const progress = page.getByRole('progressbar', { name: 'Track progress' });
       const pausedAt = await progress.getAttribute('value');
       await expect(progress).toHaveAttribute('value', pausedAt!);
       await page.getByRole('button', { name: 'Resume', exact: true }).click();
     }
     await expect(page.getByRole('heading', { name: 'Track complete' })).toBeVisible({ timeout: chart.durationMs + 5000 });
+    await expect(page.getByRole('button', { name: 'Replay', exact: true })).toBeFocused();
 
     const foreign = { Authorization: 'Bearer test-stranger' };
     for (const endpoint of [`/api/songs/${job.id}`, `/api/songs/${job.id}/audio`, `/api/generations/${job.id}`]) {
