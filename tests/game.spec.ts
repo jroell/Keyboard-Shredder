@@ -1069,8 +1069,8 @@ test('A party battle with two saved players saves each player\'s XP and notes hi
   expect(saves.sam.xp).toBeGreaterThan(saves.mia.xp);
   expect(saves.mia.xp).toBeGreaterThan(0);
   expect(saves.sam.totals.notesHit).toBeGreaterThan(saves.mia.totals.notesHit);
-  await expect(results(page).getByText(`Sam earned ${saves.sam.xp} XP on their own profile.`)).toBeVisible();
-  await expect(results(page).getByText(`+${saves.mia.xp} XP`, { exact: true })).toBeVisible();
+  await expect(results(page).locator('.xp-mini').filter({ hasText: 'Sam' }).getByText(`+${saves.sam.xp} XP`, { exact: true })).toBeVisible();
+  await expect(results(page).locator('.xp-panel:not(.xp-mini)').getByText(`+${saves.mia.xp} XP`, { exact: true })).toBeVisible();
 });
 
 type GuitarSample = { buttons: number[]; timestamp: number };

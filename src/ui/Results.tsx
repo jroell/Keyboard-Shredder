@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Award, ChevronRight, Crown, RotateCcw, Share2, Star, Trophy, Unlock, Users } from 'lucide-react';
 import { difficultyNames } from '../../shared/difficulty';
 import { MODS, finalScore, isRanked } from '../../shared/modifiers';
-import { levelFor } from '../../shared/progression';
+import { levelFor, recordKey } from '../../shared/progression';
 import { STAR_RATINGS, starsFor } from '../../shared/rating';
 import { sectionNames } from '../../shared/sections';
 import { TOUR_TRACKS, TOUR_VENUES } from '../../shared/tour';
@@ -92,14 +92,14 @@ function Timeline({ result, durationMs, names, onPractice }: { result: RunResult
   const worst = sections.reduce((best, section, index) => section.judged - section.hits + section.slips > sections[best].judged - sections[best].hits + sections[best].slips ? index : best, 0);
   const inWorst = (timeMs: number) => Math.floor(timeMs / size) === worst;
   const spots = [...result.troubles].sort((a, b) => Number(inWorst(b.timeMs)) - Number(inWorst(a.timeMs)) || b.streak - a.streak || a.timeMs - b.timeMs)
-    .filter((item, index, all) => all.findIndex(other => Math.abs(other.timeMs - item.timeMs) < 4000) === index).slice(0, 4).sort((a, b) => a.timeMs - b.timeMs);
+    .filter((item, index, all) => all.findIndex(other => Math.abs(other.timeMs - item.timeMs) < 4000) === index).slice(0, 4).sort((a, b) => Number(inWorst(b.timeMs)) - Number(inWorst(a.timeMs)) || a.timeMs - b.timeMs);
   const label = { miss: 'missed note', stray: 'stray press', drop: 'hold let go early' };
   // Missed notes and slips both cost points, so the weakest section is the one with the most of either.
   const cost = (section: typeof sections[number]) => section.judged - section.hits + section.slips;
   const weakest = sections.reduce((worst, section, index) => cost(section) > cost(sections[worst]) ? index : worst, 0);
   const clean = sections.every(section => section.hits === section.judged && !section.slips);
   return <figure className="timeline">
-    <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `${sections.every(section => section.hits === 0) ? 'Every section was missed.' : sections.every(section => cost(section) === cost(sections[0])) ? 'Every section cost you about the same.' : `The ${names[weakest]} (section ${weakest + 1}) cost you the most.`} `}
+    <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `${sections.every(section => section.hits === 0) ? (sections.some(section => section.judged === 0) ? 'No notes were hit before the song ended.' : 'Every section was missed.') : sections.every(section => cost(section) === cost(sections[0])) ? 'Every section cost you about the same.' : `The ${names[weakest]} (section ${weakest + 1}) cost you the most.`} `}
       {!clean && <><span className="keyboard-only">Click</span><span className="touch-only">Tap</span> any section to loop it slowly.</>}</figcaption>
     <div className="timeline-row">
       {sections.map((section, index) => {
@@ -266,7 +266,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         {scorings.map((scoring, index) => {
           const winner = !party.coop && partyValue(0) !== partyValue(1) && partyValue(index) === Math.max(partyValue(0), partyValue(1));
           return <div key={index} className={winner ? 'winner' : ''}>
-            {winner && <Crown aria-hidden="true" />}
+            {!party.coop && (winner ? <Crown aria-hidden="true" /> : <span className="crown-space" aria-hidden="true" />)}
             <h2>{party.names[index]}</h2>
             <strong>{fairParty ? `${scoring.rating.toFixed(1)}%` : finalScore(scoring.score, setup.mods).toLocaleString()}</strong>
             <p>{fairParty ? `timing rating · ${finalScore(scoring.score, setup.mods).toLocaleString()} points` : `${Math.round(scoring.rating)}%`}{party.difficulties ? ` · ${difficultyNames[party.difficulties[index]]}` : ''} · best streak {scoring.bestCombo}</p>
@@ -335,7 +335,10 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
                   const size = target.durationMs / SECTIONS;
                   void app.launch(id, { mode: 'quickplay', difficulty: setup.difficulty, mods: [], practice: { startMs: Math.round(part * size), endMs: Math.round((part + 1) * size), rate: 0.75 } }, { name: 'tour' });
                 }}>Practice the weak part</button></>}
-            </span><em>{(scores[index] ?? 0).toLocaleString()}</em><b>{(ratings[index] ?? 0).toFixed(1)}%</b></li>)}</ol>
+            </span><em>{(scores[index] ?? 0).toLocaleString()}{(() => {
+              const best = save.records[recordKey(id, setup.difficulty)]?.score ?? 0;
+              return best > (scores[index] ?? 0) ? <small> best {best.toLocaleString()}</small> : (scores[index] ?? 0) > 0 ? <small className="pb"> your best</small> : null;
+            })()}</em><b>{(ratings[index] ?? 0).toFixed(1)}%</b></li>)}</ol>
             <p>Total {scores.reduce((total, value) => total + value, 0).toLocaleString()} · average timing rating {average.toFixed(1)}% on {difficultyNames[setup.difficulty]}</p>
             {average >= 80 && !platinum && <p className="set-goal">Extra goal: 85% or better on every song for a platinum record. Lowest song here: {Math.min(...ratings).toFixed(1)}%. Songs under 85% have a button to practice their weak part.</p>}
             {average < 80 && <p className="set-goal">A gold record needs an 80% average timing rating. You were {(80 - average).toFixed(1)} points short.</p>}
@@ -389,8 +392,10 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
             setOffsetApplied(true);
           }}>Adjust timing to match</button></>}</p>}
 
-      {result.credited && result.credited.length > 0 && <p className="offset-hint" role="status">
-        {result.credited.map(item => `${item.name} earned ${item.xp} XP`).join(' and ')} on {result.credited.length > 1 ? 'their own profiles' : 'their own profile'}.</p>}
+      {result.credited?.map(item => <div key={item.name} className="xp-panel xp-mini" role="status">
+        <div className="xp-head"><b className="xp-name">{item.name}</b><strong>Level {item.level}</strong><span>saved to their own profile</span><em>+{item.xp} XP</em></div>
+        {item.leveled && <p className="level-up"><Trophy aria-hidden="true" /><span>Level up! {item.name} is now level {item.level}.</span></p>}
+      </div>)}
       {party && !bot && !result.spectator && result.credited && result.credited.length > 0 && <p className="offset-hint">The reward card below is for {save.name || 'Player 1'}.</p>}
       {party && !bot && party.seats?.some((id, index) => id === null && !(index === 1 && party.cpu !== undefined)) && <p className="offset-hint">Guests keep no progress.</p>}
       {result.spectator && party && <p className="offset-hint">{save.name || 'The active player'} sat this one out, so nothing below changed.</p>}

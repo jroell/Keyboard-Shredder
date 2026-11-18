@@ -388,3 +388,18 @@
 
 .stage[data-boost="on"] .hud-streak { margin-top: .5rem; }
 .hud-left { row-gap: 1.1rem; }
+
+.xp-mini { padding-block: .6rem; }
+.xp-mini .xp-head span { font-size: .78rem; }
+.party-results .crown-space { display: block; height: 24px; }
+.party-results svg { height: 24px; }
+.hud-streak { flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
+.hud-streak span { flex-basis: 100%; text-align: right; margin-top: -.3rem; }
+.stage[data-boost="on"] .stage-art { filter: brightness(.78) saturate(1.15) hue-rotate(55deg); }
+.home-position div { position: relative; }
+.home-position kbd { display: grid; place-items: center; align-content: center; height: 2.6em; }
+.home-position kbd.bump::after { bottom: 2px; height: 2px; }
+.home-hands { width: 100%; max-width: 21rem; justify-content: space-between; padding: 0 1.6rem; }
+@media (max-height: 400px) { .ready-card .ready-keys, .ready-card .ready-counts { display: none; } .ready-card { gap: .45rem; padding: 1rem; } .ready-card h2 { font-size: 1.8rem; } }
+
+.set-summary li em small { color: var(--muted); font-size: .72rem; } .set-summary li em small.pb { color: var(--gold); }

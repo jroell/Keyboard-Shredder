@@ -44,7 +44,7 @@ export type RunSetup = {
 export type RunResult = {
   summary: RunSummary; outcome: Outcome; log: InputLog; scorings: Scoring[]; events: SongEvent[];
   /** Party: saved players other than the active one who were credited on their own profiles, and whether the active player sat out. */
-  credited?: { name: string; xp: number }[]; spectator?: boolean;
+  credited?: { name: string; xp: number; level: number; leveled: boolean }[]; spectator?: boolean;
   /** Party rematch: each seat's best streak from the round before. */
   goals?: number[];
   keyStats?: KeyStats; typing?: TypingChart; typingAccuracy?: number; hitOffsetMs: number | null;
@@ -131,6 +131,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   const [pauseIndex, setPauseIndex] = useState(0);
   /** Each seat's best streak from the round before a party rematch. The result says whether the player beat it. */
   const partyGoals = useRef<number[] | null>(null);
+  const countTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [passes, setPasses] = useState<{ last: PracticePass; best: PracticePass; count: number }>();
   const names = useMemo(() => sectionNames(chart.events.normal, chart.durationMs), [chart]);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -435,13 +436,13 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         wrongKeys: other.wrongKeys, totalNotes: players[1].events.length, bestCombo: other.bestCombo, fullCombo: isFullCombo(theirs), boostsUsed: other.boostsUsed,
         won: partyWin === undefined ? undefined : fair ? other.rating > scoring.rating : other.score > scoring.score };
     };
-    const credited: { name: string; xp: number }[] = [];
+    const credited: { name: string; xp: number; level: number; leveled: boolean }[] = [];
     const activeSeat = seats ? seats.indexOf(currentPlayer) : 0;
     if (seats && counted) {
       seats.forEach((id, index) => {
         if (id === null || id === currentPlayer) return;
-        const xp = creditPlayer(id, seatSummary(index));
-        if (xp !== null) credited.push({ name: setup.party!.names[index], xp });
+        const reward = creditPlayer(id, seatSummary(index));
+        if (reward) credited.push({ name: setup.party!.names[index], ...reward });
       });
     }
     const outcome = counted && activeSeat >= 0 ? completeRun(seats ? seatSummary(activeSeat) : summary, {
@@ -489,6 +490,9 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     if (event.type === 'error') { setError(event.message); return; }
     if (event.type === 'countin') {
       setCount(event.beat > 0 ? Math.min(3, event.beat) : 0);
+      // A lesson that waits for the first key never reaches "go" on the clock, so a count number may not linger.
+      clearTimeout(countTimer.current);
+      if (event.beat > 0) countTimer.current = setTimeout(() => setCount(null), 1500);
       if (event.beat > 0 && event.beat <= 3) sfx.play('count-tick');
       if (event.beat === 0) { sfx.play('count-go'); setTimeout(() => setCount(null), 600); }
       return;
@@ -567,7 +571,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       partyGoals.current = previous ?? null;
       if (previous) setTimeout(() => previous.forEach((streak, index) => {
         if (index === 1 && setup.party!.cpu !== undefined) return;
-        callout(streak >= players[index].events.length && streak > 0 ? 'Match your full combo' : streak > 0 ? `Beat your ${streak} streak` : 'Land your first streak', 'streak', index);
+        callout(streak >= players[index].events.length && streak > 0 ? 'Match your full combo' : streak > 0 ? `Beat your ${streak} streak` : 'Land your first streak', 'note', index);
       }), 400);
       setResult(undefined);
     }
@@ -716,6 +720,16 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     const over = chord.durationMs > 0 ? events.find(event => event.timeMs > chord.timeMs && event.timeMs < chord.timeMs + chord.durationMs) : undefined;
     return `First chord: land ${keys} together${over ? `, then keep them held while you hit ${over.lanes.map(label).join(' and ')}` : ''}.`;
   }, [setup.practice, players, layouts]);
+  // A short loop around that first chord, for repeating the one move before the whole section.
+  const firstMoveRange = useMemo(() => {
+    if (!setup.practice) return null;
+    const chord = players[0].events.find(event => event.lanes.length > 1);
+    if (!chord) return null;
+    const beat = 60000 / chart.bpm;
+    const startMs = Math.max(0, Math.round(chord.timeMs - beat));
+    const endMs = Math.min(chart.durationMs, Math.round(Math.max(startMs + 4 * beat, chord.timeMs + chord.durationMs + beat)));
+    return endMs - startMs < setup.practice.endMs - setup.practice.startMs - 1 ? { startMs, endMs } : null;
+  }, [setup.practice, players, chart]);
   const practicePick = setup.practice && retune ? <div className="practice-pick">
           <div className="segments" role="group" aria-label="Section">
             {Array.from({ length: SECTIONS }, (_, index) => {
@@ -748,7 +762,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
               onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, rate } }); }}>{rate * 100}% speed</button>)}
           </div>
           <p className="muted">The section loops until you stop. Practice scores are shown for feedback only: nothing is saved or ranked. A full combo means every note hit and no stray press. A hold let go early keeps the combo but loses its bonus.</p>
-          {firstMove && <p className="ready-goal">{firstMove}</p>}
+          {firstMove && <p className="ready-goal">{firstMove}{' '}
+            {firstMoveRange && retune && <button type="button" className="link" onClick={() => retune({ ...setup, practice: { ...setup.practice!, ...firstMoveRange } })}>Loop just this move</button>}</p>}
         </div> : null;
   // The stage never scrolls. Focus moving to an off-screen control can still scroll a hidden-overflow box, which would push the results heading out of view.
   return <section className="stage" ref={stage} onScroll={event => { if (event.target === event.currentTarget) event.currentTarget.scrollTo(0, 0); }} data-state={state} data-boost="off" data-heat="cool" data-players={players.length}
@@ -800,6 +815,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         })}</p>
         {practicePick}
         {typing ? <>
+          <p className="touch-only error">Typing lessons need a physical keyboard. Connect one to type along.</p>
           <p>Type each letter as its gem reaches the ring. Keep your fingers on the home row and use the finger with the matching color.</p>
           {setup.typing?.lesson && setup.typing.lesson.unit === 1 && <HomePosition />}
           {setup.typing?.lesson?.id === 'vim-moves' && <p className="ready-goal">In Vim: H left, J down, K up, L right. W next word, B back a word, E end of word, G G top of file.</p>}

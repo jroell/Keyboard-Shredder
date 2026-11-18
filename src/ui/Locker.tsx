@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import { Award, Check, LockKeyhole } from 'lucide-react';
 import { avatars, badgeNames, type Profile } from '../../shared/duel';
 import { ACHIEVEMENTS, levelFor, MAX_LEVEL, UNLOCKS, type UnlockKind } from '../../shared/progression';
+import { TYPING_LESSONS } from '../../shared/typing';
 import { useApp } from '../App';
 import { sfx } from '../game/sfx';
 import { LANE_PALETTES } from '../game/themes';
-import { addPlayer, currentPlayer, laneColors, listPlayers, saveStore, settingsStore, switchPlayer, useCell } from '../state/store';
+import { addPlayer, currentPlayer, familyProgress, laneColors, listPlayers, saveStore, settingsStore, switchPlayer, useCell } from '../state/store';
 import { Screen } from './common';
 import DemoHighway from './DemoHighway';
 
@@ -146,6 +147,17 @@ export default function Locker() {
         <button type="button" onClick={() => { if (newName.trim()) addPlayer(newName, learner); else { setNameError(true); document.getElementById('new-player-name')?.focus(); } }}>Add player</button></div>
       <label className="check"><input type="checkbox" checked={learner} onChange={event => setLearner(event.target.checked)} /> This player is learning to type (start on the typing academy)</label>
       {nameError && !newName.trim() && <p role="alert" className="error">Type a name first.</p>}
+      <h2>Typing progress</h2>
+      <div className="family-table" role="table" aria-label="Typing progress for each player">
+        <div role="row" className="head"><span role="columnheader">Player</span><span role="columnheader">Lessons passed</span><span role="columnheader">Best WPM</span><span role="columnheader">Last 10 runs</span><span role="columnheader">Last lesson</span></div>
+        {familyProgress().map(row => <div role="row" key={row.id}>
+          <span role="cell"><strong>{row.name}</strong></span>
+          <span role="cell">{row.lessonsPassed} of {TYPING_LESSONS.length}</span>
+          <span role="cell">{row.bestWpm ? row.bestWpm.toFixed(1) : 'none yet'}</span>
+          <span role="cell">{row.runs ? `${row.recentWpm.toFixed(1)} WPM at ${row.recentAccuracy.toFixed(1)}%` : 'no typing yet'}</span>
+          <span role="cell">{row.lastLesson || 'none yet'}</span>
+        </div>)}
+      </div>
     </form>}
   </Screen>;
 }

@@ -76,9 +76,9 @@ export function completeRun(summary: RunSummary, extras: RunExtras = {}): Outcom
 
 /**
  * Adds a party result to a saved player who is not the active one on this device.
- * Returns the XP earned, or null when that player's save cannot be read.
+ * Returns the XP earned and the level reached, or null when that player's save cannot be read.
  */
-export function creditPlayer(id: string, summary: RunSummary): number | null {
+export function creditPlayer(id: string, summary: RunSummary): { xp: number; level: number; leveled: boolean } | null {
   const key = id ? `ks:${id}:save` : 'ks:save';
   try {
     const raw = JSON.parse(localStorage.getItem(key) ?? 'null');
@@ -86,6 +86,6 @@ export function creditPlayer(id: string, summary: RunSummary): number | null {
     const now = new Date();
     const outcome = applyRun(normalizeSave(raw), summary, now.getTime(), { dateKey: localDateKey(now), hour: now.getHours(), tourCleared: 0, lessonsPassed: 0 });
     localStorage.setItem(key, JSON.stringify(outcome.save));
-    return outcome.xp.total;
+    return { xp: outcome.xp.total, level: outcome.levelAfter, leveled: outcome.levelAfter > outcome.levelBefore };
   } catch { return null; }
 }

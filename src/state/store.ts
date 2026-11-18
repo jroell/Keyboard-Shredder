@@ -82,6 +82,17 @@ export function listPlayers(): { id: string; name: string; level: number; bestWp
     });
   } catch { return [{ id: '', name: 'Player 1', level: 1, bestWpm: 0 }]; }
 }
+/** One row per player for a parent: lessons passed, best speed, and the average of the last ten typing runs. */
+export function familyProgress() {
+  return listPlayers().map(player => {
+    const read = (name: string) => { try { return JSON.parse(localStorage.getItem(player.id ? `ks:${player.id}:${name}` : `ks:${name}`) || 'null'); } catch { return null; } };
+    const lessons = (read('lessons') ?? {}) as Record<string, { stars?: number }>;
+    const runs = (Array.isArray(read('wpm')) ? read('wpm') as WpmEntry[] : []).slice(-10);
+    const mean = (pick: (entry: WpmEntry) => number) => runs.length ? runs.reduce((total, entry) => total + pick(entry), 0) / runs.length : 0;
+    return { ...player, lessonsPassed: Object.values(lessons).filter(item => (item?.stars ?? 0) > 0).length, runs: runs.length,
+      recentWpm: mean(entry => entry.wpm), recentAccuracy: mean(entry => entry.accuracy), lastLesson: runs.at(-1)?.lesson ?? '' };
+  });
+}
 export const currentPlayer = profile;
 /** Switches the active player and reloads, so every screen reads that player's progress. */
 export function switchPlayer(id: string) {
