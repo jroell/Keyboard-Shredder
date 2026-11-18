@@ -188,7 +188,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
       if (event.repeat || event.target instanceof HTMLInputElement) return;
-      if (event.code === 'KeyR') { event.preventDefault(); if (setup.set && failed) next?.run(); else onReplay(); }
+      if (event.code === 'KeyR') { event.preventDefault(); if (setup.set && (failed || !songCleared(summary))) next?.run(); else onReplay(); }
       else if (event.code === 'Escape') { event.preventDefault(); onExit(); }
       else if (event.code === 'KeyN' && next) { event.preventDefault(); next.run(); }
       else if (event.code === 'Enter' && !(event.target instanceof HTMLElement)) { event.preventDefault(); primary.current?.click(); }
@@ -317,7 +317,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
 
       <div className="results-actions">
         {next && <button ref={primary} className="primary big" onClick={next.run}>{next.label}<ChevronRight aria-hidden="true" /></button>}
-        {!(setup.set && failed) && <button ref={next ? undefined : primary} className={next ? '' : 'primary big'} onClick={onReplay}><RotateCcw aria-hidden="true" size={18} />Play again</button>}
+        {!(setup.set && (failed || !songCleared(summary))) && <button ref={next ? undefined : primary} className={next ? '' : 'primary big'} onClick={onReplay}><RotateCcw aria-hidden="true" size={18} />Play again</button>}
         {ranked && <button onClick={share}><Share2 aria-hidden="true" size={18} />Challenge a friend</button>}
         <button className="ghost" onClick={onExit}>{exitLabel}</button>
         <p className="hint"><kbd>R</kbd> play again{next ? <> · <kbd>N</kbd> next</> : null} · <kbd>Esc</kbd> back</p>
