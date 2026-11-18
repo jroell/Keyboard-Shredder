@@ -152,16 +152,24 @@ test('A generated track becomes playable, scores a key press and replays after a
 
 async function hitNotes(page: Page, chart: Chart) {
   const progress = page.getByRole('progressbar', { name: 'Track progress' });
-  for (const event of chart.events.normal.filter(event => event.timeMs >= 400).slice(0, 8)) {
-    await progress.evaluate((element, threshold) => new Promise<void>((resolve, reject) => {
+  for (const [index, event] of chart.events.normal.filter(event => event.timeMs >= 400).slice(0, 8).entries()) {
+    const gap = await progress.evaluate((element, { id, threshold, measure }) => new Promise<number | null>((resolve, reject) => {
       const deadline = performance.now() + 20_000;
       const wait = () => {
-        if ((element as HTMLProgressElement).value >= threshold) resolve();
-        else if (performance.now() > deadline) reject(new Error('Playback did not advance.'));
-        else requestAnimationFrame(wait);
+        if ((element as HTMLProgressElement).value < threshold) {
+          if (performance.now() > deadline) reject(new Error('Playback did not advance.'));
+          else requestAnimationFrame(wait);
+          return;
+        }
+        if (!measure) return resolve(null);
+        const line = document.querySelector('.strike-line')?.getBoundingClientRect();
+        const gem = document.querySelector(`[data-note="${id}"]`)?.getBoundingClientRect();
+        if (!line || !gem) return reject(new Error('The note or strike line is missing.'));
+        resolve(Math.abs(line.top + line.height / 2 - (gem.top + gem.height / 2)));
       };
       wait();
-    }), event.timeMs - 30);
+    }), { id: event.id, threshold: event.timeMs - 30, measure: !live && index === 0 });
+    if (gap !== null) expect(gap).toBeLessThan(18);
     await Promise.all(event.lanes.map(lane => page.keyboard.down(keys[lane])));
     await Promise.all(event.lanes.map(lane => page.keyboard.up(keys[lane])));
   }

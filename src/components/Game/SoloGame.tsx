@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Chart, Difficulty, Song } from '../../../shared/song';
 import { Scoring } from '../../../shared/scoring';
 import { palettes, type LaneInput, type Profile } from '../../../shared/duel';
+import Highway from './Highway';
 import { Transport, withAudioDeadline } from '../../lib/transport';
 
 type Match = {
@@ -187,7 +188,7 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
   const missed = feedback?.judgement === 'Miss' || feedback?.judgement === 'Sustain dropped' || feedback?.judgement === 'Wrong key';
   if (state === 'results') {
     if (match) return <p role="status">Waiting for final duel scores…</p>;
-    return <section className="panel results">
+    return <section className="panel results stage-results">
       <h1>Track complete</h1><p>{song.title}</p>
       <dl><div><dt>Score</dt><dd>{game.score}</dd></div><div><dt>Accuracy</dt><dd>{game.accuracy}%</dd></div>
         <div><dt>Best combo</dt><dd>{game.bestCombo}</dd></div></dl>
@@ -204,31 +205,26 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
         {state === 'playing' && !match && <button onClick={() => pauseAction.current()}>Pause</button>}
         {!match && <button onClick={leave}>Exit track</button>}
       </div></header>
-    <div className="hud"><strong>Score {game.score}</strong><span className="hit-feedback">{feedback?.judgement}{timing && <small>{timing}</small>}</span><strong>{game.combo} combo</strong></div>
-    <div className="board">
-      <div aria-hidden="true">
-      <div className="strike-line" />
-      <div className="lanes">{keys.map((key, lane) => <div className="lane" key={key} style={{ color: laneColors[lane] }}>
-        <span className={`target${game.held.has(lane) ? ' held' : ''}${feedback?.lanes.includes(lane) ? missed ? ' missed' : ' hit' : ''}`}>{key.replace(/^(Key|Digit)/, '')}</span>
-      </div>)}</div>
-      {chart.beatsMs.filter(beat => beat >= chartTime && beat <= chartTime + lookahead).map(beat =>
-        <div key={beat} className={chart.downbeatsMs.includes(beat) ? 'beat downbeat' : 'beat'} style={{ bottom: `${12 + (beat - chartTime) * 75 / lookahead}%` }} />)}
-      {events.filter(event => event.timeMs + event.durationMs > chartTime - 130 && event.timeMs < chartTime + lookahead &&
-        (!game.consumed.has(event.id) || game.sustaining.has(event.id))).flatMap(event =>
-        event.lanes.map(lane => <div className="note" key={event.id + ':' + lane} style={{
-          left: `${lane * 20 + 10}%`, bottom: `${12 + Math.max(event.timeMs - chartTime, -130) * 75 / lookahead}%`, color: laneColors[lane],
-          height: `${Math.max(0, event.durationMs - Math.max(0, chartTime - event.timeMs)) * 75 / lookahead}%`,
-        }} />))}
-      </div>
+    <div className="hud">
+      <div className="stage-score"><strong>Score {game.score}</strong></div>
+      <span className={`hit-feedback${missed ? ' hit-feedback-miss' : ''}`}>{feedback?.judgement}{timing && <small>{timing}</small>}</span>
+      <div className="stage-streak"><strong>{game.combo} combo</strong>
+        <span aria-label="Score multiplier">{Math.min(4, 1 + Math.floor(game.combo / 10))}×</span></div>
+    </div>
+    <div className="board concert-board">
+      <Highway chart={chart} events={events} time={chartTime} lookahead={lookahead}
+        colors={laneColors} keys={keys} game={game} feedback={feedback} missed={missed} />
       {state !== 'playing' && <div className="board-cover">
-        <p>{state === 'paused' ? 'Paused' : 'Press the lane keys at the line. Press chords together and hold long notes.'}</p>
-        {state === 'paused' && game.sustaining.size > 0 && <p>Hold the sustain keys again as playback resumes.</p>}
-        {state === 'ready' && <div className="ready-keys" aria-label="Lane keys">{keys.map(key =>
-          <kbd key={key}>{key.replace(/^(Key|Digit)/, '')}</kbd>)}</div>}
-        {error && <p role="alert">{error}</p>}
-        <button ref={primaryAction} className="primary" disabled={starting || !!(match?.ready && match.startAt === null)} onClick={() => void play()}>
-          {starting ? 'Loading audio…' : state === 'paused' ? 'Resume' : match ? match.startAt ? 'Join playback' : match.ready ? 'Ready' : 'Ready up' : 'Play'}
-        </button>
+        <div className="stage-prompt">
+          <p>{state === 'paused' ? 'Paused' : 'Press the lane keys at the line. Press chords together and hold long notes.'}</p>
+          {state === 'paused' && game.sustaining.size > 0 && <p>Hold the sustain keys again as playback resumes.</p>}
+          {state === 'ready' && <div className="ready-keys" aria-label="Lane keys">{keys.map(key =>
+            <kbd key={key}>{key.replace(/^(Key|Digit)/, '')}</kbd>)}</div>}
+          {error && <p role="alert">{error}</p>}
+          <button ref={primaryAction} className="primary" disabled={starting || !!(match?.ready && match.startAt === null)} onClick={() => void play()}>
+            {starting ? 'Loading audio…' : state === 'paused' ? 'Resume' : match ? match.startAt ? 'Join playback' : match.ready ? 'Ready' : 'Ready up' : 'Play'}
+          </button>
+        </div>
       </div>}
       {state === 'playing' && time < offset.current && <div className="count-in">Get ready</div>}
     </div>
