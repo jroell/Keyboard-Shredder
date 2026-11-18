@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scoring } from '../shared/scoring';
+import { isFullCombo } from '../shared/rating';
 
 test('A two-key chord scores once, at 100 points per key, when both keys arrive within 55 ms', () => {
   const game = new Scoring([{ id: 'chord', timeMs: 1000, lanes: [0, 1], durationMs: 0 }]);
@@ -93,13 +94,25 @@ test('A sustain re-held within 150 ms of resuming still earns its bonus', () => 
   assert.equal(game.accuracy, 100);
 });
 
-test('An unheld sustain drops when the 150 ms resume grace expires', () => {
+test('An unheld sustain drops when the 150 ms resume grace expires, losing its bonus but not the streak', () => {
   const game = new Scoring([{ id: 'hold', timeMs: 1000, lanes: [0], durationMs: 500 }]);
   game.press(0, 1000);
   game.pause(1100);
   game.tick(1251);
   assert.equal(game.judgement, 'Sustain dropped');
-  assert.equal(game.combo, 0);
+  assert.equal(game.combo, 1);
+  assert.equal(game.score, 100);
+});
+
+test('A stray key press ends a full combo even when every note was hit', () => {
+  const game = new Scoring([0, 1].map(i => ({ id: String(i), timeMs: 1000 + 500 * i, lanes: [0], durationMs: 0 })));
+  game.press(0, 1000);
+  game.release(0, 1010);
+  game.stray(1200);
+  game.press(0, 1500);
+  game.finish();
+  assert.deepEqual([game.hits, game.misses, game.wrongKeys, game.bestCombo], [2, 0, 1, 1]);
+  assert.equal(isFullCombo(game.tally), false);
 });
 
 test('The resume count-in restores only active sustain lanes without scoring new notes', () => {

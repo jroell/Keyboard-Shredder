@@ -83,12 +83,19 @@ export class GameSession {
   private countBeat = -1;
   private touchKeys = new Map<string, { player: number; lane: number }>();
   private boostKeys = new Map<string, number>();
+  private endedAt: number | null = null;
+  private lastLogged = -Infinity;
+  /** True once this attempt was paused. Paused runs stay off the leaderboards. */
+  paused = false;
+  calibration: number;
 
   constructor(readonly options: {
     chart: Chart; audio: ArrayBuffer; leadAudio?: ArrayBuffer; players: PlayerSetup[];
     calibration: number; canFail: boolean; sudden: boolean; musicVolume: number;
     /** Keep the lead guitar audible without hits (typing and party modes). */
     openLead?: boolean;
+    /** Keys that count as a wrong press without belonging to a lane (other letters in a typing lesson). */
+    strayCodes?: ReadonlySet<string>;
     /** Playback speed, 1 by default. */
     rate?: number;
     match?: () => Match | undefined;
@@ -96,6 +103,7 @@ export class GameSession {
     sharedContext?: () => AudioContext;
   }) {
     const { chart, players } = options;
+    this.calibration = options.calibration;
     this.beatMs = Math.max(260, Math.min(850, 60_000 / chart.bpm));
     const tap = Math.max(460, Math.min(800, 60_000 / chart.bpm));
     const lead = players[0].events;
@@ -120,6 +128,9 @@ export class GameSession {
     });
     this.failedPlayer = -1;
     this.leadEvent = undefined;
+    this.endedAt = null;
+    this.paused = false;
+    this.lastLogged = -Infinity;
   }
 
   private setState(state: SessionState) {
@@ -142,6 +153,7 @@ export class GameSession {
   private fail(player: number) {
     if (this.state !== 'playing') return;
     this.failedPlayer = player;
+    this.endedAt = this.transport?.timeMs() ?? this.offset;
     this.transport?.windDown(1);
     this.setState('failed');
   }
@@ -186,7 +198,7 @@ export class GameSession {
       await this.transport.start(this.offset, this.beatMs * 4 / (this.options.rate ?? 1), match?.startAt ?? undefined);
       if (this.options.openLead) this.transport.openLead();
       if (match && this.transport.timeMs() >= 150) {
-        this.scorings[0].rejoin(this.transport.timeMs() - this.options.calibration, match.combo, match.ampCharge, match.boostEndMs);
+        this.scorings[0].rejoin(this.transport.timeMs() - this.calibration, match.combo, match.ampCharge, match.boostEndMs);
       }
       this.lastAudioTime = ctx.currentTime;
       this.lastAudioUpdate = performance.now();
@@ -197,7 +209,12 @@ export class GameSession {
       this.transport = null;
       if (this.context && this.context.state !== 'closed' && !this.options.sharedContext) void this.context.close().catch(() => {});
       this.context = null;
-      this.setState(previous === 'starting' ? 'ready' : previous);
+      // A finished attempt must not be announced twice, so a failed restart goes back to a clean ready state.
+      if (previous === 'finished' || previous === 'failed') {
+        this.resetScoring();
+        this.offset = 0;
+        this.setState('ready');
+      } else this.setState(previous === 'starting' ? 'ready' : previous);
       this.options.onEvent({ type: 'error', message: reason instanceof Error ? reason.message : 'Audio could not start.' });
     } finally {
       this.pending = false;
@@ -205,9 +222,12 @@ export class GameSession {
   }
 
   /** Raw playback position in ms. Negative during the opening count-in. */
-  rawTime() { return this.transport && (this.state === 'playing' || this.state === 'failed') ? this.transport.timeMs() : this.offset; }
+  rawTime() {
+    if (this.endedAt !== null) return this.endedAt;
+    return this.transport && this.state === 'playing' ? this.transport.timeMs() : this.offset;
+  }
   /** Chart time after the player's timing offset. */
-  time() { return this.rawTime() - this.options.calibration; }
+  time() { return this.rawTime() - this.calibration; }
   get durationMs() { return this.transport ? this.transport.buffer.duration * 1000 : this.options.chart.durationMs; }
   get counting() { return this.state === 'playing' && this.rawTime() < this.offset; }
 
@@ -233,7 +253,7 @@ export class GameSession {
     const match = this.match();
     if (match) {
       playback.muteLead();
-      const timeMs = Math.max(0, playback.inputTimeMs(performance.now()) - this.options.calibration);
+      const timeMs = Math.max(0, playback.inputTimeMs(performance.now()) - this.calibration);
       for (const lane of this.scorings[0].held) {
         this.scorings[0].release(lane, timeMs);
         match.onInput({ lane, down: false, timeMs });
@@ -242,7 +262,10 @@ export class GameSession {
     }
     this.offset = Math.min(playback.buffer.duration * 1000 - 1, Math.max(this.offset, playback.timeMs()));
     playback.stop();
-    for (const scoring of this.scorings) scoring.pause(this.offset - this.options.calibration);
+    for (const scoring of this.scorings) scoring.pause(this.offset - this.calibration);
+    // Settling the pause can register a miss that ends a sudden death run. That ending stands.
+    if (this.state !== 'playing') return;
+    this.paused = true;
     this.setState('paused');
   }
 
@@ -251,12 +274,13 @@ export class GameSession {
     const playback = this.transport;
     const scoring = this.scorings[player];
     const inputTime = playback.inputTimeMs(timestamp);
-    const timeMs = inputTime - this.options.calibration;
+    // Judged and logged at the same 0.1 ms precision, so the server replay sees exactly what was scored.
+    const timeMs = Math.round((inputTime - this.calibration) * 10) / 10;
     const match = this.match();
     const lead = player === 0;
     if (!down) {
       scoring.release(lane, timeMs);
-      this.logs[player].inputs.push([lane, 0, Math.round(timeMs * 10) / 10]);
+      this.log(player, [lane, 0, timeMs]);
       if (lead && this.leadEvent?.durationMs && this.leadEvent.lanes.includes(lane) && inputTime < this.leadEnds.get(this.leadEvent.id)!) {
         if (!this.options.openLead) playback.muteLead();
         this.leadEvent = undefined;
@@ -265,7 +289,7 @@ export class GameSession {
     } else if (inputTime >= this.offset) {
       this.options.onEvent({ type: 'press', player, lane });
       const hit = scoring.press(lane, timeMs);
-      this.logs[player].inputs.push([lane, 1, Math.round(timeMs * 10) / 10]);
+      this.log(player, [lane, 1, timeMs]);
       if (lead) {
         if (hit) this.sound(hit);
         else this.soundHeldSustain(inputTime);
@@ -282,7 +306,8 @@ export class GameSession {
     if (this.state !== 'playing' || !this.transport) return;
     const inputTime = this.transport.inputTimeMs(timestamp);
     if (inputTime < this.offset) return;
-    const timeMs = inputTime - this.options.calibration;
+    // A boost is logged after any input already logged at the same instant, because the replay runs ties boost first.
+    const timeMs = Math.max(Math.round((inputTime - this.calibration) * 10) / 10, player === 0 ? this.lastLogged + 0.1 : -Infinity);
     if (this.scorings[player].activateBoost(timeMs)) {
       this.logs[player].boosts.push(Math.round(timeMs * 10) / 10);
       this.match()?.onBoost(timeMs);
@@ -297,7 +322,7 @@ export class GameSession {
     if (!held.length || !this.transport) return [];
     const scoring = this.scorings[player];
     const { events, windowMs } = this.options.players[player];
-    const timeMs = this.transport.inputTimeMs(timestamp) - this.options.calibration;
+    const timeMs = this.transport.inputTimeMs(timestamp) - this.calibration;
     const top = Math.max(...held);
     let best: SongEvent | undefined;
     let distance = windowMs + 1;
@@ -317,6 +342,13 @@ export class GameSession {
     this.transport?.bendLead(this.scorings[0].sustaining.size ? amount * 180 : 0);
   }
 
+  private log(player: number, entry: [number, number, number]) {
+    // Taps during the opening count-in are not part of the run.
+    if (entry[2] < -400) return;
+    this.logs[player].inputs.push(entry);
+    if (player === 0) this.lastLogged = Math.max(this.lastLogged, entry[2]);
+  }
+
   /** Returns true when the key belonged to the game. */
   keyDown(event: KeyboardEvent) {
     if (this.state !== 'playing') return false;
@@ -324,6 +356,13 @@ export class GameSession {
     const target = this.touchKeys.get(event.code);
     if (target) {
       if (!event.repeat) this.laneInput(target.player, target.lane, true, event.timeStamp);
+      return true;
+    }
+    if (this.options.strayCodes?.has(event.code)) {
+      if (!event.repeat && this.transport) {
+        const inputTime = this.transport.inputTimeMs(event.timeStamp);
+        if (inputTime >= this.offset) this.scorings[0].stray(inputTime - this.calibration);
+      }
       return true;
     }
     const boostPlayer = this.boostKeys.get(event.code);
@@ -355,10 +394,10 @@ export class GameSession {
       this.context = null;
       const match = this.match();
       if (match) {
-        for (const lane of this.scorings[0].held) match.onInput({ lane, down: false, timeMs: Math.max(0, now - this.options.calibration) });
+        for (const lane of this.scorings[0].held) match.onInput({ lane, down: false, timeMs: Math.max(0, now - this.calibration) });
       }
       this.offset = match ? 0 : Math.max(this.offset, now);
-      for (const scoring of this.scorings) scoring.pause(now - this.options.calibration);
+      for (const scoring of this.scorings) scoring.pause(now - this.calibration);
       this.options.onEvent({ type: 'error', message: 'Audio stopped advancing. Press Resume to reconnect playback.' });
       this.setState('paused');
       return;
@@ -373,7 +412,7 @@ export class GameSession {
       this.countBeat = 0;
       this.options.onEvent({ type: 'countin', beat: 0 });
     }
-    const chartTime = now - this.options.calibration;
+    const chartTime = now - this.calibration;
     if (now >= this.offset) {
       this.options.players.forEach((player, index) => {
         if (player.bot !== undefined) {
@@ -383,8 +422,9 @@ export class GameSession {
         this.scorings[index].tick(chartTime);
       });
     }
-    if (this.state === 'playing' && now >= playback.buffer.duration * 1000 + Math.max(this.options.calibration, 0)) {
+    if (this.state === 'playing' && now >= playback.buffer.duration * 1000 + Math.max(this.calibration, 0)) {
       for (const scoring of this.scorings) scoring.finish();
+      this.endedAt = playback.buffer.duration * 1000;
       playback.stop();
       this.setState('finished');
     }

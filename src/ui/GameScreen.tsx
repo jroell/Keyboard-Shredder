@@ -5,7 +5,7 @@ import { canFail, difficultyNames, notesFor } from '../../shared/difficulty';
 import { applyMods, finalScore, MODS, playbackRate, windowFor, type ModId } from '../../shared/modifiers';
 import { gradeFor, isFullCombo, starProgress, starsFor } from '../../shared/rating';
 import type { RunMode, RunSummary } from '../../shared/progression';
-import { buildTypingChart, charFor, wpm, type KeyStats, type TypingChart, type TypingLesson, type TypingOptions } from '../../shared/typing';
+import { ALL_TYPING_KEYS, buildTypingChart, charFor, wpm, type KeyStats, type TypingChart, type TypingLesson, type TypingOptions } from '../../shared/typing';
 import { keyLabel } from '../../shared/practice';
 import type { ScoreEvent, Scoring } from '../../shared/scoring';
 import type { Recording } from '../lib/recording';
@@ -38,6 +38,8 @@ export type RunResult = {
   keyStats?: KeyStats; typing?: TypingChart; typingAccuracy?: number; hitOffsetMs: number | null;
   /** Signed timing of every hit in ms. Negative is early. */
   offsets: number[]; windowMs: number;
+  /** The run was paused at least once. */
+  paused: boolean;
 };
 
 type Props = {
@@ -144,6 +146,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       calibration: settings.calibration, canFail: canFail[setup.difficulty] && !setup.typing && !setup.tutorial,
       sudden: setup.mods.includes('sudden'), musicVolume: settings.musicVolume,
       openLead: !!typing || !!setup.party, rate: playbackRate(setup.mods), match: () => matchRef.current,
+      strayCodes: typing ? new Set(ALL_TYPING_KEYS.filter(code => !typing.keys.includes(code))) : undefined,
       onEvent: event => handler.current(event),
     });
     session.current = current;
@@ -160,6 +163,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   }, [chart, recording, players, setup]);
 
   useEffect(() => { session.current?.setMusicVolume(settings.musicVolume); }, [settings.musicVolume]);
+  // A new timing offset applies from the next resume or replay, never in the middle of playing.
+  useEffect(() => { if (session.current && session.current.state !== 'playing') session.current.calibration = settings.calibration; }, [settings.calibration, state]);
   useEffect(() => {
     sfx.volume = settings.sfxVolume;
     sfx.hitSounds = settings.hitSounds === 'on' || (settings.hitSounds === 'auto' && (!recording.leadAudio || !!typing));
@@ -304,8 +309,12 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       frame = requestAnimationFrame(loop);
     };
     frame = requestAnimationFrame(loop);
-    (window as unknown as Record<string, unknown>).__shredder = { session: game, chart, players, typing };
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); renderer.current = null; padFocus.playing = false; };
+    const handle = { session: game, chart, players, typing };
+    (window as unknown as Record<string, unknown>).__shredder = handle;
+    return () => {
+      if ((window as unknown as Record<string, unknown>).__shredder === handle) delete (window as unknown as Record<string, unknown>).__shredder;
+      cancelAnimationFrame(frame); observer.disconnect(); renderer.current = null; padFocus.playing = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [players, layouts, chart, save.equipped.highway, save.equipped.gem, save.equipped.fx, settings.speed, settings.calm, setup, typing]);
 
@@ -329,7 +338,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         if (offset !== undefined) { stat.hits++; stat.timingTotal += Math.abs(offset); }
       }
     }
-    const partyWin = setup.party && !setup.party.coop ? scoring.score >= (game.scorings[1]?.score ?? 0) : undefined;
+    const partyWin = setup.party && !setup.party.coop ? scoring.score > (game.scorings[1]?.score ?? 0) : undefined;
     const summary: RunSummary = {
       songId: song.id, mode: setup.mode, difficulty: setup.difficulty, mods: setup.mods,
       score: finalScore(scoring.score, setup.mods), rating: scoring.rating, stars: failed ? 0 : starsFor(tally), grade: gradeFor(tally, failed),
@@ -346,7 +355,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     }) : { save, xp: { total: 0, parts: [] }, levelBefore: 0, levelAfter: 0, unlocked: [], achievements: [], newBest: false, firstClear: false,
       previousBest: 0, streak: { days: save.streak.days, extended: false } } as Outcome;
     setResult({ summary, outcome, log: game.logs[0], scorings: [...game.scorings], events, keyStats, typing, typingAccuracy,
-      hitOffsetMs: offsets.length >= 20 ? median(offsets) : null, offsets, windowMs: players[0].windowMs });
+      hitOffsetMs: offsets.length >= 20 ? median(offsets) : null, offsets, windowMs: players[0].windowMs, paused: game.paused });
   }, [players, typing, setup, song, chart.durationMs, bot, save]);
 
   // Session events: sound, callouts and state.
@@ -355,7 +364,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     if (!game) return;
     if (event.type === 'state') {
       setState(event.state);
-      if (event.state === 'playing') { setError(''); if (game.audioContext) sfx.attach(game.audioContext); }
+      if (event.state === 'playing') setError('');
       if (event.state === 'finished') {
         sfx.stopCrowd();
         if (!matchRef.current) {
@@ -413,13 +422,15 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
           sfx.play('word-complete');
         }
       }
-    } else if (event.type === 'miss' || event.type === 'drop') {
+    } else if (event.type === 'drop') {
+      sfx.play('wrong', { pan });
+    } else if (event.type === 'miss') {
       sfx.play('miss', { pan });
       if (event.brokeCombo >= 10) {
         sfx.play('combo-break', { intensity: Math.min(1, event.brokeCombo / 100), pan });
         if (event.brokeCombo >= 50) callout('Streak lost', 'lost', player);
       }
-      if (typing && event.type === 'miss') keyboard.current?.flash(typing.keys[event.lanes[0]], false);
+      if (typing) keyboard.current?.flash(typing.keys[event.lanes[0]], false);
     } else if (event.type === 'wrong') {
       sfx.play('wrong', { pan });
     } else if (event.type === 'sustain') {
@@ -457,8 +468,11 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   }, [state, players]);
 
   // An online match starts when the server schedules it.
+  const joined = useRef<number | null>(null);
   useEffect(() => {
-    if (!match?.startAt || state !== 'ready') return;
+    // One automatic try per scheduled start. If the browser blocks audio, the Join button takes over.
+    if (!match?.startAt || state !== 'ready' || joined.current === match.startAt) return;
+    joined.current = match.startAt;
     void session.current?.start();
   }, [match?.startAt, state]);
 
@@ -481,6 +495,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         return;
       }
       if (event.repeat) return;
+      // A focused button handles its own Enter and Space.
+      if ((event.code === 'Enter' || event.code === 'Space') && event.target instanceof HTMLButtonElement) return;
       if (game.state === 'ready' && (event.code === 'Enter' || event.code === 'Space')) {
         event.preventDefault();
         if (!(matchRef.current?.ready && matchRef.current.startAt === null)) start();

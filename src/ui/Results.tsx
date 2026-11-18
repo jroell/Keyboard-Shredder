@@ -77,6 +77,8 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   const [board, setBoard] = useState<Board>();
   const [submitted, setSubmitted] = useState<Submitted>();
   const [shareStatus, setShareStatus] = useState('');
+  const [postError, setPostError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const [offsetApplied, setOffsetApplied] = useState(false);
   const primary = useRef<HTMLButtonElement>(null);
   const party = setup.party;
@@ -91,8 +93,9 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   const after = useMemo(() => levelFor(outcome.save.xp), [outcome]);
   const leveled = after.level > before.level;
   const [xpShown, setXpShown] = useState(before.progress);
-  const ranked = !bot && !failed && !typing && !party && isRanked(setup.mods) && song.model === 'starter-setlist' && scorings[0].hits > 0 &&
+  const rankable = !bot && !failed && !typing && !party && isRanked(setup.mods) && song.model === 'starter-setlist' && scorings[0].hits > 0 &&
     ['quickplay', 'tour', 'daily', 'challenge'].includes(setup.mode);
+  const ranked = rankable && !result.paused;
 
   useEffect(() => {
     primary.current?.focus({ preventScroll: true });
@@ -125,14 +128,15 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   useEffect(() => {
     if (!ranked) return;
     let active = true;
+    setPostError('');
     submitScore({ songId: song.id, difficulty: setup.difficulty, mods: setup.mods, daily: setup.daily }, result.log)
       .then(reply => { if (active) setSubmitted(reply); })
-      .catch(() => {})
+      .catch(reason => { if (active) setPostError(reason instanceof Error ? reason.message : 'Could not post your score.'); })
       .then(() => fetchBoard(song.id, setup.difficulty, setup.mods))
       .then(next => { if (active) setBoard(next); })
-      .catch(() => {});
+      .catch(() => { if (active) setPostError(previous => previous || 'Could not load the leaderboard.'); });
     return () => { active = false; };
-  }, [ranked, result, song.id, setup]);
+  }, [ranked, result, song.id, setup, attempt]);
 
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
@@ -159,7 +163,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   };
 
   const title = failed ? (setup.mods.includes('sudden') ? 'Sudden death' : 'Booed off stage')
-    : party ? (party.coop ? 'Set complete' : `${party.names[scorings[0].score >= scorings[1].score ? 0 : 1]} wins!`)
+    : party ? (party.coop ? 'Set complete' : scorings[0].score === scorings[1].score ? 'Dead heat' : `${party.names[scorings[0].score > scorings[1].score ? 0 : 1]} wins!`)
     : outcome.lesson ? (outcome.lesson.passed ? 'Lesson passed' : 'Keep practising')
     : summary.fullCombo ? 'Full combo!' : summary.stars >= 5 ? 'Standing ovation' : summary.stars >= 3 ? 'Set complete' : 'Rough night';
   const challenge = setup.challenge;
@@ -181,7 +185,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
 
       {party ? <div className="party-results">
         {scorings.map((scoring, index) => {
-          const winner = !party.coop && scoring.score === Math.max(...scorings.map(item => item.score));
+          const winner = !party.coop && scorings[0].score !== scorings[1].score && scoring.score === Math.max(...scorings.map(item => item.score));
           return <div key={index} className={winner ? 'winner' : ''}>
             {winner && <Crown aria-hidden="true" />}
             <h2>{party.names[index]}</h2>
@@ -257,8 +261,11 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         <h2>Leaderboard {submitted && <span>You are #{submitted.rank}{submitted.daily ? ` · daily #${submitted.daily.rank}` : ''}</span>}</h2>
         {board ? <ol>{board.entries.slice(0, 5).map(entry => <li key={entry.rank + entry.name} className={entry.you ? 'you' : ''}>
           <span>{entry.rank}</span><strong>{entry.name}</strong><em>{entry.score.toLocaleString()}</em></li>)}</ol>
+          : postError ? <p className="muted" role="alert">{postError} <button className="link" onClick={() => setAttempt(value => value + 1)}>Try again</button></p>
           : <p className="muted">Posting your score…</p>}
+        {board && postError && <p className="muted" role="alert">{postError} <button className="link" onClick={() => setAttempt(value => value + 1)}>Try again</button></p>}
       </div>}
+      {rankable && result.paused && <p className="offset-hint">Paused runs stay off the leaderboard. Play it through without pausing to post a score.</p>}
 
       <div className="results-actions">
         {next && <button ref={primary} className="primary big" onClick={next.run}>{next.label}<ChevronRight aria-hidden="true" /></button>}

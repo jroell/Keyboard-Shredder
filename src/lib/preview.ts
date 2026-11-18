@@ -28,6 +28,8 @@ export function previewSong(id: string, volume: number) {
     return;
   }
   wanted = id;
+  // The old song stops at once, even if the new one never loads.
+  if (player && playing && playing !== id) { cancelAnimationFrame(fade); player.pause(); playing = ''; }
   void load(id).then(url => {
     if (wanted !== id) return;
     playing = id;

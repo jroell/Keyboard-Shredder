@@ -13,13 +13,17 @@ export default function Title({ ready, onStart }: { ready: boolean; onStart: () 
   const look = useMemo(() => ({ theme: save.equipped.highway, gem: save.equipped.gem, fx: save.equipped.fx, hidden: false, calm: settings.calm }),
     [save.equipped, settings.calm]);
 
+  const begin = () => {
+    if (!ready || leaving) return;
+    setLeaving(true);
+    sfx.play('riff');
+    setTimeout(onStart, 420);
+  };
   useEffect(() => {
     if (!ready || leaving) return;
     const start = (event: Event) => {
       if (event instanceof KeyboardEvent && (event.metaKey || event.ctrlKey || event.altKey || event.code === 'Tab')) return;
-      setLeaving(true);
-      sfx.play('riff');
-      setTimeout(onStart, 420);
+      begin();
     };
     window.addEventListener('keydown', start);
     window.addEventListener('pointerdown', start);
@@ -35,7 +39,7 @@ export default function Title({ ready, onStart }: { ready: boolean; onStart: () 
       <h1 className="logo" aria-label="Keyboard Shredder"><span>Keyboard</span><span>Shredder</span></h1>
       <p className="title-tag">Shred 25 songs. Battle your friends. Type faster without noticing.</p>
     </div>
-    <button className="press-start" disabled={!ready}>{ready ? 'Press any key' : 'Plugging in…'}</button>
+    <button className="press-start" disabled={!ready} onClick={begin}>{ready ? 'Press any key' : 'Plugging in…'}</button>
     <footer className="title-foot"><span>1 or 2 players</span><span>Keyboard or touch</span><span>Free to play</span></footer>
   </main>;
 }

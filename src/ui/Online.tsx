@@ -136,6 +136,12 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
   useEffect(() => {
     if (!duel || duel.phase !== 'finished' || !me || awarded.current === duel.round) return;
     awarded.current = duel.round;
+    // A reload of the finished room must not pay out the same round twice.
+    try {
+      const paid: string[] = JSON.parse(localStorage.getItem('ks:rounds') || '[]');
+      if (paid.includes(duel.round)) return;
+      localStorage.setItem('ks:rounds', JSON.stringify([...paid, duel.round].slice(-30)));
+    } catch { /* Storage is optional. */ }
     const won = cooperative ? !!team?.teamPassed : duel.winner === slot;
     sfx.play(won ? 'crowd-roar' : 'crowd-clap');
     const tally = { perfects: 0, greats: me.hits, goods: 0, misses: 0, wrongKeys: 0, total: Math.max(1, me.hits), bestCombo: me.bestCombo };

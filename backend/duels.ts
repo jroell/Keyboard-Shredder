@@ -191,12 +191,12 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       const room = typeof id === 'string' ? rooms.get(id) : undefined;
       const previous = membership.get(uid);
       if (!room) return reject(ack, 'This invite has expired.');
-      if (previous && previous !== room) {
-        if (busyElsewhere(previous)) return reject(ack, 'Leave your current duel first.');
-        removePlayer(previous, uid);
-      }
-      if (!room.players.some(player => player.uid === uid)) {
-        if (room.phase !== 'lobby' || room.players.length >= 2) return reject(ack, 'This duel already has two players.');
+      if (previous && previous !== room && busyElsewhere(previous)) return reject(ack, 'Leave your current duel first.');
+      const member = room.players.some(player => player.uid === uid);
+      // Check the new room has space before giving up the old one.
+      if (!member && (room.phase !== 'lobby' || room.players.length >= 2)) return reject(ack, 'This duel already has two players.');
+      if (previous && previous !== room) removePlayer(previous, uid);
+      if (!member) {
         room.players.push(newPlayer(room, uid, socket.id));
       }
       connect(room, ack);

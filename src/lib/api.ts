@@ -14,15 +14,19 @@ export function setTokenSource(source: () => Promise<string | undefined>) {
   tokenSource = source;
 }
 
+let memoryToken = '';
+
 export function guestToken() {
+  // Kept in memory too, so a browser that blocks storage still has one identity for the whole visit.
+  if (memoryToken) return memoryToken;
   try {
     const saved = localStorage.getItem('ks:guest');
-    if (saved && /^guest-[a-f0-9]{32}$/.test(saved)) return saved;
+    if (saved && /^guest-[a-f0-9]{32}$/.test(saved)) return memoryToken = saved;
   } catch { /* Storage is optional. */ }
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const token = 'guest-' + [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
   try { localStorage.setItem('ks:guest', token); } catch { /* Storage is optional. */ }
-  return token;
+  return memoryToken = token;
 }
 
 export const token = () => tokenSource();

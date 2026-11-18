@@ -1,5 +1,5 @@
 import type { Difficulty } from './song';
-import type { ModId } from './modifiers';
+import { normalizeMods, type ModId } from './modifiers';
 
 export type DailyChallenge = { dateKey: string; songId: string; difficulty: Difficulty; mods: ModId[] };
 
@@ -28,6 +28,6 @@ export function dailyChallenge(dateKey: string, songIds: readonly string[]): Dai
     dateKey,
     songId: ids[seed % Math.max(1, ids.length)] ?? '',
     difficulty: LEVELS[(seed >>> 8) % LEVELS.length],
-    mods: MOD_SETS[(seed >>> 16) % MOD_SETS.length],
+    mods: normalizeMods(MOD_SETS[(seed >>> 16) % MOD_SETS.length]),
   };
 }

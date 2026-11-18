@@ -9,7 +9,9 @@ export function ratingFor(tally: Tally) {
 }
 
 export function isFullCombo(tally: Tally) {
-  return tally.total > 0 && tally.misses === 0 && tally.perfects + tally.greats + tally.goods === tally.total;
+  // The streak must run unbroken from the first note to the last: a stray press or a dropped sustain ends it.
+  return tally.total > 0 && tally.misses === 0 && tally.perfects + tally.greats + tally.goods === tally.total &&
+    tally.bestCombo >= tally.total;
 }
 
 export const STAR_RATINGS = [25, 45, 62, 78, 90] as const;

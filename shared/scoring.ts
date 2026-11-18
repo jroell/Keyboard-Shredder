@@ -162,6 +162,17 @@ export class Scoring {
     return event;
   }
 
+  /** A key press that belongs to no lane, such as a wrong letter in a typing lesson. */
+  stray(timeMs: number) {
+    this.tick(timeMs);
+    this.wrongKeys++;
+    this.crowd = Math.max(0, this.crowd - 2);
+    const brokeCombo = this.combo;
+    this.combo = 0;
+    this.feedback = { judgement: 'Wrong key', lanes: [], timeMs };
+    this.onEvent?.({ type: 'wrong', lanes: [], brokeCombo, timeMs });
+  }
+
   release(lane: number, timeMs: number) {
     this.tick(timeMs);
     this.held.delete(lane);
@@ -187,7 +198,8 @@ export class Scoring {
   }
 
   private completeSustain(id: string, event: SongEvent, timeMs: number) {
-    const points = POINTS.sustain * this.multiplier(timeMs);
+    // The bonus depends only on the sustain's own end time, so a replay settles it the same way as live play.
+    const points = POINTS.sustain * (this.boosting(event.timeMs + event.durationMs) ? 2 : 1);
     this.score += points;
     this.sustainsHeld++;
     this.sustaining.delete(id);
@@ -195,11 +207,10 @@ export class Scoring {
   }
 
   private dropSustain(event: SongEvent, timeMs: number) {
+    // Letting go early loses the sustain bonus but keeps the streak, as in the guitar games.
     this.sustaining.delete(event.id);
-    const brokeCombo = this.combo;
-    this.combo = 0;
     this.feedback = { judgement: 'Sustain dropped', lanes: event.lanes, timeMs };
-    this.onEvent?.({ type: 'drop', event, lanes: event.lanes, brokeCombo, timeMs });
+    this.onEvent?.({ type: 'drop', event, lanes: event.lanes, brokeCombo: 0, timeMs });
   }
 
   finish() {

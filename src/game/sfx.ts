@@ -903,7 +903,8 @@ export class Sfx {
 
   private ensureContext(): AudioContext | null {
     if (this.disposed) return null;
-    if (this.ctxRef) return this.ctxRef;
+    if (this.ctxRef && this.ctxRef.state !== 'closed') return this.ctxRef;
+    this.ctxRef = null;
     const scope = globalThis as unknown as {
       AudioContext?: new () => AudioContext;
       webkitAudioContext?: new () => AudioContext;

@@ -246,7 +246,8 @@ export default function App() {
       {route.name === 'tour' && <TourScreen />}
       {route.name === 'academy' && <Academy />}
       {route.name === 'party' && <PartySetup />}
-      {route.name === 'online' && <Online key={user?.uid ?? 'guest'} invite={route.invite} initialCoop={route.coop} />}
+      {route.name === 'online' && (ready ? <Online key={user?.uid ?? 'guest'} invite={route.invite} initialCoop={route.coop} />
+        : <main className="screen"><p role="status" className="loading-line">Connecting…</p></main>)}
       {route.name === 'locker' && <Locker />}
       {route.name === 'settings' && <SettingsScreen />}
       {route.name === 'create' && <CreateTrack />}
