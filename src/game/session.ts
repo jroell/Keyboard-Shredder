@@ -460,6 +460,14 @@ export class GameSession {
       const scoring = this.scorings[0];
       while (this.waitCursor < events.length && scoring.consumed.has(events[this.waitCursor].id)) this.waitCursor++;
       const next = events[this.waitCursor];
+      if (!next && events.length) {
+        // Every letter is typed. The lesson ends here instead of playing out the rest of the song.
+        for (const scoring of this.scorings) scoring.finish();
+        this.endedAt = now;
+        playback.stop();
+        this.setState('finished');
+        return;
+      }
       if (next && now - this.calibration >= next.timeMs) {
         // The letter is at the ring. Stop the song here until it is typed.
         this.holding = next;

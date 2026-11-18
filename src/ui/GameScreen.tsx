@@ -534,6 +534,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       if ((event.code === 'Enter' || event.code === 'Space') && event.target instanceof HTMLButtonElement) return;
       if (game.state === 'ready' && (event.code === 'Enter' || event.code === 'Space')) {
         event.preventDefault();
+        // In party mode Space and Enter are the overdrive keys players are trying out, so only the button starts.
+        if (setup.party) return;
         if (!(matchRef.current?.ready && matchRef.current.startAt === null)) start();
       } else if (game.state === 'ready' && event.code === 'Escape' && !matchRef.current) {
         onExit();
@@ -610,7 +612,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     {setup.challenge && <div className="challenge-banner">Beat {setup.challenge.name}: <strong>{setup.challenge.score.toLocaleString()}</strong></div>}
     {players.map((player, index) => <PlayerHud key={index} ref={node => { huds.current[index] = node; }}
       label={setup.party ? setup.party.names[index] : undefined} showScore={!match}
-      boostKey={player.boostKey === 'Enter' ? 'Enter' : 'Space'} />)}
+      boostKey={guitar && !typing && (players.length === 1 || index === 1) ? 'Select' : player.boostKey === 'Enter' ? 'Enter' : 'Space'} />)}
     {setup.party && !setup.party.coop && <div className="versus-bar" ref={versus} aria-hidden="true"><i /></div>}
     {typing && <div className="word-ribbon" ref={ribbon} aria-hidden="true" />}
     {typing && settings.showKeyboard && <KeyboardGuide ref={keyboard} active={typing.keys} compact />}
@@ -687,8 +689,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         {guitar && !typing && <p className="ready-goal">{guitar} connected{setup.party ? ` and plays for ${setup.party.names[pads().length > 1 ? 0 : 1]}${pads().length > 1 ? ' and ' + setup.party.names[1] : ''}, in place of the keys shown` : ''}. {settings.pad.mode === 'strum' ? 'Hold the frets and strum on each note.' : 'Press a fret on each note.'} Tilt or press Select for overdrive.</p>}
         {readyExtra}
         {error && <p role="alert" className="error">{error}</p>}
-        <button className="primary big" autoFocus disabled={state === 'starting' || waitingForMatch} onClick={() => start()}>{startLabel}</button>
-        {!match && <p className="hint"><kbd>Enter</kbd> start · <kbd>Esc</kbd> back</p>}
+        <button className="primary big" autoFocus={!setup.party} disabled={state === 'starting' || waitingForMatch} onClick={() => start()}>{startLabel}</button>
+        {!match && <p className="hint">{setup.party ? 'Click Start when you are both ready' : <><kbd>Enter</kbd> start</>} · <kbd>Esc</kbd> back</p>}
         {!match && <button className="ghost" onClick={onExit}>{exitLabel}</button>}
       </div>
     </div>}

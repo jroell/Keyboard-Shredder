@@ -200,6 +200,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
     : party ? (party.coop ? 'Set complete' : partyValue(0) === partyValue(1) ? 'Dead heat' : `${party.names[partyValue(0) > partyValue(1) ? 0 : 1]} wins!`)
     : outcome.lesson ? (outcome.lesson.passed ? 'Lesson passed' : 'Keep practicing')
     : typing ? (drillStars > 0 ? 'Drill complete' : 'Keep practicing')
+    : setup.set && !failed && outcome.tour && !outcome.tour.cleared ? 'Set over'
     : setup.set && !failed ? (setup.set.index + 1 < setup.set.ids.length ? `Song ${setup.set.index + 1} of ${setup.set.ids.length} cleared` : 'Headline set complete')
     : summary.fullCombo ? 'Full combo!' : summary.stars >= 5 ? 'Standing ovation' : summary.stars >= 3 ? 'Set complete' : 'Rough night';
   const challenge = setup.challenge;
@@ -241,7 +242,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
           <strong data-testid="final-score">{typing ? (summary.wpm ?? 0).toFixed(1) : shownScore.toLocaleString()}</strong>
           {!typing && <p className={outcome.newBest && !failed ? 'best new' : 'best'}>
             {failed ? `Made it ${Math.round(100 * summary.durationMs / recording.chart.durationMs)}% of the way`
-              : outcome.newBest ? (outcome.firstClear ? 'First clear!' : `New personal best! +${(summary.score - outcome.previousBest).toLocaleString()}`)
+              : outcome.newBest ? (outcome.firstClear ? (summary.stars > 0 ? 'First clear!' : 'First time through') : `New personal best! +${(summary.score - outcome.previousBest).toLocaleString()}`)
               : outcome.previousBest > 0 ? `Personal best ${outcome.previousBest.toLocaleString()}` : ''}</p>}
           {typing && <p className="best">{result.typingAccuracy}% accuracy · score {summary.score.toLocaleString()}</p>}
         </div>
@@ -249,7 +250,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       </div>}
 
       {setup.set && <p className={`challenge-result ${failed ? 'lost' : 'won'}`} role="status">
-        {failed ? `The set ends here, ${setup.set.index + 1} of ${setup.set.ids.length} songs in. Set total ${(setup.set.score + summary.score).toLocaleString()}.`
+        {failed || (outcome.tour && !outcome.tour.cleared) ? `The set ends here, ${setup.set.index + 1} of ${setup.set.ids.length} songs in. Set total ${(setup.set.score + summary.score).toLocaleString()}.`
           : setup.set.index + 1 < setup.set.ids.length ? `Set total ${(setup.set.score + summary.score).toLocaleString()} after ${setup.set.index + 1} of ${setup.set.ids.length} songs.`
           : (() => {
             const ratings = [...setup.set.ratings, summary.rating];
