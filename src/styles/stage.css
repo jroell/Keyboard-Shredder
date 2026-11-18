@@ -321,3 +321,11 @@
 .set-summary[data-gold] .record { background: repeating-radial-gradient(circle, #ffd93b 0 2px, #c99a12 2px 4px); box-shadow: 0 0 24px #ffd93b88; }
 .set-summary[data-gold] .record i { background: #ff7a18; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* The action row sits in the flow, directly under the score, so it never covers anything. */
+.results-actions, .results-actions[class] { position: static !important; margin: 0 !important; padding: .2rem 0 !important; background: none !important; backdrop-filter: none !important; overflow: visible !important; flex-wrap: wrap !important; justify-content: center !important; }
+.results { padding-bottom: clamp(1.2rem, 3vw, 2.2rem) !important; }
+.timeline-row button small { white-space: nowrap; font-size: .62rem; }
+.results-stats dd { white-space: nowrap; }
+@media (max-width: 480px) { .results-stats dd { font-size: 1.35rem; } .timeline-row { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 720px) { .duel-scoreboard { position: static; padding: .4rem; } .online-stage { overflow: auto; } }

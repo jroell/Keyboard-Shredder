@@ -219,7 +219,7 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
       ? <GameScreen key={`${duel.round ?? duel.id}:${me?.difficulty ?? ''}`} recording={track} setup={{ mode: cooperative ? 'coop' : 'versus', difficulty: me?.difficulty ?? duel.difficulty, mods: [] }}
         onExit={() => void leave()} opponentBoostUntil={cooperative ? null : other?.boostEndMs ?? null}
         readyExtra={<div className="duel-invite">
-          {venue && <p>{venue.name}</p>}
+          {venue && <p className="muted">Tour venue: {venue.name}</p>}
           {slot === duel.host && duel.players.length < 2 && <>
             <label className="field">Invite link<input readOnly value={inviteLink} onFocus={event => event.target.select()} /></label>
             <button type="button" onClick={copy}>Copy invite</button><p role="status">{status}</p>

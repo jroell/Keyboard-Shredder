@@ -274,6 +274,14 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
             return `Set complete: ${(setup.set.score + summary.score).toLocaleString()} points, ${average.toFixed(1)}% average timing rating. ${average >= 80 ? 'Gold record earned!' : 'Average 80% for the gold record.'}`;
           })()}</p>}
       {setup.tutorial && <p className="offset-hint">Here to learn typing? The Typing academy on the main menu starts with two keys and waits for you.</p>}
+      <div className="results-actions">
+        {next && <button ref={primary} className="primary big" onClick={next.run}>{next.label}<ChevronRight aria-hidden="true" /></button>}
+        {!(setup.set && (failed || !songCleared(summary))) && <button ref={next ? undefined : primary} className={next ? '' : 'primary big'} onClick={onReplay}><RotateCcw aria-hidden="true" size={18} />Play again</button>}
+        {ranked && <button onClick={share}><Share2 aria-hidden="true" size={18} />Challenge a friend</button>}
+        <button className="ghost" onClick={onExit}>{exitLabel}</button>
+        <p className="hint">{setup.set && (failed || !songCleared(summary)) ? <><kbd>R</kbd> restart the set</> : <><kbd>R</kbd> play again{next ? <> · <kbd>N</kbd> next</> : null}</>} · <kbd>Esc</kbd> back</p>
+      </div>
+
       {setup.set && !failed && songCleared(summary) && setup.set.index + 1 === setup.set.ids.length && (() => {
         const ratings = [...setup.set.ratings, summary.rating];
         const scores = [...(setup.set.scores ?? []), summary.score];
@@ -314,14 +322,6 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
           <dd>{typing ? result.typingAccuracy : summary.rating >= 100 ? '100' : summary.rating.toFixed(1)}%</dd></div>
         <div><dt>Stray presses</dt><dd>{summary.wrongKeys}</dd></div>
       </dl>}
-
-      <div className="results-actions">
-        {next && <button ref={primary} className="primary big" onClick={next.run}>{next.label}<ChevronRight aria-hidden="true" /></button>}
-        {!(setup.set && (failed || !songCleared(summary))) && <button ref={next ? undefined : primary} className={next ? '' : 'primary big'} onClick={onReplay}><RotateCcw aria-hidden="true" size={18} />Play again</button>}
-        {ranked && <button onClick={share}><Share2 aria-hidden="true" size={18} />Challenge a friend</button>}
-        <button className="ghost" onClick={onExit}>{exitLabel}</button>
-        <p className="hint"><kbd>R</kbd> play again{next ? <> · <kbd>N</kbd> next</> : null} · <kbd>Esc</kbd> back</p>
-      </div>
 
       {!party && !typing && onPractice && <Timeline result={result} durationMs={recording.chart.durationMs} onPractice={onPractice} />}
       {!party && !result.waited && result.offsets.length >= 8 && <TimingChart offsets={result.offsets} windowMs={result.windowMs} />}

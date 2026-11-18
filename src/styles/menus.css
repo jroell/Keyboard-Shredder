@@ -349,3 +349,8 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
 
 .menu-player { display: flex; gap: .5rem; align-items: center; }
 @media (max-width: 520px) { .menu-player .ghost { display: none; } }
+
+@media (max-width: 860px), (max-height: 640px) { .song-actions { background: #120a1f; } }
+@media (max-height: 520px) { .songs-screen .genre-select { position: static; width: 200px; } .songs-screen .screen-head { margin-bottom: -.4rem; } }
+.party-players .panel { align-content: start; }
+.party-players input { min-height: 44px; height: 44px; }
