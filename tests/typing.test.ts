@@ -8,13 +8,11 @@ import {
   keyInfo, lessonStatus, mergeKeyStats, typingStars, weakestKeys, wpm,
 } from '../shared/typing';
 import type { KeyStats, TypingOptions } from '../shared/typing';
+import { catalogTracks } from '../backend/catalog-data';
 
 const chart: Chart = JSON.parse(readFileSync(new URL('../catalog/river-amp/chart.json', import.meta.url), 'utf8'));
-const songIds = new Set([
-  'river-amp', 'marigold-run', 'orange-pocket', 'arc-lights', 'mirrorball-static', 'redline-radio',
-  'umbra-samba', 'neon-afterhours', 'salt-motor', 'southbound-61', 'paper-antenna', 'blacktop-sparks',
-  'midnight-switch', 'midnight-toll', 'glass-circuit', 'signal-coast', 'copper-moon', 'voltage-parade',
-]);
+// A lesson may use any song in the catalog.
+const songIds = new Set(catalogTracks.map(([id]) => id));
 
 test('Every lesson has a unique ID, a catalog song, and all the keys it introduces.', () => {
   assert.equal(new Set(TYPING_LESSONS.map(lesson => lesson.id)).size, TYPING_LESSONS.length);
