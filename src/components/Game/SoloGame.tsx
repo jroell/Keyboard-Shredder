@@ -135,7 +135,8 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
   }, [state, keys, calibration]);
 
   const game = scoring.current;
-  const feedback = state === 'playing' && game.feedback && time - calibration - game.feedback.timeMs < 650
+  const chartTime = time - calibration;
+  const feedback = state === 'playing' && game.feedback && chartTime - game.feedback.timeMs < 650
     ? game.feedback : null;
   const timing = feedback?.offsetMs
     ? `${Math.abs(feedback.offsetMs)} ms ${feedback.offsetMs < 0 ? 'early' : 'late'}`
@@ -163,20 +164,23 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
     <div className="hud"><strong>Score {game.score}</strong><span className="hit-feedback">{feedback?.judgement}{timing && <small>{timing}</small>}</span><strong>{game.combo} combo</strong></div>
     <div className="board">
       <div aria-hidden="true">
+      <div className="strike-line" />
       <div className="lanes">{keys.map((key, lane) => <div className="lane" key={key} style={{ color: laneColors[lane] }}>
         <span className={`target${game.held.has(lane) ? ' held' : ''}${feedback?.lanes.includes(lane) ? missed ? ' missed' : ' hit' : ''}`}>{key.replace(/^(Key|Digit)/, '')}</span>
       </div>)}</div>
-      {chart.beatsMs.filter(beat => beat >= time && beat <= time + lookahead).map(beat =>
-        <div key={beat} className={chart.downbeatsMs.includes(beat) ? 'beat downbeat' : 'beat'} style={{ bottom: `${12 + (beat - time) * 75 / lookahead}%` }} />)}
-      {events.filter(event => event.timeMs + event.durationMs > time - 130 && event.timeMs < time + lookahead &&
+      {chart.beatsMs.filter(beat => beat >= chartTime && beat <= chartTime + lookahead).map(beat =>
+        <div key={beat} className={chart.downbeatsMs.includes(beat) ? 'beat downbeat' : 'beat'} style={{ bottom: `${12 + (beat - chartTime) * 75 / lookahead}%` }} />)}
+      {events.filter(event => event.timeMs + event.durationMs > chartTime - 130 && event.timeMs < chartTime + lookahead &&
         (!game.consumed.has(event.id) || game.sustaining.has(event.id))).flatMap(event =>
         event.lanes.map(lane => <div className="note" key={event.id + ':' + lane} style={{
-          left: `${lane * 20 + 10}%`, bottom: `${12 + Math.max(event.timeMs - time, -130) * 75 / lookahead}%`, color: laneColors[lane],
-          height: `${Math.max(0, event.durationMs - Math.max(0, time - event.timeMs)) * 75 / lookahead}%`,
+          left: `${lane * 20 + 10}%`, bottom: `${12 + Math.max(event.timeMs - chartTime, -130) * 75 / lookahead}%`, color: laneColors[lane],
+          height: `${Math.max(0, event.durationMs - Math.max(0, chartTime - event.timeMs)) * 75 / lookahead}%`,
         }} />))}
       </div>
       {state !== 'playing' && <div className="board-cover">
-        <p>{state === 'paused' ? 'Paused' : 'Press the lane keys when notes reach the line. Hold for long notes.'}</p>
+        <p>{state === 'paused' ? 'Paused' : 'Press the lane keys at the line. Press chords together and hold long notes.'}</p>
+        {state === 'ready' && <div className="ready-keys" aria-label="Lane keys">{keys.map(key =>
+          <kbd key={key}>{key.replace(/^(Key|Digit)/, '')}</kbd>)}</div>}
         {error && <p role="alert">{error}</p>}
         <button className="primary" disabled={starting} onClick={() => void play()}>
           {starting ? 'Loading audio…' : state === 'paused' ? 'Resume' : 'Play'}

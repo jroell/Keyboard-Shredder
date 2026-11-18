@@ -124,3 +124,6 @@ progress { width: 100%; accent-color: var(--accent); }
 .hit-feedback small { display: block; margin-top: .2rem; color: var(--muted); font-size: .75rem; }
 .target.hit { outline: 2px solid #fef7df; outline-offset: 3px; }
 .target.missed { outline: 2px dashed #ff928c; outline-offset: 3px; }
+.strike-line { position: absolute; z-index: 1; bottom: 12%; width: 100%; height: 2px; background: #e7bd9680; pointer-events: none; }
+.ready-keys { display: flex; flex-wrap: wrap; justify-content: center; gap: .35rem; }
+.ready-keys kbd { min-width: 2rem; padding: .15rem .35rem; border: 1px solid #a78774; border-radius: .3rem; color: #fff3e6; }
