@@ -264,7 +264,7 @@ export default function App() {
           setStore.set(all => ({ ...all, [key]: { score: Math.max(score, previous?.score ?? 0), rating: Math.max(rating, previous?.rating ?? 0), ...(platinum ? { platinum } : {}) } }));
         }
       }
-      return undefined;
+      return { label: 'Play the set again', run: () => void launch(set.ids[0], { ...setup, set: { ...set, index: 0, score: 0, ratings: [], scores: [] } }, back) };
     }
     if (setup.tutorial) return { label: 'Pick a song', run: () => go({ name: 'songs' }) };
     if (result.summary.failed && !setup.typing && !setup.party && !setup.daily && !setup.challenge) {

@@ -70,6 +70,8 @@ type Props = {
   readyExtra?: ReactNode;
 };
 
+/** Minutes, seconds and tenths, for a loop edge that moves less than a second per step. */
+export const fineClock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${Math.floor(ms / 100) % 10}`;
 export const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 
 /** A song is split into this many sections for practice and for the results timeline. */
@@ -442,11 +444,10 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         if (setup.practice) {
           // Practice loops the section, with a short breath between passes.
           const done = game.scorings[0];
-          callout(`${done.hits} of ${players[0].events.length} hit`, done.misses ? 'streak' : 'star');
           const pass = { hits: done.hits, total: players[0].events.length, rating: done.rating, drops: troubles.current.filter(item => item.kind === 'drop').length };
           setPasses(previous => ({ last: pass, count: (previous?.count ?? 0) + 1,
-            best: previous && (previous.best.hits > pass.hits || (previous.best.hits === pass.hits && previous.best.rating >= pass.rating)) ? previous.best : pass }));
-          setTimeout(() => { if (session.current === game) void game.start(true); }, 900);
+            best: previous && (previous.best.hits > pass.hits || (previous.best.hits === pass.hits && (previous.best.rating > pass.rating || (previous.best.rating === pass.rating && previous.best.drops <= pass.drops)))) ? previous.best : pass }));
+          setTimeout(() => { if (session.current === game) void game.start(true, 2); }, 900);
         } else if (!matchRef.current) {
           const clean = isFullCombo(game.scorings[0].tally);
           sfx.play(clean ? 'crowd-roar' : 'crowd-cheer');
@@ -493,7 +494,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         { lane: layouts[player].column(event.lanes[0]) < 0 ? 0 : layouts[player].column(event.lanes[0]), pan });
       const combo = event.combo;
       // Practice names what just worked, so a chord and a paid-out hold each get their own word.
-      if (setup.practice && event.lanes.length > 1) callout('Chord landed', 'star', player);
+      if (setup.practice && event.lanes.length > 1) callout('Chord landed', 'note', player);
       if (combo === 10 || combo === 20 || combo === 30) sfx.play('mult-up', { pitch: combo / 10 * 3, pan });
       if (combo === 25 || combo === 50 || (combo >= 100 && combo % 50 === 0)) {
         sfx.play('combo-milestone', { intensity: Math.min(1, combo / 200), pan });
@@ -524,7 +525,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         if (upcoming && typing.keys[upcoming.lanes[0]].startsWith('Shift+')) callout('Hold Shift for capitals', 'lost', player);
       }
     } else if (event.type === 'sustain') {
-      if (setup.practice) callout(`Hold paid +${event.points}`, 'star', player);
+      if (setup.practice) callout(`Hold paid +${event.points}`, 'note', player);
       sfx.play('sustain-end', { pan });
     } else if (event.type === 'charged') {
       sfx.play('boost-ready', { pan });
@@ -654,7 +655,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
 
   // The stage never scrolls. Focus moving to an off-screen control can still scroll a hidden-overflow box, which would push the results heading out of view.
   return <section className="stage" ref={stage} onScroll={event => { if (event.target === event.currentTarget) event.currentTarget.scrollTo(0, 0); }} data-state={state} data-boost="off" data-heat="cool" data-players={players.length}
-    data-typing={typing ? 'true' : undefined} data-calm={settings.calm ? 'true' : undefined} data-duel={match ? 'true' : undefined}
+    data-typing={typing ? 'true' : undefined} data-practice={setup.practice ? 'true' : undefined} data-calm={settings.calm ? 'true' : undefined} data-duel={match ? 'true' : undefined}
     style={artwork ? { '--art': `url("${artwork}")` } as CSSProperties : undefined}>
     <div className="stage-art" aria-hidden="true" />
     <div className="stage-lights" aria-hidden="true"><i /><i /><i /><i /></div>
@@ -691,7 +692,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
           : typing ? 'Typing academy' : setup.tour ? 'Tour' : match ? 'Online' : 'Quick play'}</p>
         <h2>{song.title}</h2>
         {setup.set && setup.set.index > 0 && <p className="ready-challenge">Set total so far: <strong>{setup.set.score.toLocaleString()}</strong></p>}
-        {setup.set && setup.set.index === 0 && <p className="ready-goal">A headline set: {setup.set.ids.length} songs back to back, one running score. Average an 80% timing rating for a gold record. Extra goal: 85% or better on every song for a platinum record. Being booed off ends the set.</p>}
+        {setup.set && setup.set.index === 0 && <p className="ready-goal">A headline set: {setup.set.ids.length} songs back to back, one running score. Average an 80% timing rating for a gold record. Extra goal: 85% or better on every song for a platinum record. Hit at least 60% of the notes in each song, or the set ends there.</p>}
         {setup.challenge && <p className="ready-challenge">Beat {setup.challenge.name}: <strong>{setup.challenge.score.toLocaleString()}</strong></p>}
         <p className="ready-mode">{modeLine} · {chart.bpm} BPM</p>
         <p className="ready-counts">{players.map((player, index) => {
@@ -723,15 +724,15 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
             const step = (label: string, title: string, run: () => void) => <button type="button" aria-label={title} title={title}
               onClick={event => { event.currentTarget.blur(); run(); }}>{label}</button>;
             return <div className="range-pick" role="group" aria-label="Loop range">
-              <span>Start</span>{step('−', 'Start one beat earlier', () => move(startMs - beat, endMs))}<b>{clock(startMs)}</b>{step('+', 'Start one beat later', () => move(Math.min(startMs + beat, endMs - 4 * beat), endMs))}
-              <span>End</span>{step('−', 'End one beat earlier', () => move(startMs, Math.max(endMs - beat, startMs + 4 * beat)))}<b>{clock(endMs)}</b>{step('+', 'End one beat later', () => move(startMs, endMs + beat))}
+              <span>Start</span>{step('−', 'Start one beat earlier', () => move(startMs - beat, endMs))}<b>{fineClock(startMs)}</b>{step('+', 'Start one beat later', () => move(Math.min(startMs + beat, endMs - 4 * beat), endMs))}
+              <span>End</span>{step('−', 'End one beat earlier', () => move(startMs, Math.max(endMs - beat, startMs + 4 * beat)))}<b>{fineClock(endMs)}</b>{step('+', 'End one beat later', () => move(startMs, endMs + beat))}
             </div>;
           })()}
           <div className="segments" role="group" aria-label="Speed">
             {[0.5, 0.75, 1].map(rate => <button key={rate} type="button" className={setup.practice!.rate === rate ? 'on' : ''} aria-pressed={setup.practice!.rate === rate}
               onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, rate } }); }}>{rate * 100}% speed</button>)}
           </div>
-          <p className="muted">The section loops until you stop. Practice scores are shown for feedback only: nothing is saved or ranked. A full combo means every note hit, no hold let go early and no stray press.</p>
+          <p className="muted">The section loops until you stop. Practice scores are shown for feedback only: nothing is saved or ranked. A full combo means every note hit and no stray press. A hold let go early keeps the combo but loses its bonus.</p>
         </div>}
         {typing ? <>
           <p>Type each letter as its gem reaches the ring. Keep your fingers on the home row and use the finger with the matching color.</p>
@@ -758,10 +759,13 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         </> : <>
           <div className="ready-keys" aria-label="Lane keys">{players[0].keys.map((key, lane) =>
             <kbd key={key} className={`${lit.has(key) ? 'lit' : ''}${usedLanes.has(lane) ? '' : ' unused'}`}
-              style={{ '--lane': layouts[0].color(lane) } as CSSProperties}>{keyLabel(key)}</kbd>)}</div>
-          <p><span className="keyboard-only">Press the key when a gem hits its ring. </span><span className="touch-only">Tap the pads as gems reach the rings. </span>
+              style={{ '--lane': layouts[0].color(lane) } as CSSProperties}>{guitarSeats.includes(0) ? layouts[0].targets[lane].label : keyLabel(key)}</kbd>)}</div>
+          {guitarSeats.includes(0) ? <p>{settings.pad.mode === 'strum' ? 'Hold the fret and strum when a gem hits its ring.' : 'Press the fret when a gem hits its ring.'}
+            {usedLanes.size < players[0].keys.length ? ` This chart only uses ${[...usedLanes].sort().map(lane => layouts[0].targets[lane].label).join(', ')}.` : ''}
+            {' '}Keep the fret down for long notes. Fill the amp, then tilt the guitar or press <kbd>Select</kbd> for double points.</p>
+          : <p><span className="keyboard-only">Press the key when a gem hits its ring. </span><span className="touch-only">Tap the pads as gems reach the rings. </span>
             {usedLanes.size < players[0].keys.length ? `This chart only uses ${[...usedLanes].sort().map(lane => keyLabel(players[0].keys[lane])).join(', ')}. ` : ''}
-            Hold long notes. Fill the amp, then <span className="keyboard-only">press <kbd>Space</kbd></span><span className="touch-only">tap the lightning button</span> for double points.</p>
+            Hold long notes. Fill the amp, then <span className="keyboard-only">press <kbd>Space</kbd></span><span className="touch-only">tap the lightning button</span> for double points.</p>}
           {canFail[setup.difficulty] && !setup.tutorial && !setup.practice && <p className="ready-goal">Keep the crowd happy. An empty crowd meter ends the set.</p>}
           {setup.mods.includes('sudden') && <p className="ready-goal">Sudden death: one missed note ends the set.</p>}
         </>}
@@ -769,7 +773,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         {readyExtra}
         {error && <p role="alert" className="error">{error}</p>}
         <button className="primary big" autoFocus={!setup.party} disabled={state === 'starting' || waitingForMatch} onClick={() => start()}>{startLabel}</button>
-        {!match && <p className="hint">{setup.party ? 'Click Start when you are both ready' : <><kbd>Enter</kbd> start</>} · <kbd>Esc</kbd> back</p>}
+        {!match && <p className="hint keyboard-only">{setup.party ? 'Click Start when you are both ready' : <><kbd>Enter</kbd> start</>} · <kbd>Esc</kbd> back</p>}
         {!match && <button className="ghost" onClick={onExit}>{exitLabel}</button>}
       </div>
     </div>}
@@ -792,8 +796,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     </div>}
 
     {setup.practice && passes && state !== 'ready' && <div className="pass-panel" role="status">
-      <span>Pass {passes.count}: <b>{passes.last.hits} of {passes.last.total}</b> hit · timing {passes.last.rating.toFixed(1)}%{passes.last.drops ? ` · ${passes.last.drops} ${passes.last.drops === 1 ? 'hold' : 'holds'} dropped` : ''}</span>
-      {passes.count > 1 && <span>Best: <b>{passes.best.hits} of {passes.best.total}</b> · timing {passes.best.rating.toFixed(1)}%</span>}
+      <span>Pass {passes.count}: <b>{passes.last.hits} of {passes.last.total}</b> hit · timing {passes.last.rating.toFixed(1)}% · holds dropped {passes.last.drops}</span>
+      {passes.count > 1 && <span>Best: <b>{passes.best.hits} of {passes.best.total}</b> · timing {passes.best.rating.toFixed(1)}% · holds dropped {passes.best.drops}</span>}
     </div>}
     {state === 'failed' && <div className="fail-flash" aria-hidden="true" />}
     {state === 'finished' && match && <div className="stage-cover"><p role="status">Waiting for final scores…</p></div>}

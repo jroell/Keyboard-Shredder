@@ -329,7 +329,7 @@
 .timeline-row button small { white-space: nowrap; font-size: .62rem; }
 .results-stats dd { white-space: nowrap; }
 @media (max-width: 480px) { .results-stats dd { font-size: 1.35rem; } .timeline-row { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 720px) { .duel-scoreboard { position: static; padding: .4rem; } .online-stage { overflow: auto; } }
+@media (max-width: 720px) { .online-stage { overflow: auto; } }
 
 .set-goal { color: var(--muted); font-size: .9rem; }
 
@@ -357,3 +357,14 @@
   .stage[data-typing] .stage-canvas { top: 0; height: calc(100% - 158px); }
   .stage[data-typing] .hud { top: 0; bottom: 158px; }
 }
+
+.callout.note { font-size: clamp(.85rem, 1.5vw, 1.15rem); color: var(--gold); -webkit-text-stroke: 0; text-shadow: 0 2px 4px #000; letter-spacing: .06em; }
+.stage[data-practice] .callouts { top: 84px; }
+.set-last { font: 800 1.2rem var(--display); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-top: .4rem; }
+.set-summary li button { min-height: 30px; padding: 0 .6rem; font-size: .75rem; border-radius: 8px; }
+.set-summary li { align-items: center; }
+.set-summary li[data-short] b { color: var(--gold); }
+
+/* Stat tiles: one or two line labels keep their numbers on one baseline. */
+.results-stats > div { display: grid; grid-template-rows: 1fr auto; }
+.results-stats dt { align-self: center; }

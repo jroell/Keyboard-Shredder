@@ -96,7 +96,8 @@ function Timeline({ result, durationMs, names, onPractice }: { result: RunResult
   const weakest = sections.reduce((worst, section, index) => cost(section) > cost(sections[worst]) ? index : worst, 0);
   const clean = sections.every(section => section.hits === section.judged && !section.slips);
   return <figure className="timeline">
-    <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `The ${names[weakest]} (section ${weakest + 1}) cost you the most. Click any section to loop it slowly.`}</figcaption>
+    <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `${sections.every(section => cost(section) === cost(sections[0])) ? 'Every section cost you about the same.' : `The ${names[weakest]} (section ${weakest + 1}) cost you the most.`} `}
+      {!clean && <><span className="keyboard-only">Click</span><span className="touch-only">Tap</span> any section to loop it slowly.</>}</figcaption>
     <div className="timeline-row">
       {sections.map((section, index) => {
         const rate = section.judged ? section.hits / section.judged : null;
@@ -199,7 +200,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
       if (event.repeat || event.target instanceof HTMLInputElement) return;
-      if (event.code === 'KeyR') { event.preventDefault(); if (setup.set && (failed || !songCleared(summary))) next?.run(); else onReplay(); }
+      if (event.code === 'KeyR') { event.preventDefault(); if (setup.set && (failed || !songCleared(summary) || setDone)) next?.run(); else onReplay(); }
       else if (event.code === 'Escape') { event.preventDefault(); onExit(); }
       else if (event.code === 'KeyN' && next) { event.preventDefault(); next.run(); }
       else if (event.code === 'Enter' && !(event.target instanceof HTMLElement)) { event.preventDefault(); primary.current?.click(); }
@@ -281,7 +282,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       </div>}
 
       {setup.set && !(!failed && songCleared(summary) && setup.set.index + 1 === setup.set.ids.length) && <p className={`challenge-result ${failed || !songCleared(summary) ? 'lost' : 'won'}`} role="status">
-        {failed || !songCleared(summary) ? `The set ends here, ${setup.set.index + 1} of ${setup.set.ids.length} songs in. Set total ${(setup.set.score + summary.score).toLocaleString()}.`
+        {failed || !songCleared(summary) ? `The set ends here, ${setup.set.index + 1} of ${setup.set.ids.length} songs in${failed ? '' : `: you hit ${summary.totalNotes ? Math.floor(100 * (summary.perfects + summary.greats + summary.goods) / summary.totalNotes) : 0}% of the notes and a set song needs 60%`}. Set total ${(setup.set.score + summary.score).toLocaleString()}.`
           : setup.set.index + 1 < setup.set.ids.length ? `Set total ${(setup.set.score + summary.score).toLocaleString()} after ${setup.set.index + 1} of ${setup.set.ids.length} songs.`
           : (() => {
             const ratings = [...setup.set.ratings, summary.rating];
@@ -291,11 +292,11 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       {setup.tutorial && <p className="offset-hint">Here to learn typing? The Typing academy on the main menu starts with two keys and waits for you.</p>}
       <div className="results-actions">
         {next && <button ref={primary} className="primary big" onClick={next.run}>{next.label}<ChevronRight aria-hidden="true" /></button>}
-        {!(setup.set && (failed || !songCleared(summary))) && <button ref={next ? undefined : primary} className={next ? '' : 'primary big'} onClick={onReplay}><RotateCcw aria-hidden="true" size={18} />Play again</button>}
+        {!(setup.set && (failed || !songCleared(summary) || setDone)) && <button ref={next ? undefined : primary} className={next ? '' : 'primary big'} onClick={onReplay}><RotateCcw aria-hidden="true" size={18} />Play again</button>}
         {setup.tutorial && <button onClick={() => { try { sessionStorage.setItem('ks:partyLevel', 'beginner'); } catch { /* optional */ } app.go({ name: 'party' }); }}><Users aria-hidden="true" size={18} />Play with a friend</button>}
         {ranked && <button onClick={share}><Share2 aria-hidden="true" size={18} />Challenge a friend</button>}
         <button className="ghost" onClick={onExit}>{exitLabel}</button>
-        <p className="hint">{setup.set && (failed || !songCleared(summary)) ? <><kbd>R</kbd> restart the set</> : <><kbd>R</kbd> play again{next ? <> · <kbd>N</kbd> next</> : null}</>} · <kbd>Esc</kbd> back</p>
+        <p className="hint keyboard-only">{setup.set && (failed || !songCleared(summary)) ? <><kbd>R</kbd> restart the set</> : setDone ? <><kbd>R</kbd> play the set again</> : <><kbd>R</kbd> play again{next ? <> · <kbd>N</kbd> next</> : null}</>} · <kbd>Esc</kbd> back</p>
       </div>
 
       {setup.set && !failed && songCleared(summary) && setup.set.index + 1 === setup.set.ids.length && (() => {
@@ -307,9 +308,12 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
           <div className="record" aria-hidden="true"><i /></div>
           <div>
             <h2>{platinum ? 'Platinum record' : average >= 80 ? 'Gold record' : 'Set finished'}: {setup.set.name}</h2>
-            <ol>{setup.set.ids.map((id, index) => <li key={id}><span>{songTitles[id] ?? `Song ${index + 1}`}</span><em>{(scores[index] ?? 0).toLocaleString()}</em><b>{(ratings[index] ?? 0).toFixed(1)}%</b></li>)}</ol>
+            <ol>{setup.set.ids.map((id, index) => <li key={id} data-short={!platinum && (ratings[index] ?? 0) < 85 ? 'true' : undefined}><span>{songTitles[id] ?? `Song ${index + 1}`}
+              {!platinum && (ratings[index] ?? 0) < 85 && <> <button type="button" title="Practice this song. It is under the 85% platinum mark."
+                onClick={() => { const song = app.songs.find(item => item.id === id); if (song) void app.launch(id, { mode: 'quickplay', difficulty: setup.difficulty, mods: [], practice: { startMs: 0, endMs: song.durationMs, rate: 1 } }, { name: 'tour' }); }}>Practice</button></>}
+            </span><em>{(scores[index] ?? 0).toLocaleString()}</em><b>{(ratings[index] ?? 0).toFixed(1)}%</b></li>)}</ol>
             <p>Total {scores.reduce((total, value) => total + value, 0).toLocaleString()} · average timing rating {average.toFixed(1)}% on {difficultyNames[setup.difficulty]}</p>
-            {average >= 80 && !platinum && <p className="set-goal">Extra goal: 85% or better on every song for a platinum record. Lowest song here: {Math.min(...ratings).toFixed(1)}%.</p>}
+            {average >= 80 && !platinum && <p className="set-goal">Extra goal: 85% or better on every song for a platinum record. Lowest song here: {Math.min(...ratings).toFixed(1)}%. Songs under 85% have a Practice button.</p>}
             {average < 80 && <p className="set-goal">A gold record needs an 80% average timing rating. You were {(80 - average).toFixed(1)} points short.</p>}
           </div>
         </div>;
@@ -323,13 +327,15 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         {outcome.lesson.passed ? `${outcome.lesson.stars === 3 ? ((summary.wpm ?? 0) >= setup.typing!.lesson!.goal.wpm ? 'Three stars, and up to speed.' : `Three stars for accuracy. Next goal: ${setup.typing!.lesson!.goal.wpm} words per minute.`) : 'Reach 97% accuracy for three stars.'}${outcome.lesson.firstPass && outcome.lesson.next ? ` Unlocked: ${outcome.lesson.next.title}.` : ''}`
           : `Reach ${setup.typing!.lesson!.goal.accuracy}% accuracy to pass. You hit ${result.typingAccuracy}%.`}</p>}
 
+      {setDone && <h2 className="set-last">Last song: {song.title}</h2>}
       {!party && result.waited && <dl className="results-stats">
         <div data-tone="great"><dt>Correct letters</dt><dd>{summary.perfects + summary.greats + summary.goods}</dd></div>
         <div data-tone="miss"><dt>Wrong keys</dt><dd>{summary.wrongKeys}</dd></div>
         <div><dt>Accuracy</dt><dd>{result.typingAccuracy}%</dd></div>
         <div><dt>Best streak</dt><dd>{summary.bestCombo}</dd></div>
       </dl>}
-      {typing && !result.waited && summary.misses >= 6 && <p className="offset-hint">Letters arriving too fast? Choose "The song waits for me" on the lesson card and type at your own pace.</p>}
+      {typing && !result.waited && summary.misses >= 6 && <p className="offset-hint">Letters arriving too fast?{' '}
+        <button className="link" onClick={() => { settingsStore.set(previous => ({ ...previous, typingWait: true })); onReplay(); }}>Try again with the song waiting for you</button></p>}
       {!party && !result.waited && <dl className="results-stats">
         <div data-tone="perfect"><dt>Perfect</dt><dd>{summary.perfects}</dd></div>
         <div data-tone="great"><dt>Great</dt><dd>{summary.greats}</dd></div>
@@ -374,7 +380,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       </div>}
 
       {ranked && <div className="results-board">
-        <h2>Leaderboard {submitted && <span>You are #{submitted.rank}{submitted.daily ? ` · daily #${submitted.daily.rank}` : ''}</span>}</h2>
+        <h2>Leaderboard{setDone ? `: ${song.title}` : ''} {submitted && <span>You are #{submitted.rank}{submitted.daily ? ` · daily #${submitted.daily.rank}` : ''}</span>}</h2>
         {board ? <ol>{board.entries.slice(0, 5).map(entry => <li key={entry.rank + entry.name} className={entry.you ? 'you' : ''}>
           <span>{entry.rank}</span><strong>{entry.name}</strong><em>{entry.score.toLocaleString()}</em></li>)}</ol>
           : postError ? <p className="muted" role="alert">{postError} <button className="link" onClick={() => setAttempt(value => value + 1)}>Try again</button></p>

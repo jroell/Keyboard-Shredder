@@ -357,3 +357,18 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
 .party-players input { min-height: 44px; height: 44px; }
 .drill-hint { font-size: .85rem; color: var(--muted); }
 .seat-note { color: var(--muted); font-size: .8rem; }
+
+/* Small screens: the two player cards stay visible in a slim row above the lobby or stage, never under it. */
+@media (max-width: 720px), (max-height: 520px) {
+  .duel-scoreboard { position: fixed; top: 0; left: 0; right: 0; z-index: 12; padding: .25rem .4rem; gap: .4rem; flex-wrap: nowrap; }
+  .duel-player { min-width: 0; flex: 1 1 0; padding: .3rem .5rem; font-size: .72rem; grid-template-columns: 1fr auto; align-items: center; column-gap: .4rem; background: #0d0818f2; }
+  .duel-player .player-card svg { width: 18px; height: 18px; }
+  .duel-player .player-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .duel-player > strong { font-size: 1rem; text-align: right; }
+  .duel-player p { grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .duel-player .duel-frets { display: none; }
+  .stage[data-duel] .stage-cover { padding-top: 100px; place-items: start center; }
+  .stage[data-duel] .stage-top { top: 92px; }
+  .stage[data-duel] .hud-left, .stage[data-duel] .hud-right { top: 150px !important; }
+}
+.party-players { align-items: start; }

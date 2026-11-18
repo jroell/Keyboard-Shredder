@@ -188,7 +188,8 @@ export class GameSession {
     if (this.musicGain && this.context) this.musicGain.gain.setTargetAtTime(volume, this.context.currentTime, 0.05);
   }
 
-  async start(replay = false) {
+  /** `leadBeats` is the count-in length. Practice passes after the first use a short one. */
+  async start(replay = false, leadBeats = 4) {
     if (this.pending || this.disposed) return;
     this.pending = true;
     const previous = this.state;
@@ -219,7 +220,7 @@ export class GameSession {
         this.setState(previous === 'starting' ? 'ready' : previous);
         return;
       }
-      await this.transport.start(this.offset, this.beatMs * 4 / (this.options.rate ?? 1), match?.startAt ?? undefined);
+      await this.transport.start(this.offset, this.beatMs * leadBeats / (this.options.rate ?? 1), match?.startAt ?? undefined);
       if (this.options.openLead) this.transport.openLead();
       if (match && this.transport.timeMs() >= 150) {
         this.scorings[0].rejoin(this.transport.timeMs() - this.calibration, match.combo, match.ampCharge, match.boostEndMs);
