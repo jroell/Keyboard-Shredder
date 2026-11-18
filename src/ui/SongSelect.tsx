@@ -4,7 +4,9 @@ import { DIFFICULTIES, difficultyBlurbs, difficultyNames } from '../../shared/di
 import { isRanked, MOD_IDS, MODS, modMultiplier, type ModId } from '../../shared/modifiers';
 import { recordKey } from '../../shared/progression';
 import { useApp } from '../App';
-import { fetchBoard, type Board } from '../lib/api';
+import { call, fetchBoard, type Board } from '../lib/api';
+import { notesFor } from '../../shared/difficulty';
+import type { Chart } from '../../shared/song';
 import { previewSong, stopPreview } from '../lib/preview';
 import { stageArt } from '../lib/stage-art';
 import { sfx } from '../game/sfx';
@@ -12,12 +14,17 @@ import { saveStore, settingsStore, useCell } from '../state/store';
 import { formatLength, Screen, Stars, useMenuKeys } from './common';
 import fallbackArt from '../assets/concert-stage.webp';
 
+const charts = new Map<string, Chart>();
+/** The song last highlighted, so coming back from a run lands on it. */
+const last = { songId: '', genre: 'All' };
+
 export default function SongSelect() {
   const app = useApp();
   const save = useCell(saveStore);
   const settings = useCell(settingsStore);
-  const [genre, setGenre] = useState('All');
+  const [genre, setGenre] = useState(last.genre);
   const [index, setIndex] = useState(0);
+  const restored = useRef(false);
   const [mods, setMods] = useState<ModId[]>([]);
   const [board, setBoard] = useState<Board>();
   const list = useRef<HTMLUListElement>(null);
@@ -41,7 +48,17 @@ export default function SongSelect() {
   };
   useMenuKeys({ count: songs.length, index, setIndex, onPick: play, onSide: setDifficulty });
 
-  useEffect(() => { setIndex(0); }, [genre]);
+  useEffect(() => {
+    if (!restored.current && songs.length) {
+      restored.current = true;
+      const found = songs.findIndex(item => item.id === last.songId);
+      if (found >= 0) { setIndex(found); return; }
+    }
+    if (restored.current && last.genre !== genre) setIndex(0);
+    last.genre = genre;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genre, songs.length]);
+  useEffect(() => { if (song && restored.current) last.songId = song.id; }, [song?.id]);
   useEffect(() => {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [index, songs]);
@@ -63,6 +80,34 @@ export default function SongSelect() {
     return () => { active = false; clearTimeout(timer); };
   }, [song?.id, song?.model, difficulty, mods]);
 
+  // The chart for the highlighted song, to show how busy this difficulty is before you commit.
+  const [chart, setChart] = useState<Chart>();
+  useEffect(() => {
+    if (!song) return;
+    setChart(charts.get(song.id));
+    if (charts.has(song.id)) return;
+    let active = true;
+    const timer = setTimeout(() => {
+      call(`/songs/${song.id}`).then(response => response.json()).then((body: { chart: Chart }) => {
+        charts.set(song.id, body.chart);
+        if (active) setChart(body.chart);
+      }).catch(() => {});
+    }, 250);
+    return () => { active = false; clearTimeout(timer); };
+  }, [song?.id]);
+  const counts = useMemo(() => {
+    if (!chart) return null;
+    const events = notesFor(chart, difficulty);
+    return { notes: events.length, chords: events.filter(event => event.lanes.length > 1).length, holds: events.filter(event => event.durationMs > 0).length };
+  }, [chart, difficulty]);
+  const practice = () => {
+    if (!song) return;
+    sfx.play('ui-select');
+    stopPreview();
+    void app.launch(song.id, { mode: 'quickplay', difficulty, mods: mods.filter(id => id !== 'sudden' && id !== 'slow'),
+      practice: { startMs: 0, endMs: Math.round(song.durationMs / 8), rate: 0.75 } }, { name: 'songs' });
+  };
+
   const art = song ? stageArt(song.id) ?? fallbackArt : fallbackArt;
   return <Screen title="Quick play" eyebrow="Choose your song" onBack={() => { stopPreview(); app.go({ name: 'menu' }); }} className="songs-screen">
     <div className="songs-backdrop" key={art} style={{ backgroundImage: `url("${art}")` }} aria-hidden="true" />
@@ -81,7 +126,7 @@ export default function SongSelect() {
             <span className="song-text"><strong>{item.title}</strong><small>{item.credit ? `${item.credit.artist} · ` : ''}{item.genre || 'My tracks'} · {formatLength(item.durationMs)}
               {item.intensity ? <span className="intensity" title={`Intensity ${item.intensity} of 5`} aria-label={`Intensity ${item.intensity} of 5`}>{Array.from({ length: 5 }, (_, i) => <i key={i} className={i < item.intensity! ? 'on' : ''} />)}</span> : null}</small></span>
             {best ? <span className="song-best"><Stars count={best.stars} size={12} /><b data-grade={best.grade[0]}>{best.grade}</b></span>
-              : <span className="song-best new">New</span>}
+              : <span className="song-best unplayed" aria-label="Not played yet">–</span>}
           </li>;
         })}
         {!songs.length && <li className="empty">{app.songs.length ? 'No songs in this genre yet.' : 'Loading the setlist…'}</li>}
@@ -98,6 +143,7 @@ export default function SongSelect() {
             <strong>{difficultyNames[difficulty]}</strong>
             <span className="difficulty-pips" aria-hidden="true">{DIFFICULTIES.map((level, i) => <i key={level} className={i <= DIFFICULTIES.indexOf(difficulty) ? 'on' : ''} />)}</span>
             <small>{difficultyBlurbs[difficulty]}</small>
+            <small className="chart-counts">{counts ? `${counts.notes} notes · ${counts.chords} chords · ${counts.holds} holds` : '\u00a0'}</small>
           </div>
           <button className="icon-button" aria-label="Harder" disabled={difficulty === DIFFICULTIES.at(-1)} onClick={event => { event.currentTarget.blur(); setDifficulty(1); }}><ChevronRight aria-hidden="true" /></button>
         </div>
@@ -112,7 +158,10 @@ export default function SongSelect() {
             <span className="grade small" data-grade={record.grade[0]}>{record.grade}</span>{record.fullCombo && <em>Full combo</em>}</>
             : <span className="muted">No score yet on {difficultyNames[difficulty]}. Set the first one.</span>}
         </div>
-        <button className="primary big play-song" onClick={play} style={{ '--pulse': '1' } as CSSProperties}><Play aria-hidden="true" />Play</button>
+        <div className="song-actions">
+          <button className="primary big play-song" onClick={play} style={{ '--pulse': '1' } as CSSProperties}><Play aria-hidden="true" />Play</button>
+          <button onClick={practice} title="Loop one section at a slower speed. Nothing is scored.">Practice</button>
+        </div>
         {song.model === 'starter-setlist' && <div className="mini-board-wrap">
           <h3><Trophy aria-hidden="true" size={15} /> Leaderboard</h3>
           {!isRanked(mods) ? <p className="muted">Slow-mo runs are for practice and stay off the board.</p> : board ? board.entries.length ? <ol className="mini-board">{board.entries.slice(0, 5).map(entry =>

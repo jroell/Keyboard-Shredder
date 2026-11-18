@@ -26,7 +26,9 @@ export type RunSetup = {
   difficulty: Difficulty;
   mods: ModId[];
   typing?: { options: TypingOptions; lesson?: TypingLesson };
-  party?: { coop: boolean; cpu?: number; names: [string, string] };
+  party?: { coop: boolean; cpu?: number; names: [string, string]; difficulties?: [Difficulty, Difficulty] };
+  /** Loop one part of the song at a chosen speed. Nothing is saved or ranked. */
+  practice?: { startMs: number; endMs: number; rate: number };
   tour?: boolean;
   daily?: string;
   challenge?: { name: string; score: number };
@@ -51,9 +53,14 @@ type Props = {
   /** Offered on the results screen, for example the next tour song or lesson. */
   next?: (result: RunResult) => { label: string; run: () => void } | undefined;
   exitLabel?: string;
+  /** Lets the ready card change the run, for the practice section and speed pickers. */
+  retune?: (setup: RunSetup) => void;
   /** Extra content on the ready card, such as an invite link. */
   readyExtra?: ReactNode;
 };
+
+/** A song is split into this many sections for practice and for the results timeline. */
+export const SECTIONS = 8;
 
 const TUTORIAL_TIPS: [number, string][] = [
   [-4000, 'Gems slide down the neck. Press the matching key when a gem reaches its ring.'],
@@ -74,7 +81,7 @@ function median(values: number[]) {
   return sorted[sorted.length >> 1];
 }
 
-export default function GameScreen({ recording, setup: latestSetup, match, opponentBoostUntil, onExit, next, exitLabel = 'Back to songs', readyExtra }: Props) {
+export default function GameScreen({ recording, setup: latestSetup, match, opponentBoostUntil, onExit, next, exitLabel = 'Back to songs', readyExtra, retune }: Props) {
   const { song, chart } = recording;
   // A parent may pass an equal setup in a new object on every render. The session must not restart for that.
   const setupKey = JSON.stringify(latestSetup);
@@ -112,15 +119,19 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
 
   const players = useMemo<PlayerSetup[]>(() => {
     if (typing) return [{ events: typing.events, windowMs: windowFor(setup.difficulty, setup.mods) + 15, keys: typing.keys, boostKey: 'Enter', bot }];
-    const events = applyMods(notesFor(chart, setup.difficulty), setup.mods);
-    const windowMs = windowFor(setup.difficulty, setup.mods);
+    const notes = (level: Difficulty) => {
+      const all = applyMods(notesFor(chart, level), setup.mods);
+      const range = setup.practice;
+      return range ? all.filter(event => event.timeMs >= range.startMs && event.timeMs < range.endMs) : all;
+    };
     if (setup.party) {
+      const levels = setup.party.difficulties ?? [setup.difficulty, setup.difficulty];
       return [
-        { events, windowMs, keys: settings.partyKeys[0], boostKey: 'Space', bot },
-        { events, windowMs, keys: settings.partyKeys[1], boostKey: 'Enter', bot: setup.party.cpu ?? bot },
+        { events: notes(levels[0]), windowMs: windowFor(levels[0], setup.mods), keys: settings.partyKeys[0], boostKey: 'Space', bot },
+        { events: notes(levels[1]), windowMs: windowFor(levels[1], setup.mods), keys: settings.partyKeys[1], boostKey: 'Enter', bot: setup.party.cpu ?? bot },
       ];
     }
-    return [{ events, windowMs, keys: settings.keys, boostKey: 'Space', bot }];
+    return [{ events: notes(setup.difficulty), windowMs: windowFor(setup.difficulty, setup.mods), keys: settings.keys, boostKey: 'Space', bot }];
   }, [chart, setup, typing, settings.keys, settings.partyKeys, bot]);
 
   const layouts = useMemo<LaneLayout[]>(() => players.map((player, index) => typing
@@ -145,7 +156,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       chart, audio: recording.audio, leadAudio: recording.leadAudio, players,
       calibration: settings.calibration, canFail: canFail[setup.difficulty] && !setup.typing && !setup.tutorial,
       sudden: setup.mods.includes('sudden'), musicVolume: settings.musicVolume,
-      openLead: !!typing || !!setup.party, rate: playbackRate(setup.mods), match: () => matchRef.current,
+      openLead: !!typing || !!setup.party, rate: setup.practice?.rate ?? playbackRate(setup.mods), range: setup.practice, match: () => matchRef.current,
       strayCodes: typing ? new Set(ALL_TYPING_KEYS.filter(code => !typing.keys.includes(code))) : undefined,
       onEvent: event => handler.current(event),
     });
@@ -280,8 +291,9 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       if (stage.current && !settings.calm) stage.current.style.setProperty('--beat', beatPulse(chart, time).toFixed(2));
       if (progress.current) progress.current.style.setProperty('--progress', String(Math.max(0, Math.min(1, current.rawTime() / chart.durationMs))));
       if (versus.current && current.scorings[1]) {
-        const a = current.scorings[0].score;
-        const b = current.scorings[1].score;
+        const byRating = !!setup.party?.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1];
+        const a = byRating ? current.scorings[0].liveRating : current.scorings[0].score;
+        const b = byRating ? current.scorings[1].liveRating : current.scorings[1].score;
         versus.current.style.setProperty('--lead', String(a + b ? a / (a + b) : 0.5));
       }
       if (typing) {
@@ -338,7 +350,9 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         if (offset !== undefined) { stat.hits++; stat.timingTotal += Math.abs(offset); }
       }
     }
-    const partyWin = setup.party && !setup.party.coop ? scoring.score > (game.scorings[1]?.score ?? 0) : undefined;
+    const fair = !!setup.party?.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1];
+    const other = game.scorings[1];
+    const partyWin = setup.party && !setup.party.coop && other ? (fair ? scoring.rating > other.rating : scoring.score > other.score) : undefined;
     const summary: RunSummary = {
       songId: song.id, mode: setup.mode, difficulty: setup.difficulty, mods: setup.mods,
       score: finalScore(scoring.score, setup.mods), rating: scoring.rating, stars: failed ? 0 : starsFor(tally), grade: gradeFor(tally, failed),
@@ -348,7 +362,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       wpm: typing ? wpm(scoring.hits, Math.max(1000, span)) : undefined, won: partyWin, lessonId: setup.typing?.lesson?.id, genre: song.genre,
     };
     const typingAccuracy = typing ? scoring.accuracy : undefined;
-    const counted = bot === undefined && !matchRef.current;
+    const counted = bot === undefined && !matchRef.current && !setup.practice;
     const outcome = counted ? completeRun(summary, {
       tourAccuracy: setup.tour ? Math.floor(100 * scoring.hits / Math.max(1, events.length + scoring.wrongKeys)) : undefined,
       lesson: setup.typing?.lesson, typingAccuracy, keyStats, daily: setup.daily,
@@ -367,7 +381,12 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       if (event.state === 'playing') setError('');
       if (event.state === 'finished') {
         sfx.stopCrowd();
-        if (!matchRef.current) {
+        if (setup.practice) {
+          // Practice loops the section, with a short breath between passes.
+          const done = game.scorings[0];
+          callout(`${done.hits} of ${players[0].events.length} hit`, done.misses ? 'streak' : 'star');
+          setTimeout(() => { if (session.current === game) void game.start(true); }, 900);
+        } else if (!matchRef.current) {
           const clean = isFullCombo(game.scorings[0].tally);
           sfx.play(clean ? 'crowd-roar' : 'crowd-cheer');
           sfx.play('crowd-clap');
@@ -437,11 +456,10 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       sfx.play('sustain-end', { pan });
     } else if (event.type === 'charged') {
       sfx.play('boost-ready', { pan });
-      callout(`Amp charged! Press ${players[player].boostKey === 'Enter' ? 'Enter' : 'Space'}`, 'boost', player);
     } else if (event.type === 'boost') {
       sfx.play('boost-on', { pan });
       sfx.play('crowd-roar', { intensity: 0.8 });
-      callout(setup.party && !setup.party.coop ? 'Overdrive attack!' : 'Overdrive! Double points', 'mega boost', player);
+      callout(setup.party && !setup.party.coop ? 'Overdrive attack!' : 'Overdrive ×2', 'boost', player);
       if (setup.party && !setup.party.coop) sfx.play('attack', { pan: -pan });
     }
   }
@@ -530,8 +548,25 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   }, [result, start, onExit, pauseItems, pauseIndex]);
 
   const guitar = useGuitarName();
+  const usedLanes = useMemo(() => new Set(players[0].events.flatMap(event => event.lanes)), [players]);
+  // Keys light up on the ready card, so players can check their hands are in the right place.
+  const [lit, setLit] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    if (state !== 'ready') { setLit(new Set()); return; }
+    const change = (down: boolean) => (event: KeyboardEvent) => setLit(previous => {
+      if (previous.has(event.code) === down) return previous;
+      const next = new Set(previous);
+      if (down) next.add(event.code); else next.delete(event.code);
+      return next;
+    });
+    const press = change(true);
+    const release = change(false);
+    window.addEventListener('keydown', press);
+    window.addEventListener('keyup', release);
+    return () => { window.removeEventListener('keydown', press); window.removeEventListener('keyup', release); };
+  }, [state]);
   const modeLine = [typing ? setup.typing?.lesson?.title ?? 'Free typing' : difficultyNames[setup.difficulty],
-    ...setup.mods.map(id => MODS[id].name)].join(' · ');
+    ...setup.mods.map(id => MODS[id].name), ...(setup.practice ? [`${setup.practice.rate * 100}% speed`] : [])].join(' · ');
   const single = players.length === 1;
   const waitingForMatch = !!match && match.ready && match.startAt === null;
   const startLabel = state === 'starting' ? 'Loading audio…' : match ? match.startAt ? 'Join playback' : match.ready ? 'Ready' : 'Ready up' : 'Start';
@@ -569,23 +604,56 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
 
     {(state === 'ready' || state === 'starting') && !result && <div className="stage-cover">
       <div className="ready-card">
-        <p className="eyebrow">{setup.tutorial ? 'Warm-up' : setup.daily ? 'Daily challenge' : setup.party ? (setup.party.coop ? 'Party co-op' : 'Party battle')
+        <p className="eyebrow">{setup.practice ? 'Section practice' : setup.challenge ? 'Challenge' : setup.tutorial ? 'Warm-up' : setup.daily ? 'Daily challenge'
+          : setup.party ? (setup.party.coop ? 'Party co-op' : 'Party battle')
           : typing ? 'Typing academy' : setup.tour ? 'Tour' : match ? 'Online' : 'Quick play'}</p>
         <h2>{song.title}</h2>
-        <p className="ready-mode">{modeLine} · {chart.bpm} BPM · {players[0].events.length} notes</p>
+        {setup.challenge && <p className="ready-challenge">Beat {setup.challenge.name}: <strong>{setup.challenge.score.toLocaleString()}</strong></p>}
+        <p className="ready-mode">{modeLine} · {chart.bpm} BPM</p>
+        <p className="ready-counts">{players.map((player, index) => {
+          const chords = player.events.filter(event => event.lanes.length > 1).length;
+          const holds = player.events.filter(event => event.durationMs > 0).length;
+          return <span key={index}>{players.length > 1 ? `${setup.party!.names[index]}: ` : ''}{player.events.length} notes
+            {chords ? ` · ${chords} chords` : ''}{holds ? ` · ${holds} holds` : ''}</span>;
+        })}</p>
+        {setup.practice && retune && <div className="practice-pick">
+          <div className="segments" role="group" aria-label="Section">
+            {Array.from({ length: SECTIONS }, (_, index) => {
+              const size = chart.durationMs / SECTIONS;
+              const on = setup.practice!.startMs < (index + 1) * size - 1 && setup.practice!.endMs > index * size + 1;
+              return <button key={index} type="button" className={on ? 'on' : ''} aria-pressed={on}
+                onClick={() => retune({ ...setup, practice: { ...setup.practice!, startMs: Math.round(index * size), endMs: Math.round((index + 1) * size) } })}>{index + 1}</button>;
+            })}
+            <button type="button" className={setup.practice.startMs === 0 && setup.practice.endMs >= chart.durationMs ? 'on' : ''}
+              onClick={() => retune({ ...setup, practice: { ...setup.practice!, startMs: 0, endMs: chart.durationMs } })}>All</button>
+          </div>
+          <div className="segments" role="group" aria-label="Speed">
+            {[0.5, 0.75, 1].map(rate => <button key={rate} type="button" className={setup.practice!.rate === rate ? 'on' : ''} aria-pressed={setup.practice!.rate === rate}
+              onClick={() => retune({ ...setup, practice: { ...setup.practice!, rate } })}>{rate * 100}% speed</button>)}
+          </div>
+          <p className="muted">The section loops until you stop. Nothing here is scored or ranked.</p>
+        </div>}
         {typing ? <>
-          <p>Type each letter as its gem reaches the ring. Keep your fingers on the home row and use the finger with the matching colour.</p>
+          <p>Type each letter as its gem reaches the ring. Keep your fingers on the home row and use the finger with the matching color.</p>
           {setup.typing?.lesson && <p className="ready-goal">{setup.typing.lesson.blurb} Pass with {setup.typing.lesson.goal.accuracy}% accuracy.</p>}
-        </> : setup.party ? <div className="ready-party">
-          {players.map((player, index) => <div key={index}><strong>{setup.party!.names[index]}</strong>
-            <div className="ready-keys">{player.keys.map((key, lane) => <kbd key={key} style={{ '--lane': layouts[index].color(lane) } as CSSProperties}>{keyLabel(key)}</kbd>)}</div>
-            <small>Overdrive: {player.boostKey === 'Enter' ? 'Enter' : 'Space'}</small></div>)}
-        </div> : <>
+        </> : setup.party ? <>
+          <div className="ready-party">
+            {players.map((player, index) => <div key={index}><strong>{setup.party!.names[index]}</strong>
+              <div className="ready-keys">{player.keys.map((key, lane) => <kbd key={key} className={lit.has(key) ? 'lit' : ''}
+                style={{ '--lane': layouts[index].color(lane) } as CSSProperties}>{keyLabel(key)}</kbd>)}</div>
+              <small>{setup.party!.difficulties ? `${difficultyNames[setup.party!.difficulties[index]]} · ` : ''}Overdrive: {player.boostKey === 'Enter' ? 'Enter' : 'Space'}</small></div>)}
+          </div>
+          <p>Press your key when a gem reaches its ring, and hold long notes to the end of the tail. Try your keys now: they light up above.</p>
+          {setup.party.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1] && !setup.party.coop &&
+            <p className="ready-goal">Different difficulties: the winner is whoever plays their own chart more accurately.</p>}
+        </> : <>
           <div className="ready-keys" aria-label="Lane keys">{players[0].keys.map((key, lane) =>
-            <kbd key={key} style={{ '--lane': layouts[0].color(lane) } as CSSProperties}>{keyLabel(key)}</kbd>)}</div>
+            <kbd key={key} className={`${lit.has(key) ? 'lit' : ''}${usedLanes.has(lane) ? '' : ' unused'}`}
+              style={{ '--lane': layouts[0].color(lane) } as CSSProperties}>{keyLabel(key)}</kbd>)}</div>
           <p><span className="keyboard-only">Press the key when a gem hits its ring. </span><span className="touch-only">Tap the pads as gems reach the rings. </span>
-            Hold long notes. Fill the amp, then press <kbd>Space</kbd> for double points.</p>
-          {canFail[setup.difficulty] && !setup.tutorial && <p className="ready-goal">Keep the crowd happy. An empty crowd meter ends the set.</p>}
+            {usedLanes.size < players[0].keys.length ? `This chart only uses ${[...usedLanes].sort().map(lane => keyLabel(players[0].keys[lane])).join(', ')}. ` : ''}
+            Hold long notes. Fill the amp, then <span className="keyboard-only">press <kbd>Space</kbd></span><span className="touch-only">tap the lightning button</span> for double points.</p>
+          {canFail[setup.difficulty] && !setup.tutorial && !setup.practice && <p className="ready-goal">Keep the crowd happy. An empty crowd meter ends the set.</p>}
           {setup.mods.includes('sudden') && <p className="ready-goal">Sudden death: one missed note ends the set.</p>}
         </>}
         {guitar && !typing && <p className="ready-goal">{guitar} connected. {settings.pad.mode === 'strum' ? 'Hold the frets and strum on each note.' : 'Press a fret on each note.'} Tilt or press Select for overdrive.</p>}
@@ -634,7 +702,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     {state === 'playing' && single && !typing && <button type="button" className="touch-boost" aria-label="Overdrive"
       onPointerDown={event => session.current?.boost(0, event.timeStamp)}>⚡</button>}
     {result && !match && <Results recording={recording} setup={setup} result={result} bot={bot !== undefined}
-      onReplay={() => start(true)} onExit={onExit} exitLabel={exitLabel} next={next?.(result)} />}
+      onReplay={() => start(true)} onExit={onExit} exitLabel={exitLabel} next={next?.(result)}
+      onPractice={retune ? practice => retune({ mode: 'quickplay', difficulty: setup.difficulty, mods: setup.mods.filter(id => id !== 'sudden' && id !== 'slow'), practice }) : undefined} />}
   </section>;
 }
 

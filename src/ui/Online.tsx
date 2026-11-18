@@ -69,7 +69,7 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
       setDuel(next);
       if (next.phase === 'finished') refresh.current();
     });
-    client.on('duel-expired', () => { setDuel(undefined); setError('This invite has expired.'); });
+    client.on('duel-expired', () => { setDuel(undefined); setError('This game was not found or has ended.'); });
     return () => { active = false; client.disconnect(); socket.current = null; };
   }, []);
 
@@ -173,9 +173,14 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
           <button className="primary big" disabled={(!coop && !songId) || syncing || !connected}
             onClick={() => action('create-duel', coop ? { mode: 'coop', difficulty: level } : { songId, difficulty: level })}>Create invite</button>
         </div>
-        <p className="muted">You get a link to share. The game starts when both players press Ready.</p>
+        <p className="muted">{!coop && !songId ? 'Choose a track to create the invite. ' : ''}You get a link to share. The game starts when both players press Ready.</p>
       </>}
       {invite && !error && <p role="status">Joining the game…</p>}
+      {invite && error && <section className="panel notice">
+        <h2>This invite did not work</h2>
+        <p>The game was not found or has ended. Ask your friend for a new link, or start your own game.</p>
+        <button className="primary" onClick={() => app.go({ name: 'online', invite: '', coop: false })}>Start my own game</button>
+      </section>}
     </Screen>;
   }
 
@@ -199,11 +204,11 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
         </div>
         {duel.reason && <p role="status">{duel.reason}</p>}
         {!cooperative && !!me?.profile.badges.length && <p>Earned badges: {me.profile.badges.map(badge => badgeNames[badge]).join(', ')}</p>}
-        {duel.phase === 'finished' && slot === duel.host && <button className="primary big" autoFocus
+        {duel.phase === 'finished' && (slot === duel.host || !nextSong) && <button className="primary big" autoFocus
           disabled={duel.players.length < 2 || !duel.players.every(player => player.connected) || !connected}
           onClick={() => action(nextSong ? 'advance-coop' : 'rematch')}>
-          {nextSong ? 'Continue tour' : cooperative ? 'Replay song' : 'Set up rematch'}</button>}
-        {duel.phase === 'finished' && slot !== duel.host && <p>{cooperative ? 'The host chooses when to continue.' : 'The host can set up a rematch.'}</p>}
+          {nextSong ? 'Continue tour' : cooperative ? 'Replay song' : 'Rematch'}</button>}
+        {duel.phase === 'finished' && slot !== duel.host && nextSong && <p>The host chooses when to continue the tour.</p>}
       </section>
     </Screen>;
   }

@@ -190,7 +190,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       if (typeof ack !== 'function') return;
       const room = typeof id === 'string' ? rooms.get(id) : undefined;
       const previous = membership.get(uid);
-      if (!room) return reject(ack, 'This invite has expired.');
+      if (!room) return reject(ack, 'This game was not found or has ended.');
       if (previous && previous !== room && busyElsewhere(previous)) return reject(ack, 'Leave your current duel first.');
       const member = room.players.some(player => player.uid === uid);
       // Check the new room has space before giving up the old one.
@@ -243,7 +243,8 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
     socket.on('rematch', ack => {
       if (typeof ack !== 'function') return;
       const room = current();
-      if (!room || room.players[0].uid !== uid || room.phase !== 'finished' || !room.players.every(player => player.socket)) {
+      // Either player may ask for another round. Both still have to ready up.
+      if (!room || room.phase !== 'finished' || !room.players.every(player => player.socket)) {
         return reject(ack, 'Both players must be connected to play again.');
       }
       resetRound(room);

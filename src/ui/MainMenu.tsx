@@ -48,7 +48,7 @@ export default function MainMenu() {
       { id: 'academy', label: 'Typing academy', icon: GraduationCap, blurb: 'Learn touch typing one key at a time, to real music.', detail: `${lessonsPassed} of ${TYPING_LESSONS.length} lessons passed${save.totals.bestWpm ? ` · best ${Math.round(save.totals.bestWpm)} WPM` : ''}`, art: stageArt('paper-antenna') ?? stage, run: go({ name: 'academy' }) },
       { id: 'party', label: 'Party mode', icon: Users, blurb: 'Two players, one keyboard. Battle or team up.', detail: 'Or battle the computer on your own', art: band, run: go({ name: 'party' }) },
       { id: 'online', label: 'Play online', icon: Globe, blurb: 'Send a link. Duel a friend or tour together.', detail: app.profile ? `${app.profile.wins} wins · ${app.profile.played} duels` : 'Head-to-head or co-op', art: stageArt('neon-afterhours') ?? stage, run: go({ name: 'online', invite: '', coop: false }) },
-      { id: 'daily', label: 'Daily challenge', icon: CalendarDays, blurb: daily ? `${daily.title} on ${difficultyNames[daily.difficulty]}${daily.mods.length ? ` with ${daily.mods.map(id => MODS[id].name).join(' and ')}` : ''}.` : 'One song, one shot at the daily board.', detail: dailyDone ? `Today: ${dailyDone.score.toLocaleString()} points. Come back tomorrow.` : `${daily?.total ?? 0} players on the board today`, art: daily ? stageArt(daily.songId) ?? stage : stage, run: playDaily },
+      { id: 'daily', label: 'Daily challenge', icon: CalendarDays, blurb: daily ? `${daily.title} on ${difficultyNames[daily.difficulty]}${daily.mods.length ? ` with ${daily.mods.map(id => MODS[id].name).join(' and ')}` : ''}.` : 'One song, one shot at the daily board.', detail: dailyDone ? `Your best today: ${dailyDone.score.toLocaleString()}. Play again to beat it before the day ends.` : `${daily?.total ?? 0} players on the board today`, art: daily ? stageArt(daily.songId) ?? stage : stage, run: playDaily },
       { id: 'locker', label: 'Locker', icon: Shirt, blurb: 'Necks, gems, hit effects, achievements and stats.', detail: `${Object.keys(save.achievements).length} achievements`, art: stageArt('mirrorball-static') ?? stage, run: go({ name: 'locker' }) },
       ...(app.config?.musicEnabled ? [{ id: 'create', label: 'Create a track', icon: Music2, blurb: 'Describe any style of music. Play it a minute later.', detail: app.user || app.config.localTest ? 'Any genre you can describe' : 'Sign in to compose', art: stageArt('glass-circuit') ?? stage, run: go({ name: 'create' }) }] : []),
       { id: 'settings', label: 'Settings', icon: Settings, blurb: 'Keys, note speed, timing, sound and your account.', detail: '', art: stageArt('arc-lights') ?? stage, run: go({ name: 'settings' }) },
@@ -100,7 +100,7 @@ export default function MainMenu() {
         <p className="eyebrow">Welcome to the band</p>
         <h2 id="welcome-title">What should the crowd call you?</h2>
         <label className="field">Stage name<input autoFocus maxLength={24} value={name} placeholder="Shredder" onChange={event => setName(event.target.value)} /></label>
-        <p>The 60-second warm-up shows you how to play. You can skip it and jump straight in.</p>
+        <p>The warm-up takes half a minute and shows you how to play. You can skip it and jump straight in.</p>
         <div className="modal-actions">
           <button type="submit" className="primary big">Play the warm-up</button>
           <button type="button" onClick={() => finishWelcome(false)()}>Skip to the menu</button>

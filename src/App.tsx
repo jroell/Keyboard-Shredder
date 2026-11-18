@@ -1,4 +1,4 @@
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { FirebaseOptions } from 'firebase/app';
 import type { Auth, User } from 'firebase/auth';
 import type { Profile } from '../shared/duel';
@@ -17,14 +17,36 @@ import GameScreen, { type RunResult, type RunSetup } from './ui/GameScreen';
 import Title from './ui/Title';
 import MainMenu from './ui/MainMenu';
 
-const SongSelect = lazy(() => import('./ui/SongSelect'));
-const TourScreen = lazy(() => import('./ui/TourScreen'));
-const Academy = lazy(() => import('./ui/Academy'));
-const PartySetup = lazy(() => import('./ui/PartySetup'));
-const Online = lazy(() => import('./ui/Online'));
-const Locker = lazy(() => import('./ui/Locker'));
-const SettingsScreen = lazy(() => import('./ui/SettingsScreen'));
-const CreateTrack = lazy(() => import('./ui/CreateTrack'));
+const screens = {
+  songs: () => import('./ui/SongSelect'), tour: () => import('./ui/TourScreen'), academy: () => import('./ui/Academy'),
+  party: () => import('./ui/PartySetup'), online: () => import('./ui/Online'), locker: () => import('./ui/Locker'),
+  settings: () => import('./ui/SettingsScreen'), create: () => import('./ui/CreateTrack'),
+};
+const SongSelect = lazy(screens.songs);
+const TourScreen = lazy(screens.tour);
+const Academy = lazy(screens.academy);
+const PartySetup = lazy(screens.party);
+const Online = lazy(screens.online);
+const Locker = lazy(screens.locker);
+const SettingsScreen = lazy(screens.settings);
+const CreateTrack = lazy(screens.create);
+
+/** A screen that fails to load (for example when the connection drops) offers a retry instead of a blank page. */
+class ScreenBoundary extends Component<{ onMenu: () => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return <main className="screen"><section className="panel notice" role="alert">
+      <h2>This screen did not load</h2>
+      <p>Check your connection, then try again.</p>
+      <div className="modal-actions">
+        <button className="primary" onClick={() => location.reload()}>Reload the game</button>
+        <button onClick={() => { this.setState({ failed: false }); this.props.onMenu(); }}>Back to menu</button>
+      </div>
+    </section></main>;
+  }
+}
 
 export type Config = { authEmulator?: string; firebase: FirebaseOptions | null; localTest: boolean; musicEnabled: boolean; legacyDatabaseId: string | null; guest?: boolean };
 export type ScreenName = 'title' | 'menu' | 'songs' | 'tour' | 'academy' | 'party' | 'online' | 'locker' | 'settings' | 'create';
@@ -86,6 +108,8 @@ export default function App() {
   const [error, setError] = useState('');
   const invite = useMemo(() => new URLSearchParams(location.search).get('duel'), []);
   const challenge = useMemo(readChallenge, []);
+  const [notice, setNotice] = useState(() => !readChallenge() && new URLSearchParams(location.search).has('c')
+    ? 'That challenge link is not valid. It may have been cut short when it was copied.' : '');
   const [route, setRoute] = useState<Route>(invite !== null ? { name: 'online', invite, coop: false } : { name: 'title' });
   const busy = useRef(false);
   const settings = useCell(settingsStore);
@@ -93,6 +117,11 @@ export default function App() {
 
   useEffect(() => { sfx.volume = settings.sfxVolume; }, [settings.sfxVolume]);
   useEffect(() => startMenuPad(() => settingsStore.get().pad), []);
+  // Fetch the other screens in the background, so the menus keep working if the connection drops later.
+  useEffect(() => {
+    const timer = setTimeout(() => { for (const load of Object.values(screens)) void load().catch(() => {}); }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
   useEffect(() => { document.documentElement.dataset.calm = settings.calm ? 'true' : 'false'; }, [settings.calm]);
 
   useEffect(() => {
@@ -143,7 +172,7 @@ export default function App() {
     refreshProfile();
   }, [ready, user, refreshSongs, refreshProfile]);
 
-  // The stage name and lane colours chosen on this device follow the player online.
+  // The stage name and lane colors chosen on this device follow the player online.
   const synced = useRef('');
   useEffect(() => {
     if (!profile || !save.name) return;
@@ -196,14 +225,16 @@ export default function App() {
     if (!challenge || challenged.current || !ready || !songs.length) return;
     challenged.current = true;
     history.replaceState(null, '', location.pathname);
+    if (!songs.some(song => song.id === challenge.songId)) { setNotice('That challenge is for a song that is not in the setlist any more.'); return; }
     void launch(challenge.songId, challenge.setup, { name: 'menu' });
-  }, [challenge, ready, songs.length, launch]);
+  }, [challenge, ready, songs, launch]);
 
   const api: AppApi = { config, auth, user, songs, profile, go, launch, startLesson, refreshSongs, saveProfile, refreshProfile, loading, error, setError };
 
   const next = useCallback((result: RunResult) => {
     if (route.name !== 'play') return undefined;
     const { setup, recording, back } = route;
+    if (setup.practice) return undefined;
     if (setup.tutorial) return { label: 'Pick a song', run: () => go({ name: 'songs' }) };
     if (result.summary.failed && !setup.typing && !setup.party && !setup.daily && !setup.challenge) {
       const easier = DIFFICULTIES[DIFFICULTIES.indexOf(setup.difficulty) - 1];
@@ -231,33 +262,42 @@ export default function App() {
     return undefined;
   }, [route, songs, go, launch, startLesson]);
 
-  let view;
+  let view: ReactNode;
   if (route.name === 'play') {
-    view = <GameScreen key={`${route.recording.song.id}:${route.setup.mode}:${route.setup.difficulty}:${route.setup.typing?.lesson?.id ?? ''}`}
+    view = <GameScreen key={`${route.recording.song.id}:${route.setup.mode}:${route.setup.difficulty}:${route.setup.typing?.lesson?.id ?? ''}:${JSON.stringify(route.setup.practice ?? '')}`}
+      retune={setup => setRoute({ ...route, setup })}
       recording={route.recording} setup={route.setup} onExit={() => go(route.back)} next={next}
-      exitLabel={route.back.name === 'tour' ? 'Back to tour' : route.back.name === 'academy' ? 'Back to academy' : route.back.name === 'songs' ? 'Back to songs' : 'Back to menu'} />;
+      exitLabel={route.back.name === 'tour' ? 'Back to tour' : route.back.name === 'party' ? 'Change song or players' : route.back.name === 'academy' ? 'Back to academy' : route.back.name === 'songs' ? 'Back to songs' : 'Back to menu'} />;
   } else if (route.name === 'title') {
     view = <Title ready={ready} onStart={() => go({ name: 'menu' })} />;
   } else if (route.name === 'menu') {
     view = <MainMenu />;
   } else {
-    view = <Suspense fallback={<main className="screen"><p role="status" className="loading-line">Loading…</p></main>}>
+    view = <ScreenBoundary onMenu={() => go({ name: 'menu' })}><Suspense fallback={<main className="screen"><p role="status" className="loading-line">Loading…</p></main>}>
       {route.name === 'songs' && <SongSelect />}
       {route.name === 'tour' && <TourScreen />}
       {route.name === 'academy' && <Academy />}
       {route.name === 'party' && <PartySetup />}
-      {route.name === 'online' && (ready ? <Online key={user?.uid ?? 'guest'} invite={route.invite} initialCoop={route.coop} />
+      {route.name === 'online' && (ready ? <Online key={`${user?.uid ?? 'guest'}:${route.invite ? 'join' : 'host'}`} invite={route.invite} initialCoop={route.coop} />
         : <main className="screen"><p role="status" className="loading-line">Connecting…</p></main>)}
       {route.name === 'locker' && <Locker />}
       {route.name === 'settings' && <SettingsScreen />}
       {route.name === 'create' && <CreateTrack />}
-    </Suspense>;
+    </Suspense></ScreenBoundary>;
   }
 
   return <AppContext.Provider value={api}>
     <div className="app" data-route={route.name} data-level={save.xp > 0 ? 'known' : 'new'}>
       {view}
       {loading && <div className="loading-veil" role="status"><div className="loading-amp"><i /><i /><i /><i /><i /></div><p>{loading}</p></div>}
+      {notice && <div className="modal-veil"><section className="modal" role="alertdialog" aria-labelledby="notice-title">
+        <h2 id="notice-title">Link not found</h2>
+        <p>{notice}</p>
+        <div className="modal-actions">
+          <button className="primary" autoFocus onClick={() => { setNotice(''); history.replaceState(null, '', location.pathname); go({ name: 'songs' }); }}>Pick a song</button>
+          <button onClick={() => { setNotice(''); history.replaceState(null, '', location.pathname); go({ name: 'menu' }); }}>Main menu</button>
+        </div>
+      </section></div>}
       {error && route.name !== 'play' && <div className="toast error" role="alert">{error}<button className="link" onClick={() => setError('')}>Dismiss</button></div>}
     </div>
   </AppContext.Provider>;

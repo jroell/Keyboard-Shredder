@@ -368,7 +368,7 @@ export class Highway {
     // Lane tints and dividers.
     for (let column = 0; column < columns; column++) {
       const tint = ctx.createLinearGradient(0, this.py(0.9), 0, this.strikeY);
-      const color = boosting ? BOOST_COLOR : layout.targets[column]?.color ?? '#ffffff';
+      const color = layout.targets[column]?.color ?? '#ffffff';
       tint.addColorStop(0, rgba(color, 0));
       tint.addColorStop(1, rgba(color, 0.13 + 0.05 * pulse));
       ctx.fillStyle = tint;
@@ -587,7 +587,7 @@ export class Highway {
       const y = this.strikeY;
       const rx = unit * 0.43;
       const ry = rx * 0.42;
-      const color = boosting ? BOOST_COLOR : target.color;
+      const color = target.color;
       const down = held.has(column);
       const flash = this.targetFlash[column];
       const flashing = flash && flash.until > now ? (flash.until - now) / 220 : 0;
@@ -704,7 +704,8 @@ export class Highway {
     }
     for (const lane of event.lanes) {
       const column = layout.column(lane);
-      const color = missed ? '#666672' : boosting ? BOOST_COLOR : layout.color(lane);
+      // Gems keep their lane color in overdrive, so the next chord stays readable.
+      const color = missed ? '#666672' : layout.color(lane);
       const label = layout.gemLabel(lane);
       if (column < 0) {
         const half = this.half(depth) * 0.92;

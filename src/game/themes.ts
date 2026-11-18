@@ -17,7 +17,7 @@ export const HIGHWAYS: Record<string, HighwayTheme> = {
 
 export const LANE_PALETTES: Record<string, string[]> = palettes;
 
-/** One colour per finger, left pinky to right pinky, then thumb. */
+/** One color per finger, left pinky to right pinky, then thumb. */
 export const FINGER_COLORS: Record<string, string> = {
   'L-pinky': '#ff5d8f', 'L-ring': '#ff9a3c', 'L-middle': '#ffe14d', 'L-index': '#4be07f',
   'R-index': '#35d6e8', 'R-middle': '#5b8cff', 'R-ring': '#a779ff', 'R-pinky': '#ff6fe0', thumb: '#d9d2ff',

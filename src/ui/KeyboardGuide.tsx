@@ -15,7 +15,7 @@ export function fingerName(code: string) {
 }
 
 /**
- * An on-screen keyboard coloured by finger. During play it lights the next key.
+ * An on-screen keyboard colored by finger. During play it lights the next key.
  * With `stats` it becomes a heat map: weak keys glow red, strong keys green.
  */
 const KeyboardGuide = forwardRef<KeyboardHandle, { active?: readonly string[]; stats?: KeyStats; compact?: boolean }>(

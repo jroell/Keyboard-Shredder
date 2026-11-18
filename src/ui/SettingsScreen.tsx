@@ -111,7 +111,7 @@ export default function SettingsScreen() {
     <div className="settings-grid">
       <section className="panel">
         <h2>Controls</h2>
-        <p>Pick a lane, then press the key you want. Space fires the amp.</p>
+        <p>Pick a lane, then press the key you want. Space fires the amp. On a touch screen, the lightning button does.</p>
         <h3>Solo</h3>{keyRow('keys', settings.keys)}
         <h3>Party: player 1</h3>{keyRow('p1', settings.partyKeys[0])}
         <h3>Party: player 2</h3>{keyRow('p2', settings.partyKeys[1])}
@@ -134,7 +134,8 @@ export default function SettingsScreen() {
         <label className="field">Effects volume<input type="range" min={0} max={1} step={0.05} value={settings.sfxVolume}
           onChange={event => { update({ sfxVolume: Number(event.target.value) }); sfx.volume = Number(event.target.value); sfx.play('ui-select'); }} /></label>
         <label className="field">Hit sounds<select value={settings.hitSounds} onChange={event => update({ hitSounds: event.target.value as Settings['hitSounds'] })}>
-          <option value="auto">Automatic (off when your hits play the guitar)</option><option value="on">Always on</option><option value="off">Off</option></select></label>
+          <option value="auto">Automatic</option><option value="on">Always on</option><option value="off">Off</option></select>
+          <small>Automatic turns them off on songs where your hits already play the lead guitar.</small></label>
       </section>
       <section className="panel">
         <h2>Display</h2>

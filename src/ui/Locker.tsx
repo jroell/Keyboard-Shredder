@@ -80,11 +80,11 @@ export default function Locker() {
           </div>
         </section>)}
         <section>
-          <h2>Lane colours</h2>
+          <h2>Lane colors</h2>
           <div className="swatches">
             {Object.entries(LANE_PALETTES).map(([id, palette]) => <button key={id} className={`swatch${settings.palette === id ? ' on' : ''}`} aria-pressed={settings.palette === id}
               onClick={() => { sfx.play('ui-select'); settingsStore.set(previous => ({ ...previous, palette: id })); }}>
-              <strong>{id}</strong><span className="palette-dots">{palette.map(color => <i key={color} style={{ background: color }} />)}</span>
+              <strong>{id}</strong>{settings.palette === id && <small><Check size={12} aria-hidden="true" /> Equipped</small>}<span className="palette-dots">{palette.map(color => <i key={color} style={{ background: color }} />)}</span>
             </button>)}
           </div>
         </section>

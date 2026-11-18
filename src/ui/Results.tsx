@@ -10,7 +10,7 @@ import type { Recording } from '../lib/recording';
 import { fetchBoard, submitScore, type Board, type Submitted } from '../lib/api';
 import { sfx } from '../game/sfx';
 import { saveStore, settingsStore, useCell } from '../state/store';
-import type { RunResult, RunSetup } from './GameScreen';
+import { SECTIONS, type RunResult, type RunSetup } from './GameScreen';
 import KeyboardGuide, { fingerName } from './KeyboardGuide';
 import confetti from 'canvas-confetti';
 
@@ -18,6 +18,8 @@ type Props = {
   recording: Recording; setup: RunSetup; result: RunResult; bot: boolean;
   onReplay: () => void; onExit: () => void; exitLabel: string;
   next?: { label: string; run: () => void };
+  /** Opens a section of this song in practice mode. */
+  onPractice?: (practice: { startMs: number; endMs: number; rate: number }) => void;
 };
 
 function useCountUp(target: number, delay: number, duration = 1100) {
@@ -69,7 +71,35 @@ function TimingChart({ offsets, windowMs }: { offsets: number[]; windowMs: numbe
   </figure>;
 }
 
-export default function Results({ recording, setup, result, bot, onReplay, onExit, exitLabel, next }: Props) {
+/** The song cut into sections, colored by how many notes landed, with one click to practice a weak one. */
+function Timeline({ result, durationMs, onPractice }: { result: RunResult; durationMs: number; onPractice: NonNullable<Props['onPractice']> }) {
+  const size = durationMs / SECTIONS;
+  const scoring = result.scorings[0];
+  const sections = Array.from({ length: SECTIONS }, (_, index) => {
+    const events = result.events.filter(event => event.timeMs >= index * size && event.timeMs < (index + 1) * size);
+    const judged = events.filter(event => scoring.consumed.has(event.id));
+    const hits = judged.filter(event => scoring.hitOffsets.has(event.id)).length;
+    return { total: events.length, judged: judged.length, hits };
+  });
+  const weakest = sections.reduce((worst, section, index) => section.judged && section.hits / section.judged < (sections[worst].judged ? sections[worst].hits / sections[worst].judged : 2) ? index : worst, 0);
+  const clean = sections.every(section => section.hits === section.judged);
+  return <figure className="timeline">
+    <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `Section ${weakest + 1} cost you the most. Click any section to loop it slowly.`}</figcaption>
+    <div className="timeline-row">
+      {sections.map((section, index) => {
+        const rate = section.judged ? section.hits / section.judged : null;
+        return <button key={index} type="button" data-tone={rate === null ? 'none' : rate >= 0.95 ? 'clean' : rate >= 0.75 ? 'ok' : 'rough'}
+          title={section.judged ? `Section ${index + 1}: ${section.hits} of ${section.judged} notes hit` : `Section ${index + 1}: not reached`}
+          aria-label={`Practice section ${index + 1}${section.judged ? `, ${section.hits} of ${section.judged} notes hit` : ''}`}
+          onClick={() => onPractice({ startMs: Math.round(index * size), endMs: Math.round((index + 1) * size), rate: 0.75 })}>
+          <b>{index + 1}</b><small>{section.judged ? `${section.hits}/${section.judged}` : '·'}</small>
+        </button>;
+      })}
+    </div>
+  </figure>;
+}
+
+export default function Results({ recording, setup, result, bot, onReplay, onExit, exitLabel, next, onPractice }: Props) {
   const { song } = recording;
   const { summary, outcome, scorings } = result;
   const save = useCell(saveStore);
@@ -85,8 +115,9 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   const typing = !!result.typing;
   const failed = summary.failed;
   // A lesson is graded on its own three-star scale.
-  const starSlots = outcome.lesson ? 3 : 5;
-  const stars = outcome.lesson ? outcome.lesson.stars
+  const drillStars = (result.typingAccuracy ?? 0) >= 97 ? 3 : (result.typingAccuracy ?? 0) >= 92 ? 2 : (result.typingAccuracy ?? 0) >= 80 ? 1 : 0;
+  const starSlots = typing ? 3 : 5;
+  const stars = outcome.lesson ? outcome.lesson.stars : typing ? (failed ? 0 : drillStars)
     : party?.coop ? Math.min(5, Math.round((starsFor(scorings[0].tally) + starsFor(scorings[1].tally)) / 2)) : summary.stars;
   const shownScore = useCountUp(party?.coop ? finalScore(scorings[0].score + scorings[1].score, setup.mods) : summary.score, 900);
   const before = useMemo(() => levelFor(outcome.save.xp - outcome.xp.total), [outcome]);
@@ -162,9 +193,13 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       .catch(() => setShareStatus(link));
   };
 
+  // With different difficulties a battle is decided on timing rating, so both players have a fair shot.
+  const fairParty = !!party?.difficulties && party.difficulties[0] !== party.difficulties[1] && !party.coop;
+  const partyValue = (index: number) => fairParty ? scorings[index].rating : scorings[index].score;
   const title = failed ? (setup.mods.includes('sudden') ? 'Sudden death' : 'Booed off stage')
-    : party ? (party.coop ? 'Set complete' : scorings[0].score === scorings[1].score ? 'Dead heat' : `${party.names[scorings[0].score > scorings[1].score ? 0 : 1]} wins!`)
-    : outcome.lesson ? (outcome.lesson.passed ? 'Lesson passed' : 'Keep practising')
+    : party ? (party.coop ? 'Set complete' : partyValue(0) === partyValue(1) ? 'Dead heat' : `${party.names[partyValue(0) > partyValue(1) ? 0 : 1]} wins!`)
+    : outcome.lesson ? (outcome.lesson.passed ? 'Lesson passed' : 'Keep practicing')
+    : typing ? (drillStars > 0 ? 'Drill complete' : 'Keep practicing')
     : summary.fullCombo ? 'Full combo!' : summary.stars >= 5 ? 'Standing ovation' : summary.stars >= 3 ? 'Set complete' : 'Rough night';
   const challenge = setup.challenge;
   const beat = challenge && !failed && summary.score > challenge.score;
@@ -173,7 +208,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
     return stat.hits / stat.attempts < 0.9;
   }) : [];
   const offset = result.hitOffsetMs;
-  const suggestOffset = offset !== null && Math.abs(offset) >= 22 && !typing && !bot;
+  const suggestOffset = offset !== null && Math.abs(offset) >= 22 && !typing && !bot && !party;
 
   return <div className="results-layer" data-failed={failed ? 'true' : undefined}>
     <section className="results" aria-labelledby="results-title">
@@ -185,12 +220,12 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
 
       {party ? <div className="party-results">
         {scorings.map((scoring, index) => {
-          const winner = !party.coop && scorings[0].score !== scorings[1].score && scoring.score === Math.max(...scorings.map(item => item.score));
+          const winner = !party.coop && partyValue(0) !== partyValue(1) && partyValue(index) === Math.max(partyValue(0), partyValue(1));
           return <div key={index} className={winner ? 'winner' : ''}>
             {winner && <Crown aria-hidden="true" />}
             <h2>{party.names[index]}</h2>
             <strong>{finalScore(scoring.score, setup.mods).toLocaleString()}</strong>
-            <p>{Math.round(scoring.rating)}% · best streak {scoring.bestCombo}</p>
+            <p>{fairParty ? <b>{scoring.rating.toFixed(1)}% timing rating</b> : `${Math.round(scoring.rating)}%`}{party.difficulties ? ` · ${difficultyNames[party.difficulties[index]]}` : ''} · best streak {scoring.bestCombo}</p>
             <p>{scoring.perfects} perfect · {scoring.misses} missed</p>
           </div>;
         })}
@@ -209,7 +244,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
               : outcome.previousBest > 0 ? `Personal best ${outcome.previousBest.toLocaleString()}` : ''}</p>}
           {typing && <p className="best">{result.typingAccuracy}% accuracy · score {summary.score.toLocaleString()}</p>}
         </div>
-        <div className="grade" data-grade={summary.grade[0]} aria-label={`Grade ${summary.grade}`}>{summary.grade}</div>
+        {!typing && <div className="grade" data-grade={summary.grade[0]} aria-label={`Grade ${summary.grade}`}>{summary.grade}</div>}
       </div>}
 
       {challenge && <p className={`challenge-result ${beat ? 'won' : 'lost'}`} role="status">
@@ -227,16 +262,28 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         <div data-tone="good"><dt>Good</dt><dd>{summary.goods}</dd></div>
         <div data-tone="miss"><dt>Missed</dt><dd>{summary.misses}</dd></div>
         <div><dt>Best streak</dt><dd>{summary.bestCombo}</dd></div>
-        <div><dt>{typing ? 'Accuracy' : 'Rating'}</dt><dd>{typing ? result.typingAccuracy : Math.round(summary.rating)}%</dd></div>
-        {summary.wrongKeys > 0 && <div><dt>Stray presses</dt><dd>{summary.wrongKeys}</dd></div>}
+        <div><dt>Notes hit</dt><dd>{summary.totalNotes ? Math.floor(100 * (summary.perfects + summary.greats + summary.goods) / summary.totalNotes) : 0}%</dd></div>
+        <div title="Notes hit, weighted by timing: a Perfect counts in full, a Great 80%, a Good 55%."><dt>{typing ? 'Accuracy' : 'Timing rating'}</dt>
+          <dd>{typing ? result.typingAccuracy : summary.rating >= 100 ? '100' : summary.rating.toFixed(1)}%</dd></div>
+        <div><dt>Stray presses</dt><dd>{summary.wrongKeys}</dd></div>
       </dl>}
 
+      <div className="results-actions">
+        {next && <button ref={primary} className="primary big" onClick={next.run}>{next.label}<ChevronRight aria-hidden="true" /></button>}
+        <button ref={next ? undefined : primary} className={next ? '' : 'primary big'} onClick={onReplay}><RotateCcw aria-hidden="true" size={18} />Play again</button>
+        {ranked && <button onClick={share}><Share2 aria-hidden="true" size={18} />Challenge a friend</button>}
+        <button className="ghost" onClick={onExit}>{exitLabel}</button>
+        <p className="hint"><kbd>R</kbd> play again{next ? <> · <kbd>N</kbd> next</> : null} · <kbd>Esc</kbd> back</p>
+      </div>
+
+      {!party && !typing && onPractice && <Timeline result={result} durationMs={recording.chart.durationMs} onPractice={onPractice} />}
       {!party && result.offsets.length >= 8 && <TimingChart offsets={result.offsets} windowMs={result.windowMs} />}
 
       {result.keyStats && <div className="results-typing">
         <KeyboardGuide stats={result.keyStats} compact />
         {weak.length > 0 ? <p>Work on {weak.map(code => `${code === 'Space' ? 'Space' : keyLabel(code)} (${fingerName(code)})`).join(', ')}.</p>
-          : <p>Every key landed. Clean hands.</p>}
+          : <p>{summary.misses + summary.wrongKeys === 0 ? 'Every key landed. Clean hands.' : 'No single key stands out. Keep your eyes on the next letter.'}</p>}
+        <p className="heat-legend"><i data-tone="rough" /> missed most <i data-tone="ok" /> shaky <i data-tone="clean" /> clean</p>
       </div>}
 
       {suggestOffset && <p className="offset-hint" role="status">
@@ -267,14 +314,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       </div>}
       {rankable && result.paused && <p className="offset-hint">Paused runs stay off the leaderboard. Play it through without pausing to post a score.</p>}
 
-      <div className="results-actions">
-        {next && <button ref={primary} className="primary big" onClick={next.run}>{next.label}<ChevronRight aria-hidden="true" /></button>}
-        <button ref={next ? undefined : primary} className={next ? '' : 'primary big'} onClick={onReplay}><RotateCcw aria-hidden="true" size={18} />{failed ? 'Try again' : 'Play again'}</button>
-        {ranked && <button onClick={share}><Share2 aria-hidden="true" size={18} />Challenge a friend</button>}
-        <button className="ghost" onClick={onExit}>{exitLabel}</button>
-      </div>
       {shareStatus && <p role="status" className="share-status">{shareStatus}</p>}
-      <p className="hint"><kbd>R</kbd> play again{next ? <> · <kbd>N</kbd> next</> : null} · <kbd>Esc</kbd> back</p>
     </section>
   </div>;
 }

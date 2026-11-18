@@ -84,6 +84,7 @@ export class GameSession {
   private touchKeys = new Map<string, { player: number; lane: number }>();
   private boostKeys = new Map<string, number>();
   private endedAt: number | null = null;
+  private lastSync = 0;
   private lastLogged = -Infinity;
   /** True once this attempt was paused. Paused runs stay off the leaderboards. */
   paused = false;
@@ -96,6 +97,8 @@ export class GameSession {
     openLead?: boolean;
     /** Keys that count as a wrong press without belonging to a lane (other letters in a typing lesson). */
     strayCodes?: ReadonlySet<string>;
+    /** Play only this part of the song, for section practice. */
+    range?: { startMs: number; endMs: number };
     /** Playback speed, 1 by default. */
     rate?: number;
     match?: () => Match | undefined;
@@ -113,6 +116,7 @@ export class GameSession {
       player.keys.forEach((code, lane) => this.touchKeys.set(code, { player: index, lane }));
       if (player.boostKey) this.boostKeys.set(player.boostKey, index);
     });
+    this.offset = options.range?.startMs ?? 0;
     this.resetScoring();
   }
 
@@ -187,7 +191,7 @@ export class GameSession {
       if (this.disposed) return;
       if (replay) {
         this.resetScoring();
-        this.offset = 0;
+        this.offset = this.options.range?.startMs ?? 0;
       }
       const match = this.match();
       if (match && match.startAt === null) {
@@ -212,7 +216,7 @@ export class GameSession {
       // A finished attempt must not be announced twice, so a failed restart goes back to a clean ready state.
       if (previous === 'finished' || previous === 'failed') {
         this.resetScoring();
-        this.offset = 0;
+        this.offset = this.options.range?.startMs ?? 0;
         this.setState('ready');
       } else this.setState(previous === 'starting' ? 'ready' : previous);
       this.options.onEvent({ type: 'error', message: reason instanceof Error ? reason.message : 'Audio could not start.' });
@@ -412,6 +416,16 @@ export class GameSession {
       this.countBeat = 0;
       this.options.onEvent({ type: 'countin', beat: 0 });
     }
+    // Online, the song must stay on the shared clock. If audio fell behind (a stalled tab or a busy machine), jump back in step.
+    const match = this.match();
+    if (match?.startAt && clock - this.lastSync > 2000) {
+      const expected = clock - match.startAt;
+      if (expected > 0 && Math.abs(expected - now) > 300) {
+        this.lastSync = clock;
+        void playback.start(0, 0, match.startAt).then(() => { if (this.options.openLead) playback.openLead(); }).catch(() => {});
+        return;
+      }
+    }
     const chartTime = now - this.calibration;
     if (now >= this.offset) {
       this.options.players.forEach((player, index) => {
@@ -422,9 +436,10 @@ export class GameSession {
         this.scorings[index].tick(chartTime);
       });
     }
-    if (this.state === 'playing' && now >= playback.buffer.duration * 1000 + Math.max(this.calibration, 0)) {
+    const end = Math.min(playback.buffer.duration * 1000, this.options.range?.endMs ?? Infinity);
+    if (this.state === 'playing' && now >= end + Math.max(this.calibration, 0)) {
       for (const scoring of this.scorings) scoring.finish();
-      this.endedAt = playback.buffer.duration * 1000;
+      this.endedAt = end;
       playback.stop();
       this.setState('finished');
     }
