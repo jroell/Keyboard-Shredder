@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { notesFor } from '../shared/difficulty';
 import type { Chart, Difficulty } from '../shared/song';
 import {
-  ALL_TYPING_KEYS, SENTENCES, TYPING_LESSONS, WORDS, buildTypingChart, charFor, codeFor,
+  ALL_TYPING_KEYS, SHIFT_TYPING_KEYS, baseKey, SENTENCES, TYPING_LESSONS, WORDS, buildTypingChart, charFor, codeFor,
   keyInfo, lessonStatus, mergeKeyStats, typingStars, weakestKeys, wpm,
 } from '../shared/typing';
 import type { KeyStats, TypingOptions } from '../shared/typing';
@@ -30,7 +30,8 @@ test('Every lesson maps its text and groups to sequential notes and valid keyboa
     assert.ok(result.events.length > 0, lesson.id);
     assert.equal(result.text.length, result.events.length, lesson.id);
     assert.doesNotMatch(result.text, /^ | $| {2}/, lesson.id);
-    assert.deepEqual(result.keys, ALL_TYPING_KEYS.filter(code => result.text.includes(charFor(code))));
+    const used = [...ALL_TYPING_KEYS, ...SHIFT_TYPING_KEYS].filter(code => result.text.includes(charFor(code)));
+    assert.deepEqual(result.keys, [...used.filter(code => code !== 'Space'), ...used.filter(code => code === 'Space')]);
     const covered = new Set<number>();
     for (const { text, first, last } of result.words) {
       assert.equal(text, result.text.slice(first, last + 1));
@@ -194,7 +195,28 @@ test('Key metadata uses physical rows, columns, fingers, and hands.', () => {
     assert.deepEqual([key.row, key.column, key.finger, key.hand], [row, column, finger, hand]);
   }
   for (const code of ALL_TYPING_KEYS) assert.equal(codeFor(charFor(code)), code);
-  assert.equal(codeFor('A'), 'KeyA');
+  assert.equal(codeFor('a'), 'KeyA');
+  assert.equal(codeFor('A'), 'Shift+KeyA');
+  assert.equal(codeFor('?'), 'Shift+Slash');
+  assert.deepEqual([keyInfo('Shift+KeyA')!.finger, keyInfo('Shift+KeyA')!.column, baseKey('Shift+KeyA')], ['L-pinky', 0, 'KeyA']);
   assert.equal(codeFor('ab'), undefined);
   assert.equal(keyInfo('Enter'), undefined);
+});
+
+test('The proper sentences lesson starts each sentence with a capital, ends it with a full stop and writes I as a capital.', () => {
+  const lesson = TYPING_LESSONS.find(item => item.id === 'proper-sentences')!;
+  const long: Chart = JSON.parse(readFileSync(new URL('../catalog/copper-moon/chart.json', import.meta.url), 'utf8'));
+  const { text, keys } = buildTypingChart(long, { ...lesson, seed: 11 });
+  const sentences = text.split('. ').slice(0, -1);
+  assert.ok(sentences.length >= 3);
+  for (const sentence of sentences) assert.match(sentence, /^[A-Z][a-zI ]+$/, sentence);
+  assert.doesNotMatch(text, / i /);
+  assert.ok(keys.some(code => code.startsWith('Shift+Key')) && keys.includes('Period'));
+});
+
+test('The Vim lesson drills real motions such as hjkl, gg and wb instead of random letters.', () => {
+  const lesson = TYPING_LESSONS.find(item => item.id === 'vim-moves')!;
+  const { words } = buildTypingChart(chart, { ...lesson, seed: 4 });
+  const known = new Set(['hjkl', 'jjj', 'kkk', 'hhh', 'lll', 'jk', 'kj', 'hl', 'lh', 'www', 'bbb', 'wb', 'bw', 'eee', 'we', 'gg', 'ge', 'jjkk', 'hhll', 'wwbb', 'ggjj', 'lwe', 'kbh']);
+  assert.ok(words.filter(word => known.has(word.text)).length >= words.length - 2);
 });

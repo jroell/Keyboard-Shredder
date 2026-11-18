@@ -89,6 +89,13 @@ export class GameSession {
   /** True once this attempt was paused. Paused runs stay off the leaderboards. */
   paused = false;
   calibration: number;
+  /** Typing lessons: the song stops at each letter until the right key is pressed. */
+  wait = false;
+  /** Time spent actually playing, in real milliseconds. Words per minute use this when the song waits. */
+  playedMs = 0;
+  private holding: SongEvent | null = null;
+  private waitCursor = 0;
+  private lastFrame = 0;
 
   constructor(readonly options: {
     chart: Chart; audio: ArrayBuffer; leadAudio?: ArrayBuffer; players: PlayerSetup[];
@@ -135,6 +142,9 @@ export class GameSession {
     this.endedAt = null;
     this.paused = false;
     this.lastLogged = -Infinity;
+    this.holding = null;
+    this.waitCursor = 0;
+    this.playedMs = 0;
   }
 
   private setState(state: SessionState) {
@@ -228,6 +238,7 @@ export class GameSession {
   /** Raw playback position in ms. Negative during the opening count-in. */
   rawTime() {
     if (this.endedAt !== null) return this.endedAt;
+    if (this.holding) return this.offset;
     return this.transport && this.state === 'playing' ? this.transport.timeMs() : this.offset;
   }
   /** Chart time after the player's timing offset. */
@@ -264,7 +275,8 @@ export class GameSession {
       }
       return;
     }
-    this.offset = Math.min(playback.buffer.duration * 1000 - 1, Math.max(this.offset, playback.timeMs()));
+    if (!this.holding) this.offset = Math.min(playback.buffer.duration * 1000 - 1, Math.max(this.offset, playback.timeMs()));
+    this.holding = null;
     playback.stop();
     for (const scoring of this.scorings) scoring.pause(this.offset - this.calibration);
     // Settling the pause can register a miss that ends a sudden death run. That ending stands.
@@ -357,7 +369,32 @@ export class GameSession {
   keyDown(event: KeyboardEvent) {
     if (this.state !== 'playing') return false;
     if (event.altKey || event.metaKey || event.ctrlKey) return false;
-    const target = this.touchKeys.get(event.code);
+    // A capital letter is its own key: Shift plus the letter.
+    const shifted = this.touchKeys.get(`Shift+${event.code}`);
+    const plain = this.touchKeys.get(event.code);
+    const target = event.shiftKey ? shifted : plain;
+    if (this.holding) {
+      if (event.repeat || !this.transport) return !!(shifted || plain || this.options.strayCodes?.has(event.code));
+      const scoring = this.scorings[0];
+      const waited = this.holding;
+      if (target && waited.lanes.includes(target.lane)) {
+        this.options.onEvent({ type: 'press', player: 0, lane: target.lane });
+        scoring.press(target.lane, waited.timeMs);
+        scoring.release(target.lane, waited.timeMs + 1);
+        this.holding = null;
+        void this.transport.start(this.offset, 0).then(() => { if (this.options.openLead) this.transport?.openLead(); }).catch(() => {});
+        return true;
+      }
+      if (shifted || plain || this.options.strayCodes?.has(event.code)) { scoring.stray(waited.timeMs); return true; }
+      return false;
+    }
+    if (!target && (shifted || plain)) {
+      // The right letter in the wrong case.
+      if (!event.repeat && this.transport && this.transport.inputTimeMs(event.timeStamp) >= this.offset) {
+        this.scorings[0].stray(this.transport.inputTimeMs(event.timeStamp) - this.calibration);
+      }
+      return true;
+    }
     if (target) {
       if (!event.repeat) this.laneInput(target.player, target.lane, true, event.timeStamp);
       return true;
@@ -378,16 +415,40 @@ export class GameSession {
   }
 
   keyUp(event: KeyboardEvent) {
-    const target = this.touchKeys.get(event.code);
-    if (target) this.laneInput(target.player, target.lane, false, event.timeStamp);
+    if (this.holding) return;
+    for (const id of [event.code, `Shift+${event.code}`]) {
+      const target = this.touchKeys.get(id);
+      if (target && this.scorings[target.player].held.has(target.lane)) this.laneInput(target.player, target.lane, false, event.timeStamp);
+    }
   }
 
   /** Call once per animation frame while playing. */
   frame() {
     if (this.state !== 'playing' || !this.transport) return;
     const playback = this.transport;
-    const now = playback.timeMs();
     const clock = performance.now();
+    const step = this.lastFrame ? Math.min(250, clock - this.lastFrame) : 0;
+    this.lastFrame = clock;
+    if (this.holding) {
+      this.playedMs += step;
+      this.lastAudioUpdate = clock;
+      return;
+    }
+    const now = playback.timeMs();
+    if (now >= this.offset && now - this.calibration >= (this.options.players[0].events[0]?.timeMs ?? 0)) this.playedMs += step;
+    if (this.wait && now >= this.offset) {
+      const events = this.options.players[0].events;
+      const scoring = this.scorings[0];
+      while (this.waitCursor < events.length && scoring.consumed.has(events[this.waitCursor].id)) this.waitCursor++;
+      const next = events[this.waitCursor];
+      if (next && now - this.calibration >= next.timeMs) {
+        // The letter is at the ring. Stop the song here until it is typed.
+        this.holding = next;
+        this.offset = next.timeMs + this.calibration;
+        playback.stop();
+        return;
+      }
+    }
     if (playback.context.currentTime > this.lastAudioTime) {
       this.lastAudioTime = playback.context.currentTime;
       this.lastAudioUpdate = clock;

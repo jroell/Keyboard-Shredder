@@ -5,7 +5,7 @@ import { canFail, difficultyNames, notesFor } from '../../shared/difficulty';
 import { applyMods, finalScore, MODS, playbackRate, windowFor, type ModId } from '../../shared/modifiers';
 import { gradeFor, isFullCombo, starProgress, starsFor } from '../../shared/rating';
 import type { RunMode, RunSummary } from '../../shared/progression';
-import { ALL_TYPING_KEYS, buildTypingChart, charFor, wpm, type KeyStats, type TypingChart, type TypingLesson, type TypingOptions } from '../../shared/typing';
+import { ALL_TYPING_KEYS, baseKey, buildTypingChart, charFor, wpm, type KeyStats, type TypingChart, type TypingLesson, type TypingOptions } from '../../shared/typing';
 import { keyLabel } from '../../shared/practice';
 import type { ScoreEvent, Scoring } from '../../shared/scoring';
 import type { Recording } from '../lib/recording';
@@ -13,6 +13,7 @@ import { stageArt } from '../lib/stage-art';
 import { GameSession, type InputLog, type Match, type PlayerSetup, type SessionEvent, type SessionState } from '../game/session';
 import { beatPulse, Highway, StageRenderer, type LaneLayout } from '../game/renderer';
 import { laneLayout, typingLayout } from '../game/layouts';
+import { FINGER_COLORS } from '../game/themes';
 import { sfx } from '../game/sfx';
 import { padFocus, padName, PadReader, pads } from '../game/gamepad';
 import { laneColors, saveStore, settingsStore, useCell } from '../state/store';
@@ -42,6 +43,8 @@ export type RunResult = {
   offsets: number[]; windowMs: number;
   /** The run was paused at least once. */
   paused: boolean;
+  /** A typing run where the song waited for each letter, so timing was not judged. */
+  waited: boolean;
 };
 
 type Props = {
@@ -69,6 +72,8 @@ const TUTORIAL_TIPS: [number, string][] = [
   [15000, 'Good timing fills the amp. When it glows, press SPACE for double points.'],
   [22000, 'Watch the crowd meter. Clean playing keeps them cheering.'],
 ];
+
+const TYPING_WINDOWS: Record<Difficulty, number> = { beginner: 260, easy: 240, medium: 176, hard: 136, expert: 104 };
 
 const botSkill = () => {
   const value = Number(new URLSearchParams(location.search).get('bot'));
@@ -118,7 +123,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   [chart, setup.typing, attempt]);
 
   const players = useMemo<PlayerSetup[]>(() => {
-    if (typing) return [{ events: typing.events, windowMs: windowFor(setup.difficulty, setup.mods) + 15, keys: typing.keys, boostKey: 'Enter', bot }];
+    // Typing is judged on the letter more than the millisecond, so the window is generous.
+    if (typing) return [{ events: typing.events, windowMs: TYPING_WINDOWS[setup.difficulty], keys: typing.keys, boostKey: 'Enter', bot }];
     const notes = (level: Difficulty) => {
       const all = applyMods(notesFor(chart, level), setup.mods);
       const range = setup.practice;
@@ -157,7 +163,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       calibration: settings.calibration, canFail: canFail[setup.difficulty] && !setup.typing && !setup.tutorial,
       sudden: setup.mods.includes('sudden'), musicVolume: settings.musicVolume,
       openLead: !!typing || !!setup.party, rate: setup.practice?.rate ?? playbackRate(setup.mods), range: setup.practice, match: () => matchRef.current,
-      strayCodes: typing ? new Set(ALL_TYPING_KEYS.filter(code => !typing.keys.includes(code))) : undefined,
+      strayCodes: typing ? new Set(ALL_TYPING_KEYS.filter(code => !typing.keys.some(key => baseKey(key) === code))) : undefined,
       onEvent: event => handler.current(event),
     });
     session.current = current;
@@ -174,6 +180,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   }, [chart, recording, players, setup]);
 
   useEffect(() => { session.current?.setMusicVolume(settings.musicVolume); }, [settings.musicVolume]);
+  const waiting = !!typing && settings.typingWait && bot === undefined;
+  useEffect(() => { if (session.current && session.current.state !== 'playing') session.current.wait = waiting; }, [waiting, state]);
   // A new timing offset applies from the next resume or replay, never in the middle of playing.
   useEffect(() => { if (session.current && session.current.state !== 'playing') session.current.calibration = settings.calibration; }, [settings.calibration, state]);
   useEffect(() => {
@@ -307,8 +315,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
           ribbon.current.dataset.at = String(tracker.index);
           renderRibbon(ribbon.current, typing, lead, tracker.index, word);
         }
-        if (liveWpm.current && typing.events.length) {
-          const elapsed = time - typing.events[0].timeMs;
+        if (liveWpm.current && typing.events.length && current.state === 'playing') {
+          const elapsed = current.wait ? current.playedMs : time - typing.events[0].timeMs;
           liveWpm.current.textContent = String(Math.round(wpm(lead.hits, Math.max(1000, elapsed))));
         }
       }
@@ -343,7 +351,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       keyStats = {};
       for (const event of events) {
         if (failed && !scoring.consumed.has(event.id)) continue;
-        const code = typing.keys[event.lanes[0]];
+        const code = baseKey(typing.keys[event.lanes[0]]);
         const stat = keyStats[code] ??= { attempts: 0, hits: 0, timingTotal: 0 };
         const offset = scoring.hitOffsets.get(event.id);
         stat.attempts++;
@@ -359,7 +367,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       perfects: scoring.perfects, greats: scoring.greats, goods: scoring.goods, misses: scoring.misses, wrongKeys: scoring.wrongKeys,
       totalNotes: events.length, bestCombo: scoring.bestCombo, fullCombo: !failed && isFullCombo(tally), failed,
       boostsUsed: scoring.boostsUsed, durationMs: Math.max(0, Math.min(chart.durationMs, game.rawTime())),
-      wpm: typing ? wpm(scoring.hits, Math.max(1000, span)) : undefined, won: partyWin, lessonId: setup.typing?.lesson?.id, genre: song.genre,
+      wpm: typing ? wpm(scoring.hits, Math.max(1000, game.wait ? game.playedMs : span)) : undefined, won: partyWin, lessonId: setup.typing?.lesson?.id, genre: song.genre,
     };
     const typingAccuracy = typing ? scoring.accuracy : undefined;
     const counted = bot === undefined && !matchRef.current && !setup.practice;
@@ -369,7 +377,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     }) : { save, xp: { total: 0, parts: [] }, levelBefore: 0, levelAfter: 0, unlocked: [], achievements: [], newBest: false, firstClear: false,
       previousBest: 0, streak: { days: save.streak.days, extended: false } } as Outcome;
     setResult({ summary, outcome, log: game.logs[0], scorings: [...game.scorings], events, keyStats, typing, typingAccuracy,
-      hitOffsetMs: offsets.length >= 20 ? median(offsets) : null, offsets, windowMs: players[0].windowMs, paused: game.paused });
+      hitOffsetMs: offsets.length >= 20 ? median(offsets) : null, offsets, windowMs: players[0].windowMs, paused: game.paused, waited: game.wait });
   }, [players, typing, setup, song, chart.durationMs, bot, save]);
 
   // Session events: sound, callouts and state.
@@ -635,6 +643,15 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         </div>}
         {typing ? <>
           <p>Type each letter as its gem reaches the ring. Keep your fingers on the home row and use the finger with the matching color.</p>
+          {setup.typing?.lesson && setup.typing.lesson.unit === 1 && <HomePosition />}
+          {setup.typing?.lesson?.id === 'vim-moves' && <p className="ready-goal">In Vim: H left, J down, K up, L right. W next word, B back a word, E end of word, G G top of file.</p>}
+          {bot === undefined && <div className="segments" role="group" aria-label="Pace">
+            <button type="button" className={settings.typingWait ? 'on' : ''} aria-pressed={settings.typingWait}
+              onClick={event => { event.currentTarget.blur(); settingsStore.set(previous => ({ ...previous, typingWait: true })); }}>The song waits for me</button>
+            <button type="button" className={settings.typingWait ? '' : 'on'} aria-pressed={!settings.typingWait}
+              onClick={event => { event.currentTarget.blur(); settingsStore.set(previous => ({ ...previous, typingWait: false })); }}>Keep the beat</button>
+          </div>}
+          <p className="muted">{settings.typingWait ? 'Each letter waits at the ring until you type it. Take your time: only wrong keys count against you.' : 'Letters do not wait. Type each one as it reaches the ring.'}</p>
           {setup.typing?.lesson && <p className="ready-goal">{setup.typing.lesson.blurb} Pass with {setup.typing.lesson.goal.accuracy}% accuracy.</p>}
         </> : setup.party ? <>
           <div className="ready-party">
@@ -718,6 +735,16 @@ export function useGuitarName() {
     return () => { window.removeEventListener('gamepadconnected', update); window.removeEventListener('gamepaddisconnected', update); clearInterval(timer); };
   }, []);
   return name;
+}
+
+/** Where the eight fingers rest. F and J have a small bump you can feel. */
+function HomePosition() {
+  const keys: [string, string][] = [['A', 'L-pinky'], ['S', 'L-ring'], ['D', 'L-middle'], ['F', 'L-index'], ['J', 'R-index'], ['K', 'R-middle'], ['L', 'R-ring'], [';', 'R-pinky']];
+  return <figure className="home-position">
+    <div>{keys.map(([label, finger], index) => <kbd key={label} className={label === 'F' || label === 'J' ? 'bump' : ''}
+      style={{ '--lane': FINGER_COLORS[finger], marginRight: index === 3 ? '2.2rem' : undefined } as CSSProperties}>{label}</kbd>)}</div>
+    <figcaption>Rest your left hand on A S D F and your right hand on J K L ;. Feel for the bumps on F and J. Thumbs rest on the space bar.</figcaption>
+  </figure>;
 }
 
 function renderRibbon(host: HTMLElement, typing: TypingChart, scoring: Scoring, index: number, word: number) {

@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle, useRef, type CSSProperties } from 'react';
 import { keyLabel, PRACTICE_ROWS } from '../../shared/practice';
-import { keyInfo, type KeyStats } from '../../shared/typing';
+import { baseKey, keyInfo, needsShift, type KeyStats } from '../../shared/typing';
 import { FINGER_COLORS } from '../game/themes';
 
 export type KeyboardHandle = { setNext: (code: string | null) => void; flash: (code: string, good: boolean) => void };
@@ -27,13 +27,16 @@ const KeyboardGuide = forwardRef<KeyboardHandle, { active?: readonly string[]; s
     useImperativeHandle(ref, () => ({
       setNext(code) {
         if (code === next.current) return;
-        if (next.current) find(next.current)?.classList.remove('next');
+        if (next.current) find(baseKey(next.current))?.classList.remove('next');
         next.current = code;
-        if (code) find(code)?.classList.add('next');
-        if (hint.current) hint.current.textContent = code ? `${code === 'Space' ? 'Space' : keyLabel(code)} · ${fingerName(code)}` : '';
+        if (code) find(baseKey(code))?.classList.add('next');
+        if (hint.current) {
+          const shift = code && needsShift(code) ? `Shift (${keyInfo(code)?.hand === 'L' ? 'right' : 'left'} pinky) + ` : '';
+          hint.current.textContent = code ? `${shift}${code === 'Space' ? 'Space' : keyLabel(baseKey(code))} · ${fingerName(code)}` : '';
+        }
       },
       flash(code, good) {
-        const key = find(code);
+        const key = find(baseKey(code));
         if (!key) return;
         const name = good ? 'good' : 'bad';
         key.classList.remove('good', 'bad');

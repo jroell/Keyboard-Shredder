@@ -277,7 +277,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       </div>
 
       {!party && !typing && onPractice && <Timeline result={result} durationMs={recording.chart.durationMs} onPractice={onPractice} />}
-      {!party && result.offsets.length >= 8 && <TimingChart offsets={result.offsets} windowMs={result.windowMs} />}
+      {!party && !result.waited && result.offsets.length >= 8 && <TimingChart offsets={result.offsets} windowMs={result.windowMs} />}
 
       {result.keyStats && <div className="results-typing">
         <KeyboardGuide stats={result.keyStats} compact />

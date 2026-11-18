@@ -13,16 +13,19 @@ export function laneLayout(keys: string[], colors: string[], lettered = false): 
   };
 }
 
+const HOME_ROW = ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';'];
 const COLUMN_FINGERS: Finger[] = ['L-pinky', 'L-ring', 'L-middle', 'L-index', 'L-index', 'R-index', 'R-index', 'R-middle', 'R-ring', 'R-pinky'];
 
 /** Ten finger columns. Each gem carries its letter, and the space bar spans the neck. */
 export function typingLayout(keys: string[]): LaneLayout {
   const info = keys.map(code => keyInfo(code));
+  // Lessons with capitals show each letter in its real case. Earlier lessons show letters as printed on the keys.
+  const cased = keys.some(code => code.startsWith('Shift+'));
   return {
     columns: 10,
     column: lane => info[lane]?.code === 'Space' ? -1 : Math.max(0, Math.min(9, Math.round(info[lane]?.column ?? 4))),
     color: lane => FINGER_COLORS[info[lane]?.finger ?? 'thumb'],
-    gemLabel: lane => info[lane]?.code === 'Space' ? '' : (info[lane]?.label ?? '').toUpperCase(),
-    targets: COLUMN_FINGERS.map(finger => ({ label: '', color: FINGER_COLORS[finger] })),
+    gemLabel: lane => info[lane]?.code === 'Space' ? '' : cased ? info[lane]?.char ?? '' : (info[lane]?.label ?? '').toUpperCase(),
+    targets: COLUMN_FINGERS.map((finger, column) => ({ label: HOME_ROW[column], color: FINGER_COLORS[finger] })),
   };
 }

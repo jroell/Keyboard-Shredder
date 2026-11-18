@@ -20,6 +20,8 @@ export type Settings = {
   hitSounds: 'auto' | 'on' | 'off';
   calm: boolean;
   showKeyboard: boolean;
+  /** Typing lessons wait at each letter until it is typed. */
+  typingWait: boolean;
   difficulty: Difficulty;
   /** Guitar controller or gamepad mapping. */
   pad: PadMap;
@@ -30,7 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   keys: DEFAULT_KEYS,
   partyKeys: [['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG'], ['KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon']],
   calibration: 0, speed: 1700, palette: 'Classic', musicVolume: 0.9, sfxVolume: 0.7,
-  hitSounds: 'auto', calm: false, showKeyboard: true, difficulty: 'easy', pad: DEFAULT_PAD,
+  hitSounds: 'auto', calm: false, showKeyboard: true, typingWait: true, difficulty: 'easy', pad: DEFAULT_PAD,
 };
 
 const KEY_CODE = /^(Key[A-Z]|Digit[0-9]|Semicolon|Comma|Period|Slash|Quote|BracketLeft|BracketRight|Minus|Equal)$/;
@@ -56,6 +58,7 @@ export function normalizeSettings(value: unknown): Settings {
     hitSounds: input.hitSounds === 'on' || input.hitSounds === 'off' ? input.hitSounds : 'auto',
     calm: input.calm === true,
     showKeyboard: input.showKeyboard !== false,
+    typingWait: input.typingWait !== false,
     difficulty: isDifficulty(input.difficulty) ? input.difficulty : DEFAULT_SETTINGS.difficulty,
     pad: normalizePadMap(input.pad),
   };

@@ -25,10 +25,22 @@ const keyLayout = PRACTICE_ROWS.flatMap(({ keys }, row) => keys.map((code, index
 }));
 keyLayout.push({ code: 'Space', label: 'Space', char: ' ', row: 4, column: 4.5, finger: 'thumb', hand: 'both' });
 
-const keysByCode = new Map(keyLayout.map(key => [key.code, key]));
-const codesByChar = new Map(keyLayout.map(key => [key.char, key.code]));
+// Capital letters and a few marks need Shift. They are their own "keys", written as Shift+<code>.
+const shiftedMarks: Record<string, string> = { Slash: '?', Digit1: '!' };
+const shiftLayout = keyLayout.flatMap((key): KeyInfo[] => {
+  const char = /^Key[A-Z]$/.test(key.code) ? key.char.toUpperCase() : shiftedMarks[key.code];
+  return char ? [{ ...key, code: `Shift+${key.code}`, label: char, char }] : [];
+});
 
+const keysByCode = new Map([...keyLayout, ...shiftLayout].map(key => [key.code, key]));
+const codesByChar = new Map([...keyLayout, ...shiftLayout].map(key => [key.char, key.code]));
+
+/** Every plain key, without the Shift variants. */
 export const ALL_TYPING_KEYS: readonly string[] = keyLayout.map(key => key.code);
+export const SHIFT_TYPING_KEYS: readonly string[] = shiftLayout.map(key => key.code);
+export const needsShift = (code: string) => code.startsWith('Shift+');
+/** The physical key behind a code: 'Shift+KeyA' is 'KeyA'. */
+export const baseKey = (code: string) => code.replace(/^Shift\+/, '');
 
 export function keyInfo(code: string): KeyInfo | undefined {
   return keysByCode.get(code);
@@ -39,7 +51,7 @@ export function charFor(code: string): string {
 }
 
 export function codeFor(char: string): string | undefined {
-  return codesByChar.get(char.toLowerCase());
+  return codesByChar.get(char) ?? codesByChar.get(char.toLowerCase());
 }
 
 export type LessonKind = 'drill' | 'words' | 'sentences';
@@ -92,6 +104,11 @@ const units: { name: string; lessons: LessonRow[] }[] = [
     ['sentences', 'Sentences', 'Keep your fingers near the home row and use a thumb between words.', '', 'sentences', 'copper-moon', 36],
     ['speed-run', 'Speed run', 'Use light taps and return your fingers to the home row as you pick up speed.', '', 'sentences', 'voltage-parade', 40],
   ] },
+  { name: 'Capitals and punctuation', lessons: [
+    ['capital-words', 'Capital letters', 'Hold Shift with the little finger of the other hand, then press the letter.', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'words', 'umbra-samba', 30],
+    ['proper-sentences', 'Proper sentences', 'Start each sentence with a capital and end it with a full stop.', '', 'sentences', 'copper-moon', 34],
+    ['questions', 'Questions and shouts', 'Hold Shift for the question mark and the exclamation mark.', '?!', 'sentences', 'voltage-parade', 36],
+  ] },
   { name: 'Numbers', lessons: [
     ['middle-numbers', '4, 5, 6 and 7', 'Reach up with your index fingers for the four middle numbers.', '4567', 'drill', 'midnight-toll', 40, '4567 '],
     ['outer-numbers', 'Outer numbers', 'Reach up with your pinkies, ring fingers and middle fingers for the outer numbers.', '123890', 'drill', 'glass-circuit', 41, '123890 '],
@@ -133,21 +150,21 @@ dance dare dark dart date dawn day dear deck deep deer delay denim dense dent de
 each eagle ear early earn earth ease east easy eat echo edge edit eel effect egg eight either elbow elder elect elf elk elm else email end enjoy enter entry equal erase error essay even event ever every exact exam exit extra eye
 face fact fade faint fair fairy faith fake fame fan fancy far farm fast feast fed feel fern fetch few field fig file fill film final fin find fine firm first fish fizz flat fleet flew flip float flock flood floor flour flow flute foam fog fold folk food foot force ford fork form fort forth found fox free fresh frog from front frost fruit fuel full fun funny fur fuse
 gain game gap garage garden gate gather gauge gears gem gentle giant gift gill give given glacier glow glue goal goat goes gold golf gone good goose grain grand grape grass grate gravy gray great green greet grew grill grin grip grit grow guard guess guide guild guitar gull gust gym
-habit hail hair hand hang happy hard harp harvest hash hat hatch hawk hay hazel head heal heap hear heard heart heat heavy hedge heel held hello help herb herd here hero hers hide high hike hill hint hip hire hive hold hole hollow home honey hood hook hope horn horse hose host hot hotel hour house hover howl huge hum hunt hurry hush
+habit hail hair hand  happy hard harp harvest  hat hatch hawk hay hazel head heal heap hear heard heart heat heavy hedge heel held hello help herb herd here hero hers hide high hike hill hint hip hire hive hold hole hollow home honey hood hook hope horn horse hose host hot hotel hour house hover howl huge hum hunt hurry hush
 ice icon idea idle inch index indoor ink inn input inside into iris iron island item ivory
 ivy jack jade jam jar jazz jeep jelly jet jewel job jog join joke jolly joy judge jug juice jump june just keen keep kelp kept kettle key kick kid kind king kite knee knew knit knob knot know
 label lace lack lake lamb lamp land lane lap large last late later latte laugh lay layer lazy lead leaf lean leap learn lease least leave ledge leek left legal lemon lend lens lent level lever lid life lift light lime limit line linen link lion lips list live load loaf loan lobby local lock lodge loft log long look loop loose lord lose loss lost loud love low loyal luck lunar lunch lush lute
 machine mail main make mall malt mane many maple marble march mark marsh mask mast mat match mate maze meadow meal mean melt memo mend menu mere merge merit merry mesh mess metal meter mild mile milk mill mind mine mint minute mist mitt mix mochi mode mole month moon moor moss moth motor mound mount mouse mouth move movie mow much mule mulch mural muse music must myth
 nail name narrow navy near neat neck need nest net never news new next nice night nine noble node noise noon north nose note noun novel now numb nurse nut nylon
 oar oasis obey ocean odd offer often oil okay old olive omen once one onion only onto open opera orbit order organ otter other our outer oven over oval owl own
-pace pack page paid pail paint pair pale palm pan panda panel paper park part party pass past pasta patch path pause pave paw pea peach peak pear pearl pecan peel peer pen penny perch pest pet phase piano pick picnic pie pier pig pile pill pilot pine pink pin pipe pitch pizza place plain plan plane plank plant plate play plaza plea plow plug plum plus poem poet point pole polo pond pony pool pop porch pose post pot pound pour power press price pride prime print prism prize proof prop prose proud prune puff pull pulp pulse pump punch pup puppy pure purse push put puzzle
+pace pack page paid pail paint pair pale palm pan panda panel paper park part party pass past pasta patch path pause pave paw pea peach peak pear pearl pecan peel peer pen penny perch pest pet phase piano pick picnic pie pier pig pile pill pilot pine pink pin pipe pitch pizza place plain plan plane plank plant plate play plaza plea plow plug plum plus poem poet point pole polo pond pony pool pop porch pose post  pound pour power press price pride prime print prism prize proof prop prose proud prune puff pull pulp pulse pump punch pup puppy pure purse push put puzzle
 quail quart queen query quest quick quiet quilt quite quiz quote
 race rack raft rag rail rain raise rake ramp ranch rang range rank rapid rare rate ratio rave raw ray reach read ready real reed reef reel reign relay rent rest ride ridge right rim ring rinse ripe rise risk river road roam roast robe robin rock rod rode roll roof rook room root rope rose round route row royal ruby rug rule run rung rush rust
-sack safe sage sail sake sale salt same sand save saw scale scan scarf scene scent scoop score scout scrap seal seam seat seed seek seem seen self sell send sense sent serve seven shade shake shale shape share shark sharp shawl shed sheep sheet shelf shell shift shine ship shirt shoe shop shore short shout show shrub shut shy side sift sign silk sill silo silver simple sing sink sip sir size skate sketch ski skill skim skin skip skirt sky slab slack sled sleep sleek slice slide slim slope slot slow slug small smart smell smile smoke smooth snack snail snap snow sock soda soft soil solar sold sole solo solve some song soon sore sort soup sour south space spark speak spear spell spice spill spin spoke spoon sport spot spray spring spur square stack staff stage stair stamp stand star stare start stay steam steel stem step stew stick still stir stone stool stop store stork storm story stove straw stream street string strip strum study stuff style such suit sugar sum sun sunny super sure surf swamp swan sway sweep sweet swell swept swift swim swing swirl
+sack safe sage sail sake sale salt same sand save saw scale scan scarf scene scent scoop score scout scrap seal seam seat seed seek seem seen self sell send sense sent serve seven shade shake shale shape share shark sharp shawl shed sheep sheet shelf shell shift shine ship shirt shoe shop shore short shout show shrub shut shy side sift sign silk sill silo silver simple sing sink sip sir size skate sketch ski skill skim skin skip skirt sky slab slack sled sleep sleek slice slide slim slope slot slow slug small smart smell smile  smooth snack snail snap snow sock soda soft soil solar sold sole solo solve some song soon sore sort soup sour south space spark speak spear spell spice spill spin spoke spoon sport spot spray spring spur square stack staff stage stair stamp stand star stare start stay steam steel stem step stew stick still stir stone stool stop store stork storm story stove straw stream street string  strum study stuff style such suit sugar sum sun sunny super sure surf swamp swan sway sweep sweet swell swept swift swim swing swirl
 table tack taco tail take tale talk tall tame tang tank tap tape task taste taught team tear teak tell tempo ten tent term test text than thank that thaw them then there these theta thick thief thin thing think third thorn those three threw throw thumb thyme tick tide tidy tie tier tile tilt time tin tint tiny tire toast today toe tofu token told toll tone tonic took tool top torch toss tote touch tour towel tower town toy trace track trade trail train tray treat tree trek trend trim trio trip troll trout true trunk trust truth tube tuck tulip tuna tune turf turn tusk twig twin twine twist two type
 under undo unit until upon upper urban urge use usher usual
 vale valve value van vase vast vault veer vegan veil vein vent venue verb verse vest view vine vinyl viola violet viral visit vivid vocal voice volt vote vow
-wade wafer wage wait wake walk wall wand want warm warp wash wasp waste watch wave wax way wear weave web weed week weigh well west wet whale wheat wheel when where which while white whole wide width wild will wily wind wine wing wink wipe wire wise wish wisp with woke wolf wood wool word wore work world worm worn woven wrap wren wrist write
+wade wafer wage wait wake walk wall wand want warm warp wash wasp waste watch wave wax way wear weave web  week weigh well west wet whale wheat wheel when where which while white whole wide width wild will wily wind  wing wink wipe wire wise wish wisp with woke wolf wood wool word wore work world worm worn woven wrap wren wrist write
 yacht yam yard yarn yawn year yeast yell yoga yoke yolk you young your youth yummy zebra zero zest zinc zone zoom
 `.trim().split(/\s+/);
 
@@ -273,9 +290,20 @@ function typingGroups(length: number, options: TypingOptions): { groups: string[
   const preferred = new Set([...(options.newKeys ?? []), ...(options.focus ?? [])].map(charFor));
   const random = seededRandom(options.seed);
   const isTypeable = (phrase: string) => Array.from(phrase).every(char => char === ' ' || allowed.has(char));
-  const sentences = options.kind === 'sentences' ? SENTENCES.filter(isTypeable) : [];
-  const words = options.kind !== 'drill' && !sentences.length ? WORDS.filter(isTypeable) : [];
-  const bank = sentences.length ? sentences : words.length >= 8 ? words : [];
+  const plain = (phrase: string) => Array.from(phrase).every(char => char === ' ' || allowed.has(char));
+  const sentences = options.kind === 'sentences' ? SENTENCES.filter(plain) : [];
+  const words = options.kind !== 'drill' && !sentences.length ? WORDS.filter(plain) : [];
+  const vim = options.kind === 'drill' && options.keys.length <= 9 && ['KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyW', 'KeyB'].every(code => options.keys.includes(code));
+  const cased = options.keys.some(needsShift);
+  const marks = ['.', '?', '!'].filter(mark => allowed.has(mark));
+  const dress = (phrase: string, index: number) => {
+    if (!cased) return phrase;
+    if (options.kind !== 'sentences') return phrase[0].toUpperCase() + phrase.slice(1);
+    const body = phrase.split(' ').map(word => word === 'i' ? 'I' : word).join(' ');
+    return body[0].toUpperCase() + body.slice(1) + (marks.length ? marks[index % marks.length] : '');
+  };
+  const source = vim ? VIM_MOVES : sentences.length ? sentences : words.length >= 8 ? words : [];
+  const bank = source.map(dress).filter(isTypeable);
   const preferredWords = sentences.length ? [] : bank.filter(word => Array.from(word).some(char => preferred.has(char)));
   const separator = bank.length || options.keys.includes('Space') ? ' ' : '';
   const groups: string[] = [];
@@ -298,6 +326,9 @@ function typingGroups(length: number, options: TypingOptions): { groups: string[
   return { groups, separator };
 }
 
+/** Real Vim motions: move by character, by word, to the top and to the end of a word. */
+const VIM_MOVES = ['hjkl', 'jjj', 'kkk', 'hhh', 'lll', 'jk', 'kj', 'hl', 'lh', 'www', 'bbb', 'wb', 'bw', 'eee', 'we', 'gg', 'ge', 'jjkk', 'hhll', 'wwbb', 'ggjj', 'lwe', 'kbh'];
+
 export function buildTypingChart(chart: Chart, options: TypingOptions): TypingChart {
   // Riff notes plus every beat, so letters keep coming through the quiet bars.
   const noteTimes = notesFor(chart, options.difficulty).map(note => note.timeMs);
@@ -310,7 +341,7 @@ export function buildTypingChart(chart: Chart, options: TypingOptions): TypingCh
   const { groups, separator } = typingGroups(times.length, options);
   const text = groups.join(separator);
   const usedCodes = new Set(Array.from(text, char => codesByChar.get(char)!));
-  const keys = ALL_TYPING_KEYS.filter(code => usedCodes.has(code));
+  const keys = [...ALL_TYPING_KEYS, ...SHIFT_TYPING_KEYS].filter(code => usedCodes.has(code)).sort((a, b) => Number(a === 'Space') - Number(b === 'Space'));
   const lanes = new Map(keys.map((code, index) => [charFor(code), index]));
   const events = Array.from(text, (char, index): SongEvent => ({
     id: 'type-' + index, timeMs: times[index], lanes: [lanes.get(char)!], durationMs: 0,

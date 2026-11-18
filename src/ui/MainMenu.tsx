@@ -103,6 +103,7 @@ export default function MainMenu() {
         <p>The warm-up takes half a minute and shows you how to play. You can skip it and jump straight in.</p>
         <div className="modal-actions">
           <button type="submit" className="primary big">Play the warm-up</button>
+          <button type="button" onClick={() => { finishWelcome(false)(); app.go({ name: 'academy' }); }}>I am here to learn typing</button>
           <button type="button" onClick={() => finishWelcome(false)()}>Skip to the menu</button>
         </div>
       </form>
