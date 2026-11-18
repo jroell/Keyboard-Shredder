@@ -7,6 +7,7 @@ import { gradeFor, isFullCombo, starProgress, starsFor } from '../../shared/rati
 import type { RunMode, RunSummary } from '../../shared/progression';
 import { ALL_TYPING_KEYS, baseKey, buildTypingChart, charFor, wpm, type KeyStats, type TypingChart, type TypingLesson, type TypingOptions } from '../../shared/typing';
 import { keyLabel } from '../../shared/practice';
+import { sectionNames } from '../../shared/sections';
 import type { ScoreEvent, Scoring } from '../../shared/scoring';
 import type { Recording } from '../lib/recording';
 import { stageArt } from '../lib/stage-art';
@@ -70,6 +71,7 @@ export const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.fl
 
 /** A song is split into this many sections for practice and for the results timeline. */
 export const SECTIONS = 8;
+type PracticePass = { hits: number; total: number; rating: number; drops: number };
 
 const TUTORIAL_TIPS: [number, string][] = [
   [-4000, 'Gems slide down the neck. Press the matching key when a gem reaches its ring.'],
@@ -107,6 +109,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   const [result, setResult] = useState<RunResult>();
   const [tip, setTip] = useState(-1);
   const [pauseIndex, setPauseIndex] = useState(0);
+  const [passes, setPasses] = useState<{ last: PracticePass; best: PracticePass; count: number }>();
+  const names = useMemo(() => sectionNames(chart.events.normal, chart.durationMs), [chart]);
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLElement>(null);
   const huds = useRef<(HudHandle | null)[]>([]);
@@ -417,6 +421,9 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
           // Practice loops the section, with a short breath between passes.
           const done = game.scorings[0];
           callout(`${done.hits} of ${players[0].events.length} hit`, done.misses ? 'streak' : 'star');
+          const pass = { hits: done.hits, total: players[0].events.length, rating: done.rating, drops: troubles.current.filter(item => item.kind === 'drop').length };
+          setPasses(previous => ({ last: pass, count: (previous?.count ?? 0) + 1,
+            best: previous && (previous.best.hits > pass.hits || (previous.best.hits === pass.hits && previous.best.rating >= pass.rating)) ? previous.best : pass }));
           setTimeout(() => { if (session.current === game) void game.start(true); }, 900);
         } else if (!matchRef.current) {
           const clean = isFullCombo(game.scorings[0].tally);
@@ -609,7 +616,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   }, [state]);
   const mixed = setup.party?.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1] ? setup.party.difficulties : undefined;
   const modeLine = [typing ? setup.typing?.lesson?.title ?? 'Free typing' : mixed ? `${difficultyNames[mixed[0]]} vs ${difficultyNames[mixed[1]]}` : difficultyNames[setup.difficulty],
-    ...setup.mods.map(id => MODS[id].name), ...(setup.practice ? [setup.practice.endMs - setup.practice.startMs >= chart.durationMs - 1 ? 'Whole song' : Math.abs(setup.practice.endMs - setup.practice.startMs - chart.durationMs / SECTIONS) > 5 || (setup.practice.startMs % (chart.durationMs / SECTIONS)) > 5 ? `${clock(setup.practice.startMs)} to ${clock(setup.practice.endMs)}` : `Section ${Math.round(setup.practice.startMs / (chart.durationMs / SECTIONS)) + 1}`, `${setup.practice.rate * 100}% speed`, 'looping'] : [])].join(' · ');
+    ...setup.mods.map(id => MODS[id].name), ...(setup.practice ? [setup.practice.endMs - setup.practice.startMs >= chart.durationMs - 1 ? 'Whole song' : Math.abs(setup.practice.endMs - setup.practice.startMs - chart.durationMs / SECTIONS) > 5 || (setup.practice.startMs % (chart.durationMs / SECTIONS)) > 5 ? `${clock(setup.practice.startMs)} to ${clock(setup.practice.endMs)}` : names[Math.round(setup.practice.startMs / (chart.durationMs / SECTIONS))], `${setup.practice.rate * 100}% speed`, 'looping'] : [])].join(' · ');
   const single = players.length === 1;
   const waitingForMatch = !!match && match.ready && match.startAt === null;
   const startLabel = state === 'starting' ? 'Loading audio…' : match ? match.startAt ? 'Join playback' : match.ready ? 'Ready' : 'Ready up' : 'Start';
@@ -652,7 +659,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
           : typing ? 'Typing academy' : setup.tour ? 'Tour' : match ? 'Online' : 'Quick play'}</p>
         <h2>{song.title}</h2>
         {setup.set && setup.set.index > 0 && <p className="ready-challenge">Set total so far: <strong>{setup.set.score.toLocaleString()}</strong></p>}
-        {setup.set && setup.set.index === 0 && <p className="ready-goal">A headline set: {setup.set.ids.length} songs back to back, one running score. Average an 80% timing rating for a gold record. Being booed off ends the set.</p>}
+        {setup.set && setup.set.index === 0 && <p className="ready-goal">A headline set: {setup.set.ids.length} songs back to back, one running score. Average an 80% timing rating for a gold record. Extra goal: 85% or better on every song for a platinum record. Being booed off ends the set.</p>}
         {setup.challenge && <p className="ready-challenge">Beat {setup.challenge.name}: <strong>{setup.challenge.score.toLocaleString()}</strong></p>}
         <p className="ready-mode">{modeLine} · {chart.bpm} BPM</p>
         <p className="ready-counts">{players.map((player, index) => {
@@ -667,16 +674,32 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
               const size = chart.durationMs / SECTIONS;
               const on = setup.practice!.startMs < (index + 1) * size - 1 && setup.practice!.endMs > index * size + 1;
               return <button key={index} type="button" className={on ? 'on' : ''} aria-pressed={on}
-                onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, startMs: Math.round(index * size), endMs: Math.round((index + 1) * size) } }); }}>{index + 1}</button>;
+                title={names[index]} aria-label={`Section ${index + 1}, ${names[index]}`}
+                onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, startMs: Math.round(index * size), endMs: Math.round((index + 1) * size) } }); }}>{index + 1}<small>{names[index]}</small></button>;
             })}
             <button type="button" className={setup.practice.startMs === 0 && setup.practice.endMs >= chart.durationMs ? 'on' : ''}
               onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, startMs: 0, endMs: chart.durationMs } }); }}>All</button>
           </div>
+          {(() => {
+            const beat = 60000 / chart.bpm;
+            const { startMs, endMs } = setup.practice;
+            const move = (from: number, to: number) => {
+              const start = Math.max(0, Math.min(Math.round(from), chart.durationMs - 4 * beat));
+              const end = Math.max(start + 4 * beat, Math.min(Math.round(to), chart.durationMs));
+              retune({ ...setup, practice: { ...setup.practice!, startMs: Math.round(start), endMs: Math.round(end) } });
+            };
+            const step = (label: string, title: string, run: () => void) => <button type="button" aria-label={title} title={title}
+              onClick={event => { event.currentTarget.blur(); run(); }}>{label}</button>;
+            return <div className="range-pick" role="group" aria-label="Loop range">
+              <span>Start</span>{step('−', 'Start one beat earlier', () => move(startMs - beat, endMs))}<b>{clock(startMs)}</b>{step('+', 'Start one beat later', () => move(Math.min(startMs + beat, endMs - 4 * beat), endMs))}
+              <span>End</span>{step('−', 'End one beat earlier', () => move(startMs, Math.max(endMs - beat, startMs + 4 * beat)))}<b>{clock(endMs)}</b>{step('+', 'End one beat later', () => move(startMs, endMs + beat))}
+            </div>;
+          })()}
           <div className="segments" role="group" aria-label="Speed">
             {[0.5, 0.75, 1].map(rate => <button key={rate} type="button" className={setup.practice!.rate === rate ? 'on' : ''} aria-pressed={setup.practice!.rate === rate}
               onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, rate } }); }}>{rate * 100}% speed</button>)}
           </div>
-          <p className="muted">The section loops until you stop. Practice scores are shown for feedback only: nothing is saved or ranked.</p>
+          <p className="muted">The section loops until you stop. Practice scores are shown for feedback only: nothing is saved or ranked. A full combo means every note hit, no hold let go early and no stray press.</p>
         </div>}
         {typing ? <>
           <p>Type each letter as its gem reaches the ring. Keep your fingers on the home row and use the finger with the matching color.</p>
@@ -736,6 +759,10 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       </div>
     </div>}
 
+    {setup.practice && passes && state !== 'ready' && <div className="pass-panel" role="status">
+      <span>Pass {passes.count}: <b>{passes.last.hits} of {passes.last.total}</b> hit · timing {passes.last.rating.toFixed(1)}%{passes.last.drops ? ` · ${passes.last.drops} ${passes.last.drops === 1 ? 'hold' : 'holds'} dropped` : ''}</span>
+      {passes.count > 1 && <span>Best: <b>{passes.best.hits} of {passes.best.total}</b> · timing {passes.best.rating.toFixed(1)}%</span>}
+    </div>}
     {state === 'failed' && <div className="fail-flash" aria-hidden="true" />}
     {state === 'finished' && match && <div className="stage-cover"><p role="status">Waiting for final scores…</p></div>}
 

@@ -75,7 +75,7 @@ export default function TourScreen() {
             <button disabled={!done} onClick={() => headline(venue.name, venue.tracks.map(track => track.id))}
               title={done ? 'Play every song here back to back for one score' : 'Clear every song here to unlock the headline set'}>
               <Disc3 size={15} aria-hidden="true" />Headline set</button>
-            {best ? <span className={best.rating >= 80 ? 'gold' : ''}>{best.rating >= 80 ? 'Gold record · ' : ''}{best.score.toLocaleString()} on {difficultyNames[settings.difficulty]}</span>
+            {best ? <span className={best.platinum ? 'gold platinum' : best.rating >= 80 ? 'gold' : ''}>{best.platinum ? 'Platinum record · ' : best.rating >= 80 ? 'Gold record · ' : ''}{best.score.toLocaleString()} on {difficultyNames[settings.difficulty]}</span>
               : <span>{done ? `${venue.tracks.length} songs, one score. A record for each difficulty.` : 'Clear the venue to unlock'}</span>}
           </div>}
         </li>;

@@ -259,7 +259,10 @@ export default function App() {
         const rating = ratings.reduce((total, value) => total + value, 0) / ratings.length;
         const key = `${set.name}:${setup.difficulty}`;
         const previous = setStore.get()[key];
-        if (!previous || score > previous.score) setStore.set(all => ({ ...all, [key]: { score, rating: Math.max(rating, previous?.rating ?? 0) } }));
+        const platinum = ratings.every(value => value >= 85) || !!previous?.platinum;
+        if (!previous || score > previous.score || rating > previous.rating || platinum !== !!previous.platinum) {
+          setStore.set(all => ({ ...all, [key]: { score: Math.max(score, previous?.score ?? 0), rating: Math.max(rating, previous?.rating ?? 0), ...(platinum ? { platinum } : {}) } }));
+        }
       }
       return undefined;
     }

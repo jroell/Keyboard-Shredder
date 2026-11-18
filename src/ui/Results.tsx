@@ -4,6 +4,7 @@ import { difficultyNames } from '../../shared/difficulty';
 import { MODS, finalScore, isRanked } from '../../shared/modifiers';
 import { levelFor } from '../../shared/progression';
 import { STAR_RATINGS, starsFor } from '../../shared/rating';
+import { sectionNames } from '../../shared/sections';
 import { TOUR_TRACKS } from '../../shared/tour';
 import { keyLabel } from '../../shared/practice';
 import { weakestKeys } from '../../shared/typing';
@@ -76,7 +77,7 @@ function TimingChart({ offsets, windowMs }: { offsets: number[]; windowMs: numbe
 }
 
 /** The song cut into sections, colored by how many notes landed, with one click to practice a weak one. */
-function Timeline({ result, durationMs, onPractice }: { result: RunResult; durationMs: number; onPractice: NonNullable<Props['onPractice']> }) {
+function Timeline({ result, durationMs, names, onPractice }: { result: RunResult; durationMs: number; names: string[]; onPractice: NonNullable<Props['onPractice']> }) {
   const size = durationMs / SECTIONS;
   const scoring = result.scorings[0];
   const sections = Array.from({ length: SECTIONS }, (_, index) => {
@@ -95,15 +96,15 @@ function Timeline({ result, durationMs, onPractice }: { result: RunResult; durat
   const weakest = sections.reduce((worst, section, index) => cost(section) > cost(sections[worst]) ? index : worst, 0);
   const clean = sections.every(section => section.hits === section.judged && !section.slips);
   return <figure className="timeline">
-    <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `Section ${weakest + 1} cost you the most. Click any section to loop it slowly.`}</figcaption>
+    <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `The ${names[weakest]} (section ${weakest + 1}) cost you the most. Click any section to loop it slowly.`}</figcaption>
     <div className="timeline-row">
       {sections.map((section, index) => {
         const rate = section.judged ? section.hits / section.judged : null;
         return <button key={index} type="button" data-tone={rate === null ? 'none' : rate >= 0.95 && !section.slips ? 'clean' : rate >= 0.75 ? 'ok' : 'rough'}
-          title={section.judged ? `Section ${index + 1}: ${section.hits} of ${section.judged} notes hit` : `Section ${index + 1}: not reached`}
-          aria-label={`Practice section ${index + 1}${section.judged ? `, ${section.hits} of ${section.judged} notes hit` : ''}`}
+          title={section.judged ? `${names[index]}: ${section.hits} of ${section.judged} notes hit` : `${names[index]}: not reached`}
+          aria-label={`Practice section ${index + 1}, ${names[index]}${section.judged ? `, ${section.hits} of ${section.judged} notes hit` : ''}`}
           onClick={() => onPractice({ startMs: Math.round(index * size), endMs: Math.round((index + 1) * size), rate: 0.75 })}>
-          <b>{index + 1}</b><small>{section.judged ? `${section.hits}/${section.judged}${section.slips ? ` +${section.slips}` : ''}` : '·'}</small>
+          <b>{index + 1}</b><em>{names[index]}</em><small>{section.judged ? `${section.hits}/${section.judged}${section.slips ? ` +${section.slips}` : ''}` : '·'}</small>
         </button>;
       })}
     </div>
@@ -111,7 +112,7 @@ function Timeline({ result, durationMs, onPractice }: { result: RunResult; durat
       <span>Loop the exact spot:</span>
       {spots.map(spot => <button key={spot.timeMs} type="button" title="Loops six seconds around this moment at 75% speed"
         onClick={() => onPractice({ startMs: Math.max(0, Math.round(spot.timeMs - 3000)), endMs: Math.min(durationMs, Math.round(spot.timeMs + 3000)), rate: 0.75 })}>
-        {clock(spot.timeMs)} {label[spot.kind]}{spot.streak >= 10 ? ` (ended a ${spot.streak} streak)` : ''}</button>)}
+        {clock(spot.timeMs)} {names[Math.min(names.length - 1, Math.floor(spot.timeMs / size))]}: {label[spot.kind]}{spot.streak >= 10 ? ` (ended a ${spot.streak} streak)` : ''}</button>)}
     </div>}
     <p className="timeline-key">Each box shows notes hit out of notes in that section. A plus counts stray presses and holds let go early.</p>
   </figure>;
@@ -297,12 +298,14 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         const ratings = [...setup.set.ratings, summary.rating];
         const scores = [...(setup.set.scores ?? []), summary.score];
         const average = ratings.reduce((total, value) => total + value, 0) / ratings.length;
-        return <div className="set-summary" data-gold={average >= 80 ? 'true' : undefined}>
+        const platinum = ratings.every(value => value >= 85);
+        return <div className="set-summary" data-gold={average >= 80 ? 'true' : undefined} data-platinum={platinum ? 'true' : undefined}>
           <div className="record" aria-hidden="true"><i /></div>
           <div>
-            <h2>{average >= 80 ? 'Gold record' : 'Set finished'}: {setup.set.name}</h2>
+            <h2>{platinum ? 'Platinum record' : average >= 80 ? 'Gold record' : 'Set finished'}: {setup.set.name}</h2>
             <ol>{setup.set.ids.map((id, index) => <li key={id}><span>{songTitles[id] ?? `Song ${index + 1}`}</span><em>{(scores[index] ?? 0).toLocaleString()}</em><b>{(ratings[index] ?? 0).toFixed(1)}%</b></li>)}</ol>
             <p>Total {scores.reduce((total, value) => total + value, 0).toLocaleString()} · average timing rating {average.toFixed(1)}% on {difficultyNames[setup.difficulty]}</p>
+            {average >= 80 && !platinum && <p className="set-goal">Extra goal: 85% or better on every song for a platinum record. Lowest song here: {Math.min(...ratings).toFixed(1)}%.</p>}
             {average < 80 && <p className="set-goal">A gold record needs an 80% average timing rating. You were {(80 - average).toFixed(1)} points short.</p>}
           </div>
         </div>;
@@ -335,7 +338,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         <div><dt>Stray presses</dt><dd>{summary.wrongKeys}</dd></div>
       </dl>}
 
-      {!party && !typing && onPractice && <Timeline result={result} durationMs={recording.chart.durationMs} onPractice={onPractice} />}
+      {!party && !typing && onPractice && <Timeline result={result} durationMs={recording.chart.durationMs} names={sectionNames(recording.chart.events.normal, recording.chart.durationMs)} onPractice={onPractice} />}
       {!party && !result.waited && result.offsets.length >= 8 && <TimingChart offsets={result.offsets} windowMs={result.windowMs} />}
 
       {result.keyStats && <div className="results-typing">

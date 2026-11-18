@@ -332,3 +332,16 @@
 @media (max-width: 720px) { .duel-scoreboard { position: static; padding: .4rem; } .online-stage { overflow: auto; } }
 
 .set-goal { color: var(--muted); font-size: .9rem; }
+
+.segments button small { display: block; font-size: .56rem; font-weight: 600; letter-spacing: .02em; color: var(--muted); text-transform: none; }
+.range-pick { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; justify-content: center; font-size: .85rem; color: var(--muted); }
+.range-pick button { min-height: 40px; min-width: 44px; padding: 0 .6rem; border-radius: 10px; font-size: 1.1rem; }
+.range-pick b { min-width: 3.2ch; color: var(--text); font-variant-numeric: tabular-nums; text-align: center; }
+.range-pick span:not(:first-child) { margin-left: .8rem; }
+.timeline-row button em { font: 600 .6rem var(--body); font-style: normal; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+.pass-panel { position: absolute; z-index: 6; left: 50%; bottom: 1.1rem; transform: translateX(-50%); display: flex; flex-wrap: wrap; gap: .3rem 1.2rem; justify-content: center;
+  padding: .4rem 1rem; border-radius: 12px; background: #0d0818d9; border: 1px solid var(--edge); font-size: .85rem; color: var(--muted); max-width: calc(100vw - 1rem); pointer-events: none; }
+.pass-panel b { color: var(--text); }
+.set-summary[data-platinum] { border-color: #dfe9ff; box-shadow: 0 0 34px #cfe0ff55; }
+.set-summary[data-platinum] .record { background: repeating-radial-gradient(circle, #f4f8ff 0 2px, #9fb2d6 2px 4px); box-shadow: 0 0 26px #dfe9ffaa; }
+.segments button.on small { color: inherit; opacity: .8; }

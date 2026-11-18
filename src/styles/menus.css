@@ -147,6 +147,7 @@
 .venue-set { display: flex; gap: .7rem; align-items: center; padding: 0 .8rem .8rem; font-size: .82rem; color: var(--muted); }
 .venue-set button { min-height: 40px; font-size: .88rem; padding: .3rem .9rem; }
 .venue-set .gold { color: var(--gold); font-weight: 700; }
+.venue-set .platinum { color: #dfe9ff; text-shadow: 0 0 10px #cfe0ff88; }
 .venue-tracks small { color: var(--muted); }
 
 /* Academy */
