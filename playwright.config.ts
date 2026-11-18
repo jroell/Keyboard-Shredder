@@ -11,5 +11,16 @@ export default defineConfig({
   use: { actionTimeout: 15_000, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   projects: process.env.LIVE_MUSIC_SECONDS
     ? [{ name: 'chromium', use: { browserName: 'chromium' } }]
-    : [{ name: 'chromium', use: { browserName: 'chromium' } }, { name: 'firefox', use: { browserName: 'firefox' } }],
+    : [
+      { name: 'chromium', use: { browserName: 'chromium' } },
+      {
+        name: 'firefox',
+        use: {
+          browserName: 'firefox',
+          viewport: { width: 960, height: 640 },
+          reducedMotion: 'reduce',
+          trace: { mode: 'retain-on-failure', screenshots: false },
+        },
+      },
+    ],
 });
