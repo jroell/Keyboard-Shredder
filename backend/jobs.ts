@@ -108,6 +108,9 @@ export function createJobStore() {
   kick();
 
   return {
+    catalogIds() {
+      return [...catalog.keys()];
+    },
     async importBenchmarkTrack(id: string, title: string, chart: Chart) {
       db.prepare("INSERT OR IGNORE INTO jobs (id, owner, prompt, seconds, request_key, model, stage) VALUES (?, 'test-player', ?, 90, ?, 'blind', 'failed')")
         .run(id, title, id);

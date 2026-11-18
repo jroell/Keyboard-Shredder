@@ -22,8 +22,10 @@ export function loadCatalog() {
       const stems = playbackStems(folder);
       const artist = long?.credit;
       const credit = artist && { artist: artist.artist, license: artist.license, licenseUrl: artist.licenseUrl, source: artist.source };
+      const perSecond = chart.events.normal.length / (chart.durationMs / 1000);
+      const intensity = [3.3, 3.8, 4.2, 4.6].filter(level => perSecond >= level).length + 1;
       const song: Song = { id, title, genre, prompt: '', model: 'starter-setlist', durationMs: chart.durationMs,
-        hasStemMix: !!stems, credit };
+        hasStemMix: !!stems, credit, intensity, bpm: chart.bpm };
       return [id, { song, chart: async () => serialized, audio, stems }] as const;
     } catch (error) {
       throw new Error(`Starter setlist track "${title}" could not be loaded from ${folder}.`, { cause: error });

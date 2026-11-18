@@ -3,7 +3,7 @@ import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import type { Chart, Difficulty, Song } from '../shared/song';
 import type { CoopStage, Duel, DuelMode, LaneInput, Profile, Reply } from '../shared/duel';
-import { hitWindows, notesFor } from '../shared/difficulty';
+import { hitWindows, isDifficulty, notesFor } from '../shared/difficulty';
 import { Scoring } from '../shared/scoring';
 import { isTourSongCleared, TOUR_PASS_ACCURACY, tourStart, type TourProgress } from '../shared/tour';
 import type { createProfileStore } from './profiles';
@@ -114,17 +114,18 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       publish(room, true);
     }
     const reject = (ack: (reply: Reply) => void, error: string) => ack({ error });
+    // A finished, canceled or abandoned room never blocks a new game. Only a song in progress on another connection does.
+    const busyElsewhere = (room: Room) => room.phase === 'playing' &&
+      room.players.some(player => player.uid === uid && player.socket && player.socket !== socket.id);
     socket.on('clock', ack => { if (typeof ack === 'function') ack(Date.now()); });
     socket.on('create-duel', async (input, ack) => {
       if (typeof ack !== 'function') return;
       const previous = membership.get(uid);
-      if (previous?.players.some(player => player.uid === uid && player.socket)) {
-        return reject(ack, 'Leave your current duel first.');
-      }
+      if (previous && busyElsewhere(previous)) return reject(ack, 'Leave your current duel first.');
       if (rooms.size >= 250) return reject(ack, 'The studio is busy. Try again shortly.');
       const mode = input?.mode ?? 'duel';
       const difficulty = input?.difficulty;
-      if (!['duel', 'coop'].includes(mode) || !['easy', 'normal', 'hard'].includes(difficulty)) {
+      if (!['duel', 'coop'].includes(mode) || !isDifficulty(difficulty)) {
         return reject(ack, 'Choose a game mode and difficulty.');
       }
       if (mode === 'duel' && typeof input.songId !== 'string') return reject(ack, 'Choose a track and difficulty.');
@@ -190,7 +191,10 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       const room = typeof id === 'string' ? rooms.get(id) : undefined;
       const previous = membership.get(uid);
       if (!room) return reject(ack, 'This invite has expired.');
-      if (previous && previous !== room) return reject(ack, 'Leave your current duel first.');
+      if (previous && previous !== room) {
+        if (busyElsewhere(previous)) return reject(ack, 'Leave your current duel first.');
+        removePlayer(previous, uid);
+      }
       if (!room.players.some(player => player.uid === uid)) {
         if (room.phase !== 'lobby' || room.players.length >= 2) return reject(ack, 'This duel already has two players.');
         room.players.push(newPlayer(room, uid, socket.id));
