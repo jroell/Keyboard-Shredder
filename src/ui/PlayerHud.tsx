@@ -17,7 +17,7 @@ function retrigger(element: HTMLElement | null, name: string) {
 }
 
 /** Score, multiplier, streak, crowd and amp meters for one highway. Updated every frame without React renders. */
-const PlayerHud = forwardRef<HudHandle, { label?: string; boostKey: string; showScore: boolean }>(function PlayerHud({ label, boostKey, showScore }, ref) {
+const PlayerHud = forwardRef<HudHandle, { label?: string; boostKey: string; showScore: boolean; byRating?: boolean }>(function PlayerHud({ label, boostKey, showScore, byRating }, ref) {
   const root = useRef<HTMLDivElement>(null);
   const score = useRef<HTMLElement>(null);
   const mult = useRef<HTMLDivElement>(null);
@@ -46,10 +46,11 @@ const PlayerHud = forwardRef<HudHandle, { label?: string; boostKey: string; show
     },
     update(scoring, timeMs, shownScore) {
       const state = last.current;
-      const rounded = Math.round(shownScore);
+      // A battle on different difficulties is decided on timing rating, so that is the number to watch.
+      const rounded = byRating ? Math.round(scoring.liveRating) : Math.round(shownScore);
       if (rounded !== state.score && score.current) {
         state.score = rounded;
-        score.current.textContent = rounded.toLocaleString();
+        score.current.textContent = byRating ? `${rounded}%` : rounded.toLocaleString();
       }
       const boosting = scoring.boosting(timeMs);
       const multiplier = scoring.multiplier(timeMs);
@@ -85,13 +86,13 @@ const PlayerHud = forwardRef<HudHandle, { label?: string; boostKey: string; show
         state.boost = boosting;
       }
     },
-  }), []);
+  }), [byRating]);
 
   return <div className="hud" ref={root}>
     <div className="callouts" ref={callouts} aria-live="polite" />
     <div className="hud-left">
       {label && <div className="hud-name">{label}</div>}
-      {showScore && <div className="hud-score"><span>Score</span><strong ref={score} data-testid="score">0</strong></div>}
+      {showScore && <div className="hud-score"><span>{byRating ? 'Timing rating' : 'Score'}</span><strong ref={score} data-testid="score">{byRating ? '0%' : '0'}</strong></div>}
       <div className="hud-mult" ref={mult} data-level="1" aria-label="Score multiplier">
         <svg viewBox="0 0 100 100" aria-hidden="true"><circle className="track" cx="50" cy="50" r="43" /><circle className="fill" cx="50" cy="50" r="43" pathLength="1" /></svg>
         <strong ref={multText}>1×</strong>

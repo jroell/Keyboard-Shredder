@@ -195,6 +195,7 @@ export default function App() {
 
   const go = useCallback((next: Route) => {
     setError('');
+    setWelcome(false);
     if (next.name !== 'online' && new URLSearchParams(location.search).has('duel')) history.replaceState(null, '', location.pathname);
     setRoute(next);
   }, []);

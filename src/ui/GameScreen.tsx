@@ -635,7 +635,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     </header>
     {setup.challenge && <div className="challenge-banner">Beat {setup.challenge.name}: <strong>{setup.challenge.score.toLocaleString()}</strong></div>}
     {players.map((player, index) => <PlayerHud key={index} ref={node => { huds.current[index] = node; }}
-      label={setup.party ? setup.party.names[index] : undefined} showScore={!match}
+      label={setup.party ? setup.party.names[index] : undefined} showScore={!match} byRating={!!setup.party && !setup.party.coop && !!setup.party.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1]}
       boostKey={guitar && !typing && (players.length === 1 || index === 1) ? 'Select' : player.boostKey === 'Enter' ? 'Enter' : 'Space'} />)}
     {setup.party && !setup.party.coop && <div className="versus-bar" ref={versus} aria-hidden="true"><i /></div>}
     {typing && <div className="word-ribbon" ref={ribbon} aria-hidden="true" />}

@@ -3,7 +3,7 @@ import { Award, ChevronRight, Crown, RotateCcw, Share2, Star, Trophy, Unlock } f
 import { difficultyNames } from '../../shared/difficulty';
 import { MODS, finalScore, isRanked } from '../../shared/modifiers';
 import { levelFor } from '../../shared/progression';
-import { starsFor } from '../../shared/rating';
+import { STAR_RATINGS, starsFor } from '../../shared/rating';
 import { TOUR_TRACKS } from '../../shared/tour';
 import { keyLabel } from '../../shared/practice';
 import { weakestKeys } from '../../shared/typing';
@@ -90,7 +90,9 @@ function Timeline({ result, durationMs, onPractice }: { result: RunResult; durat
   const spots = [...result.troubles].sort((a, b) => b.streak - a.streak || a.timeMs - b.timeMs)
     .filter((item, index, all) => all.findIndex(other => Math.abs(other.timeMs - item.timeMs) < 4000) === index).slice(0, 4).sort((a, b) => a.timeMs - b.timeMs);
   const label = { miss: 'missed note', stray: 'stray press', drop: 'hold let go early' };
-  const weakest = sections.reduce((worst, section, index) => section.judged && section.hits / section.judged < (sections[worst].judged ? sections[worst].hits / sections[worst].judged : 2) ? index : worst, 0);
+  // Missed notes and slips both cost points, so the weakest section is the one with the most of either.
+  const cost = (section: typeof sections[number]) => section.judged - section.hits + section.slips;
+  const weakest = sections.reduce((worst, section, index) => cost(section) > cost(sections[worst]) ? index : worst, 0);
   const clean = sections.every(section => section.hits === section.judged && !section.slips);
   return <figure className="timeline">
     <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `Section ${weakest + 1} cost you the most. Click any section to loop it slowly.`}</figcaption>
@@ -130,12 +132,16 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   const party = setup.party;
   const typing = !!result.typing;
   const failed = summary.failed;
+  // The last song of a finished headline set shows the whole set: its total, and stars and grade from the average rating.
+  const setDone = !!setup.set && !failed && songCleared(summary) && setup.set.index + 1 === setup.set.ids.length;
+  const setAverage = setup.set ? [...setup.set.ratings, summary.rating].reduce((total, value) => total + value, 0) / (setup.set.ratings.length + 1) : 0;
   // A lesson is graded on its own three-star scale.
   const drillStars = (result.typingAccuracy ?? 0) >= 97 ? 3 : (result.typingAccuracy ?? 0) >= 92 ? 2 : (result.typingAccuracy ?? 0) >= 80 ? 1 : 0;
   const starSlots = typing ? 3 : 5;
   const stars = outcome.lesson ? outcome.lesson.stars : typing ? (failed ? 0 : drillStars)
-    : party?.coop ? Math.min(5, Math.round((starsFor(scorings[0].tally) + starsFor(scorings[1].tally)) / 2)) : summary.stars;
-  const shownScore = useCountUp(party?.coop ? finalScore(scorings[0].score + scorings[1].score, setup.mods) : summary.score, 900);
+    : party?.coop ? Math.min(5, Math.round((starsFor(scorings[0].tally) + starsFor(scorings[1].tally)) / 2))
+    : setDone ? STAR_RATINGS.filter(threshold => setAverage >= threshold).length : summary.stars;
+  const shownScore = useCountUp(party?.coop ? finalScore(scorings[0].score + scorings[1].score, setup.mods) : setDone ? setup.set!.score + summary.score : summary.score, 900);
   const before = useMemo(() => levelFor(outcome.save.xp - outcome.xp.total), [outcome]);
   const after = useMemo(() => levelFor(outcome.save.xp), [outcome]);
   const leveled = after.level > before.level;
@@ -255,15 +261,19 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
             className={index < stars ? 'earned' : ''} style={{ '--delay': `${350 + index * 190}ms` } as CSSProperties} />)}
         </div>
         <div className="results-score">
-          <span>{typing ? 'Words per minute' : 'Score'}</span>
+          <span>{typing ? 'Words per minute' : setDone ? 'Set total' : 'Score'}</span>
           <strong data-testid="final-score">{typing ? (summary.wpm ?? 0).toFixed(1) : shownScore.toLocaleString()}</strong>
-          {!typing && !(setup.set && !songCleared(summary)) && <p className={outcome.newBest && !failed ? 'best new' : 'best'}>
+          {setDone && <p className="best">Last song {summary.score.toLocaleString()} · average timing rating {setAverage.toFixed(1)}%</p>}
+          {!typing && !setDone && !(setup.set && !songCleared(summary)) && <p className={outcome.newBest && !failed ? 'best new' : 'best'}>
             {failed ? `Made it ${Math.round(100 * summary.durationMs / recording.chart.durationMs)}% of the way`
               : outcome.newBest ? (outcome.firstClear ? (summary.stars > 0 ? 'First clear!' : 'First time through') : `New personal best! +${(summary.score - outcome.previousBest).toLocaleString()}`)
               : outcome.previousBest > 0 ? `Personal best ${outcome.previousBest.toLocaleString()}` : ''}</p>}
           {typing && <p className="best">{result.typingAccuracy}% accuracy · score {summary.score.toLocaleString()}</p>}
         </div>
-        {!typing && <div className="grade" data-grade={summary.grade[0]} aria-label={`Grade ${summary.grade}`}>{summary.grade}</div>}
+        {!typing && (() => {
+          const grade = setDone ? (setAverage >= 93 ? 'S' : setAverage >= 85 ? 'A' : setAverage >= 72 ? 'B' : setAverage >= 55 ? 'C' : 'D') : summary.grade;
+          return <div className="grade" data-grade={grade[0]} aria-label={`${setDone ? 'Set grade' : 'Grade'} ${grade}`}>{grade}</div>;
+        })()}
       </div>}
 
       {setup.set && !(!failed && songCleared(summary) && setup.set.index + 1 === setup.set.ids.length) && <p className={`challenge-result ${failed || !songCleared(summary) ? 'lost' : 'won'}`} role="status">
@@ -293,6 +303,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
             <h2>{average >= 80 ? 'Gold record' : 'Set finished'}: {setup.set.name}</h2>
             <ol>{setup.set.ids.map((id, index) => <li key={id}><span>{songTitles[id] ?? `Song ${index + 1}`}</span><em>{(scores[index] ?? 0).toLocaleString()}</em><b>{(ratings[index] ?? 0).toFixed(1)}%</b></li>)}</ol>
             <p>Total {scores.reduce((total, value) => total + value, 0).toLocaleString()} · average timing rating {average.toFixed(1)}% on {difficultyNames[setup.difficulty]}</p>
+            {average < 80 && <p className="set-goal">A gold record needs an 80% average timing rating. You were {(80 - average).toFixed(1)} points short.</p>}
           </div>
         </div>;
       })()}

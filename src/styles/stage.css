@@ -269,6 +269,7 @@
   .callout { white-space: normal; text-align: center; font-size: clamp(1.2rem, 6vw, 2rem); }
   .callout.mega { font-size: clamp(1.5rem, 8vw, 2.6rem); }
   .stage > .kb { display: none; }
+  .word-ribbon { top: 116px; max-width: calc(100vw - 1rem); }
   .stage[data-typing] .stage-canvas { top: 0; height: 100%; }
   .stage[data-typing] .hud { top: 0; bottom: 0; }
   .results-hero { grid-template-columns: 1fr; grid-template-areas: "stars" "score" "grade"; justify-items: center; text-align: center; }
@@ -329,3 +330,5 @@
 .results-stats dd { white-space: nowrap; }
 @media (max-width: 480px) { .results-stats dd { font-size: 1.35rem; } .timeline-row { grid-template-columns: repeat(4, 1fr); } }
 @media (max-width: 720px) { .duel-scoreboard { position: static; padding: .4rem; } .online-stage { overflow: auto; } }
+
+.set-goal { color: var(--muted); font-size: .9rem; }
