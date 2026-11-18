@@ -63,9 +63,11 @@ app.get('/api/duels/:id/track', async (request, response, next) => {
   try { return response.json({ song: assets.song, chart: JSON.parse(await assets.chart()) }); }
   catch (error) { return next(error); }
 });
-app.get('/api/duels/:id/audio', (request, response) => {
+app.get('/api/duels/:id/audio/:stem?', (request, response) => {
   const assets = duels.assets(request.params.id, response.locals.uid);
-  return assets ? response.sendFile(assets.audio) : response.status(404).json({ error: 'Join this duel to access the track.' });
+  const { stem } = request.params;
+  const path = stem === 'lead' || stem === 'backing' ? assets?.stems?.[stem] : stem ? undefined : assets?.audio;
+  return path ? response.sendFile(path) : response.status(404).json({ error: 'Join this duel to access the track.' });
 });
 app.post('/api/generations', (request, response) => {
   const { prompt, durationSeconds, key } = request.body ?? {};
@@ -94,9 +96,11 @@ app.get('/api/songs/:id', async (request, response, next) => {
     return next(error);
   }
 });
-app.get('/api/songs/:id/audio', (request, response) => {
+app.get('/api/songs/:id/audio/:stem?', (request, response) => {
   const assets = store.assets(response.locals.uid, request.params.id);
-  return assets ? response.sendFile(assets.audio) : response.status(404).json({ error: 'Audio not found.' });
+  const { stem } = request.params;
+  const path = stem === 'lead' || stem === 'backing' ? assets?.stems?.[stem] : stem ? undefined : assets?.audio;
+  return path ? response.sendFile(path) : response.status(404).json({ error: 'Audio not found.' });
 });
 app.use('/api', (_request, response) => response.status(404).json({ error: 'API route not found.' }));
 

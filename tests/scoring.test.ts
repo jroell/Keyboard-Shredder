@@ -52,7 +52,7 @@ test('Overlapping 95 ms windows credit the attack closest to the press', () => {
 test('A good hit 70 ms early reports its signed timing and successful lane', () => {
   const game = new Scoring([{ id: 'note', timeMs: 1000, lanes: [2], durationMs: 0 }]);
   game.press(2, 930);
-  assert.deepEqual(game.feedback, { judgement: 'Good', offsetMs: -70, lanes: [2], timeMs: 930 });
+  assert.deepEqual(game.feedback, { judgement: 'Good', offsetMs: -70, lanes: [2], timeMs: 930, points: 70 });
 });
 
 test('An expired chord identifies both missed lanes after the 95 ms hit window', () => {
@@ -104,4 +104,26 @@ test('The resume count-in restores only active sustain lanes without scoring new
   game.tick(1400);
   assert.equal(game.score, 230);
   assert.equal(game.accuracy, 100);
+});
+
+test('Ten perfect hits charge the amp and boost only doubles multipliers for 6 seconds', () => {
+  const game = new Scoring(Array.from({ length: 12 }, (_, i) => ({
+    id: String(i), timeMs: i < 11 ? 1000 + 250 * i : 9600, lanes: [0], durationMs: 0,
+  })));
+  assert.equal(game.activateBoost(0), false);
+  for (let i = 0; i < 10; i++) {
+    game.press(0, 1000 + 250 * i);
+    game.release(0, 1001 + 250 * i);
+  }
+  assert.equal(game.score, 1000);
+  assert.equal(game.ampCharge, 100);
+  assert.equal(game.activateBoost(3500), true);
+  assert.equal(game.ampCharge, 0);
+  assert.equal(game.activateBoost(3501), false);
+  game.press(0, 3500);
+  game.release(0, 3501);
+  assert.equal(game.score, 1400);
+  game.press(0, 9600);
+  assert.equal(game.score, 1600);
+  assert.equal(game.boostHits, 1);
 });

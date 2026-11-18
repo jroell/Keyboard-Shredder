@@ -20,7 +20,7 @@ export type Profile = {
 };
 export type DuelPlayer = {
   slot: number; profile: Profile; connected: boolean; ready: boolean; score: number;
-  combo: number; frets: number[]; strike: { lanes: number[]; missed: boolean } | null; accuracy: number; hits: number; bestCombo: number;
+  combo: number; ampCharge: number; boostEndMs: number | null; frets: number[]; strike: { lanes: number[]; missed: boolean } | null; accuracy: number; hits: number; bestCombo: number;
 };
 export type Duel = {
   id: string; song: Song; difficulty: Difficulty; phase: 'lobby' | 'playing' | 'finished' | 'canceled';

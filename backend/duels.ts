@@ -3,6 +3,7 @@ import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import type { Chart, Difficulty, Song } from '../shared/song';
 import type { Duel, LaneInput, Profile, Reply } from '../shared/duel';
+import { hitWindows, notesFor } from '../shared/difficulty';
 import { Scoring } from '../shared/scoring';
 import type { createProfileStore } from './profiles';
 import type { createJobStore } from './jobs';
@@ -23,7 +24,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
     id: room.id, song: publicSong(room.assets.song), difficulty: room.difficulty, phase: room.phase,
     players: room.players.map((player, slot) => ({
       slot, profile: player.profile, connected: !!player.socket, ready: player.ready,
-      score: player.game.score, combo: player.game.combo, accuracy: player.game.accuracy,
+      score: player.game.score, combo: player.game.combo, ampCharge: player.game.ampCharge, boostEndMs: player.game.boostEndMs, accuracy: player.game.accuracy,
       frets: [...player.game.held],
       strike: player.game.feedback && Date.now() - (room.startAt ?? 0) - player.game.feedback.timeMs < 500
         ? { lanes: player.game.feedback.lanes, missed: player.game.feedback.offsetMs === undefined } : null,
@@ -39,7 +40,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       io.to(room.id).emit('duel', snapshot);
     }
   }
-  const game = (chart: Chart, level: Difficulty) => new Scoring(chart.events[level], level === 'hard' ? 80 : 95);
+  const game = (chart: Chart, level: Difficulty) => new Scoring(notesFor(chart, level), hitWindows[level]);
   const newPlayer = (room: Room, uid: string, socket: string): Player =>
     ({ uid, profile: profiles.get(uid), socket, ready: false, game: game(room.chart, room.difficulty), lastTime: -Infinity, sent: 0, window: 0 });
 
@@ -95,7 +96,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
         return reject(ack, 'Leave your current duel first.');
       }
       if (rooms.size >= 250) return reject(ack, 'The studio is busy. Try again shortly.');
-      if (typeof input?.songId !== 'string' || !['normal', 'hard'].includes(input?.difficulty)) return reject(ack, 'Choose a track and difficulty.');
+      if (typeof input?.songId !== 'string' || !['easy', 'normal', 'hard'].includes(input?.difficulty)) return reject(ack, 'Choose a track and difficulty.');
       const assets = songs.assets(uid, input.songId);
       if (!assets) return reject(ack, 'That track is unavailable.');
       try {
@@ -137,25 +138,32 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       ack({});
       publish(room);
     });
-    socket.on('duel-input', (input: LaneInput) => {
+    function playerForInput(timeMs: number) {
       const room = current();
-      if (!room || room.phase !== 'playing' || room.startAt === null || !input ||
-          !Number.isInteger(input.lane) || input.lane < 0 || input.lane > 4 ||
-          typeof input.down !== 'boolean' || !Number.isFinite(input.timeMs)) return;
+      if (!room || room.phase !== 'playing' || room.startAt === null || !Number.isFinite(timeMs)) return;
       const now = Date.now();
       const elapsed = now - room.startAt;
-      if (elapsed < 0 || elapsed > room.chart.durationMs + 450 || input.timeMs < 0 ||
-          input.timeMs > room.chart.durationMs + 250 || Math.abs(input.timeMs - elapsed) > 500) return;
+      if (elapsed < 0 || elapsed > room.chart.durationMs + 450 || timeMs < 0 ||
+          timeMs > room.chart.durationMs + 250 || Math.abs(timeMs - elapsed) > 500) return;
       const player = room.players.find(candidate => candidate.uid === uid)!;
-      if (input.timeMs < player.lastTime) return;
+      if (timeMs < player.lastTime) return;
       if (now - player.window >= 1000) {
         player.window = now;
         player.sent = 0;
       }
       if (++player.sent > 80) return;
-      player.lastTime = input.timeMs;
+      player.lastTime = timeMs;
+      return player;
+    }
+    socket.on('duel-input', (input: LaneInput) => {
+      if (!input || !Number.isInteger(input.lane) || input.lane < 0 || input.lane > 4 || typeof input.down !== 'boolean') return;
+      const player = playerForInput(input.timeMs);
+      if (!player) return;
       if (input.down) player.game.press(input.lane, input.timeMs);
       else player.game.release(input.lane, input.timeMs);
+    });
+    socket.on('duel-boost', (timeMs: number) => {
+      playerForInput(timeMs)?.game.activateBoost(timeMs);
     });
     socket.on('rematch', ack => {
       if (typeof ack !== 'function') return;

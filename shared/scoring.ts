@@ -1,7 +1,7 @@
 import type { SongEvent } from './song';
 
 export type Judgement = 'Perfect' | 'Good' | 'Miss' | 'Sustain dropped' | 'Wrong key';
-type Feedback = { judgement: Judgement; timeMs: number; lanes: number[]; offsetMs?: number };
+type Feedback = { judgement: Judgement; timeMs: number; lanes: number[]; offsetMs?: number; points?: number };
 
 export const DEFAULT_KEYS = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG'];
 
@@ -9,12 +9,43 @@ export class Scoring {
   readonly held = new Set<number>();
   readonly consumed = new Set<string>();
   readonly sustaining = new Map<string, SongEvent>();
+  readonly hitsByLane = new Map<number, number>();
   score = 0;
   hits = 0;
+  chordsHit = 0;
   misses = 0;
   wrongKeys = 0;
   combo = 0;
   bestCombo = 0;
+  ampCharge = 0;
+  boostHits = 0;
+  crowd = 50;
+  private boostUntil = -Infinity;
+
+  get boostEndMs() { return Number.isFinite(this.boostUntil) ? this.boostUntil : null; }
+
+  rejoin(timeMs: number, combo: number, ampCharge: number, boostEndMs: number | null) {
+    while (this.cursor < this.events.length && this.events[this.cursor].timeMs < timeMs - this.windowMs) {
+      this.consumed.add(this.events[this.cursor++].id);
+    }
+    this.combo = combo;
+    this.ampCharge = ampCharge;
+    this.boostUntil = boostEndMs ?? -Infinity;
+  }
+
+  boosting(timeMs: number) { return timeMs < this.boostUntil; }
+  boostRemaining(timeMs: number) { return Math.max(0, this.boostUntil - timeMs); }
+
+  activateBoost(timeMs: number) {
+    if (timeMs < 0 || this.ampCharge < 100 || this.boosting(timeMs)) return false;
+    this.ampCharge = 0;
+    this.boostUntil = timeMs + 6000;
+    return true;
+  }
+
+  multiplier(timeMs: number) {
+    return Math.min(4, 1 + Math.floor(this.combo / 10)) * (this.boosting(timeMs) ? 2 : 1);
+  }
   feedback: Feedback | null = null;
 
   get judgement() {
@@ -59,6 +90,7 @@ export class Scoring {
     if (!event || this.consumed.has(event.id) || !event.lanes.includes(lane)) {
       if (timeMs <= this.regripUntil && [...this.sustaining.values()].some(held => held.lanes.includes(lane))) return;
       this.wrongKeys++;
+      this.crowd = Math.max(0, this.crowd - 3);
       this.combo = 0;
       this.feedback = { judgement: 'Wrong key', lanes: [lane], timeMs };
       return;
@@ -73,11 +105,19 @@ export class Scoring {
     this.consumed.add(event.id);
     this.chord = null;
     this.hits++;
+    for (const lane of event.lanes) this.hitsByLane.set(lane, (this.hitsByLane.get(lane) ?? 0) + 1);
+    if (event.lanes.length > 1) this.chordsHit++;
+    const boost = this.boosting(timeMs);
+    const points = (perfect ? 100 : 70) * this.multiplier(timeMs);
     this.combo++;
     this.bestCombo = Math.max(this.bestCombo, this.combo);
-    this.score += (perfect ? 100 : 70) * Math.min(4, 1 + Math.floor((this.combo - 1) / 10));
+    this.score += points;
+    this.crowd = Math.min(100, this.crowd + (perfect ? 5 : 3));
+    if (boost) this.boostHits++;
+    else this.ampCharge = Math.min(100, this.ampCharge + (perfect ? 10 : 6) + (event.lanes.length > 1 ? 5 : 0));
     if (event.durationMs) this.sustaining.set(event.id, event);
-    this.feedback = { judgement: perfect ? 'Perfect' : 'Good', offsetMs, lanes: event.lanes, timeMs };
+    this.feedback = { judgement: perfect ? 'Perfect' : 'Good', offsetMs, lanes: event.lanes, timeMs, points };
+    return event;
   }
 
   release(lane: number, timeMs: number) {
@@ -136,6 +176,7 @@ export class Scoring {
     this.consumed.add(event.id);
     if (this.chord?.event.id === event.id) this.chord = null;
     this.misses++;
+    this.crowd = Math.max(0, this.crowd - 7);
     this.combo = 0;
     this.feedback = { judgement: 'Miss', lanes: event.lanes, timeMs };
   }
