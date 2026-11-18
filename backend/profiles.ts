@@ -3,6 +3,8 @@ import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { avatars, badgeNames, palettes, type Badge, type Profile } from '../shared/duel';
 
+import { normalizeTourProgress, recordTourResult } from '../shared/tour';
+
 type Totals = { played: number; wins: number; precision: number; streak: number };
 
 export function createProfileStore() {
@@ -17,6 +19,10 @@ export function createProfileStore() {
       combo INTEGER NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY (id, uid)
     );
     CREATE INDEX IF NOT EXISTS duel_results_uid ON duel_results(uid);
+    CREATE TABLE IF NOT EXISTS coop_progress (
+      uid TEXT NOT NULL, track_id TEXT NOT NULL, accuracy INTEGER NOT NULL,
+      PRIMARY KEY (uid, track_id)
+    );
   `);
 
   function get(uid: string): Profile {
@@ -33,8 +39,24 @@ export function createProfileStore() {
     return { ...options, badges, played: totals.played, wins: totals.wins };
   }
 
+  function coopProgress(uid: string) {
+    const values = db.prepare('SELECT track_id, accuracy FROM coop_progress WHERE uid=?').all(uid);
+    return normalizeTourProgress(Object.fromEntries(values.map(row => [row.track_id, row.accuracy])));
+  }
+
   return {
     get,
+    coopProgress,
+    recordCoop(uid: string, trackId: string, accuracy: number) {
+      const current = coopProgress(uid);
+      const progress = recordTourResult(current, trackId, accuracy);
+      if (progress !== current) {
+        db.prepare(`INSERT INTO coop_progress VALUES (?, ?, ?) ON CONFLICT(uid, track_id)
+          DO UPDATE SET accuracy=max(coop_progress.accuracy, excluded.accuracy)`)
+          .run(uid, trackId, progress[trackId]);
+      }
+      return progress;
+    },
     save(uid: string, input: Partial<Profile> | null) {
       const current = get(uid);
       if (!input || typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 24 ||

@@ -1,4 +1,5 @@
 import type { Difficulty, Song } from './song';
+import type { TourProgress } from './tour';
 
 export const palettes = {
   Sunset: ['#ff8757', '#ffc66b', '#87dcae', '#78b9ff', '#e0a2ff'],
@@ -22,9 +23,18 @@ export type DuelPlayer = {
   slot: number; profile: Profile; connected: boolean; ready: boolean; score: number;
   combo: number; ampCharge: number; boostEndMs: number | null; frets: number[]; strike: { lanes: number[]; missed: boolean } | null; accuracy: number; hits: number; bestCombo: number;
 };
+export type DuelMode = 'duel' | 'coop';
+export type CoopStage = {
+  progress: TourProgress;
+  targetScore: number;
+  teamScore: number;
+  teamPassed: boolean | null;
+  nextSongId: string | null;
+};
 export type Duel = {
+  mode: DuelMode; round: string; coop?: CoopStage;
   id: string; song: Song; difficulty: Difficulty; phase: 'lobby' | 'playing' | 'finished' | 'canceled';
   players: DuelPlayer[]; host: number; startAt: number | null; winner: number | null; reason?: string;
 };
 export type LaneInput = { lane: number; down: boolean; timeMs: number };
-export type Reply = { error?: string; id?: string; slot?: number };
+export type Reply = { error?: string; id?: string; slot?: number; progress?: TourProgress };

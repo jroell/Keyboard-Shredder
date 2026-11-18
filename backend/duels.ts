@@ -2,17 +2,19 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import type { Chart, Difficulty, Song } from '../shared/song';
-import type { Duel, LaneInput, Profile, Reply } from '../shared/duel';
+import type { CoopStage, Duel, DuelMode, LaneInput, Profile, Reply } from '../shared/duel';
 import { hitWindows, notesFor } from '../shared/difficulty';
 import { Scoring } from '../shared/scoring';
+import { isTourSongCleared, TOUR_PASS_ACCURACY, tourStart, type TourProgress } from '../shared/tour';
 import type { createProfileStore } from './profiles';
 import type { createJobStore } from './jobs';
 
 type Assets = NonNullable<ReturnType<ReturnType<typeof createJobStore>['assets']>>;
 type Player = { uid: string; profile: Profile; socket: string | null; ready: boolean; game: Scoring; lastTime: number; sent: number; window: number };
 type Room = {
-  id: string; round: string; assets: Assets; chart: Chart; difficulty: Difficulty; players: Player[];
+  id: string; round: string; mode: DuelMode; assets: Assets; chart: Chart; difficulty: Difficulty; players: Player[];
   phase: Duel['phase']; startAt: number | null; winner: number | null; reason?: string; touched: number; published?: string;
+  coop?: { progress: TourProgress; targetScore: number; teamPassed: boolean | null };
 };
 
 export function attachDuels(http: HttpServer, authenticate: (token: string) => Promise<string | undefined>,
@@ -21,7 +23,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
   const rooms = new Map<string, Room>();
   const membership = new Map<string, Room>();
   const view = (room: Room): Duel => ({
-    id: room.id, song: publicSong(room.assets.song), difficulty: room.difficulty, phase: room.phase,
+    id: room.id, round: room.round, mode: room.mode, coop: coopStage(room), song: publicSong(room.assets.song), difficulty: room.difficulty, phase: room.phase,
     players: room.players.map((player, slot) => ({
       slot, profile: player.profile, connected: !!player.socket, ready: player.ready,
       score: player.game.score, combo: player.game.combo, ampCharge: player.game.ampCharge, boostEndMs: player.game.boostEndMs, accuracy: player.game.accuracy,
@@ -32,6 +34,18 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
     })),
     host: 0, startAt: room.startAt, winner: room.winner, reason: room.reason,
   });
+  function coopStage(room: Room): CoopStage | undefined {
+    if (!room.coop) return undefined;
+    const currentProgress = room.coop.progress;
+    const next = room.phase === 'finished' && isTourSongCleared(room.assets.song.id, currentProgress)
+      ? tourStart(currentProgress) : null;
+    return {
+      ...room.coop,
+      teamScore: room.players.reduce((total, player) => total + player.game.score, 0),
+      nextSongId: next === room.assets.song.id ? null : next,
+    };
+  }
+
   function publish(room: Room, force = false) {
     const snapshot = view(room);
     const serialized = JSON.stringify(snapshot);
@@ -41,8 +55,20 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
     }
   }
   const game = (chart: Chart, level: Difficulty) => new Scoring(notesFor(chart, level), hitWindows[level]);
+  const targetFor = (chart: Chart, level: Difficulty) => 2 * TOUR_PASS_ACCURACY * notesFor(chart, level).length;
   const newPlayer = (room: Room, uid: string, socket: string): Player =>
     ({ uid, profile: profiles.get(uid), socket, ready: false, game: game(room.chart, room.difficulty), lastTime: -Infinity, sent: 0, window: 0 });
+
+  function resetRound(room: Room) {
+    room.round = randomUUID();
+    room.phase = 'lobby';
+    room.startAt = null;
+    room.winner = null;
+    room.reason = undefined;
+    room.touched = Date.now();
+    room.players = room.players.map(player => newPlayer(room, player.uid, player.socket!));
+    if (room.coop) room.coop.teamPassed = null;
+  }
 
   function removePlayer(room: Room, uid: string) {
     const player = room.players.find(candidate => candidate.uid === uid);
@@ -56,7 +82,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       room.players[0].ready = false;
     } else if (room.phase === 'lobby' || room.phase === 'playing') {
       room.phase = 'canceled';
-      room.reason = 'A player left the duel.';
+      room.reason = room.mode === 'coop' ? 'A player left the tour.' : 'A player left the duel.';
     }
     publish(room);
   }
@@ -96,22 +122,67 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
         return reject(ack, 'Leave your current duel first.');
       }
       if (rooms.size >= 250) return reject(ack, 'The studio is busy. Try again shortly.');
-      if (typeof input?.songId !== 'string' || !['easy', 'normal', 'hard'].includes(input?.difficulty)) return reject(ack, 'Choose a track and difficulty.');
-      const assets = songs.assets(uid, input.songId);
-      if (!assets) return reject(ack, 'That track is unavailable.');
+      const mode = input?.mode ?? 'duel';
+      const difficulty = input?.difficulty;
+      if (!['duel', 'coop'].includes(mode) || !['easy', 'normal', 'hard'].includes(difficulty)) {
+        return reject(ack, 'Choose a game mode and difficulty.');
+      }
+      if (mode === 'duel' && typeof input.songId !== 'string') return reject(ack, 'Choose a track and difficulty.');
       try {
+        const progress = mode === 'coop' ? profiles.coopProgress(uid) : undefined;
+        const songId = progress ? tourStart(progress) : input.songId;
+        if (!songId) return reject(ack, 'You cleared the co-op tour.');
+        if (progress && input.songId !== undefined && input.songId !== songId) {
+          return reject(ack, 'A co-op tour starts at your next unlocked track.');
+        }
+        const assets = songs.assets(uid, songId);
+        if (!assets) return reject(ack, 'That track is unavailable.');
         const chart = JSON.parse(await assets.chart()) as Chart;
         if (!socket.connected || membership.get(uid) !== previous) return reject(ack, 'Leave your current duel first.');
         if (previous) removePlayer(previous, uid);
         const room: Room = {
-          id: randomBytes(12).toString('base64url'), round: randomUUID(), assets, chart, difficulty: input.difficulty,
+          id: randomBytes(12).toString('base64url'), round: randomUUID(), mode, assets, chart, difficulty,
           players: [], phase: 'lobby', startAt: null, winner: null, touched: Date.now(),
+          coop: progress && { progress, targetScore: targetFor(chart, difficulty), teamPassed: null },
         };
         room.players.push(newPlayer(room, uid, socket.id));
         rooms.set(room.id, room);
         connect(room, ack);
       } catch {
         reject(ack, 'Could not read that track.');
+      }
+    });
+    socket.on('coop-progress', ack => {
+      if (typeof ack !== 'function') return;
+      try { ack({ progress: profiles.coopProgress(uid) }); }
+      catch { reject(ack, 'Could not load co-op tour progress.'); }
+    });
+    socket.on('advance-coop', async ack => {
+      if (typeof ack !== 'function') return;
+      const room = current();
+      if (!room?.coop || room.players[0].uid !== uid) return reject(ack, 'Only the host can advance the tour.');
+      if (room.phase !== 'finished' || !isTourSongCleared(room.assets.song.id, room.coop.progress) ||
+          !room.players.every(player => player.socket)) {
+        return reject(ack, 'Clear this stage with both players connected before advancing.');
+      }
+      const next = coopStage(room)?.nextSongId;
+      if (!next) return reject(ack, 'There is no next stage.');
+      const round = room.round;
+      const assets = songs.assets(uid, next);
+      if (!assets) return reject(ack, 'That track is unavailable.');
+      try {
+        const chart = JSON.parse(await assets.chart()) as Chart;
+        if (current() !== room || room.phase !== 'finished' || room.round !== round || !room.players.every(player => player.socket)) {
+          return reject(ack, 'The room changed. Wait for both players before advancing.');
+        }
+        room.assets = assets;
+        room.chart = chart;
+        room.coop.targetScore = targetFor(chart, room.difficulty);
+        resetRound(room);
+        ack({});
+        publish(room);
+      } catch {
+        reject(ack, 'Could not read the next track.');
       }
     });
     socket.on('join-duel', (id, ack) => {
@@ -171,12 +242,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       if (!room || room.players[0].uid !== uid || room.phase !== 'finished' || !room.players.every(player => player.socket)) {
         return reject(ack, 'Both players must be connected to play again.');
       }
-      room.round = randomUUID();
-      room.phase = 'lobby';
-      room.startAt = null;
-      room.winner = null;
-      room.reason = undefined;
-      room.players = room.players.map(player => newPlayer(room, player.uid, player.socket!));
+      resetRound(room);
       ack({});
       publish(room);
     });
@@ -227,9 +293,16 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
   function finish(room: Room) {
     for (const player of room.players) player.game.finish();
     const [a, b] = room.players.map(player => player.game);
-    room.winner = a.score === b.score ? null : a.score > b.score ? 0 : 1;
     room.phase = 'finished';
     room.touched = Date.now();
+    if (room.coop) {
+      const teamScore = a.score + b.score;
+      room.coop.teamPassed = teamScore >= room.coop.targetScore;
+      const accuracy = Math.min(100, Math.floor(teamScore * TOUR_PASS_ACCURACY / room.coop.targetScore));
+      room.coop.progress = profiles.recordCoop(room.players[0].uid, room.assets.song.id, accuracy);
+      return;
+    }
+    room.winner = a.score === b.score ? null : a.score > b.score ? 0 : 1;
     profiles.record(room.round, room.players.map((player, slot) => ({
       uid: player.uid, win: room.winner === slot, accuracy: player.game.accuracy,
       bestCombo: player.game.bestCombo, hits: player.game.hits,
