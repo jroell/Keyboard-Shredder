@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { badgeNames, palettes, type Duel, type LaneInput, type Profile, type Reply } from '../../../shared/duel';
-import type { Chart, Difficulty, Song } from '../../../shared/song';
+import type { Difficulty, Song } from '../../../shared/song';
 import { PlayerCard } from '../PlayerProfile';
 import SoloGame from './SoloGame';
+import { loadRecording, type Recording } from '../../lib/recording';
 
-type Track = { song: Song; chart: Chart; audio: ArrayBuffer };
 type Props = {
   invite: string; token: () => Promise<string | undefined>; call: (path: string, options?: RequestInit) => Promise<Response>;
   songs: Song[]; difficulty: Difficulty; profile?: Profile; keys: string[]; calibration: number;
@@ -17,7 +17,7 @@ export default function DuelRoom(props: Props) {
   const [slot, setSlot] = useState<number>();
   const [songId, setSongId] = useState(props.songs[0]?.id || '');
   const [level, setLevel] = useState(props.difficulty);
-  const [track, setTrack] = useState<Track>();
+  const [track, setTrack] = useState<Recording>();
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [connected, setConnected] = useState(false);
@@ -82,11 +82,8 @@ export default function DuelRoom(props: Props) {
     if (!activeId) return;
     const serial = ++fetchTrack.current;
     const api = current.current.call;
-    Promise.all([
-      api(`/duels/${activeId}/track`).then(response => response.json()),
-      api(`/duels/${activeId}/audio`).then(response => response.arrayBuffer()),
-    ]).then(([manifest, audio]) => {
-      if (serial === fetchTrack.current) setTrack({ ...manifest, audio });
+    loadRecording(api, `/duels/${activeId}`, `/duels/${activeId}/track`).then(recording => {
+      if (serial === fetchTrack.current) setTrack(recording);
     }).catch(() => {
       if (serial === fetchTrack.current) setError('Could not load the shared track. Try again.');
     });
@@ -121,34 +118,37 @@ export default function DuelRoom(props: Props) {
     scheduled.current = { epoch: duel.startAt, perf: performance.now() + duel.startAt - Date.now() - serverOffset.current };
   }
 
-  return <main className="studio duel-studio">
+  return <main className="studio duel-studio" data-phase={duel?.phase}>
     <header className="masthead"><h1>Head-to-head</h1><button onClick={() => void leave()}>Back to studio</button></header>
     {!connected && <p role="status">Connecting to the duel… <button onClick={() => socket.current?.connect()}>Retry connection</button></p>}
     {error && <p role="alert" className="error">{error}</p>}
-    {!duel && !props.invite && <section className="panel settings">
-      <h2>Host an invite</h2>
-      {!props.songs.length && <p>Generate a track in the studio to host a duel.</p>}
+    {!duel && !props.invite && <section className="panel duel-host">
+      <h2>Head-to-head</h2>
+      <p>Pick a track and share the invite. Both players start on the same beat.</p>
+      <div className="duel-fields">
       <label>Track<select value={songId} onChange={event => setSongId(event.target.value)}>
         <option value="">Choose a track</option>{props.songs.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
       </select></label>
       <label>Duel difficulty<select value={level} onChange={event => setLevel(event.target.value as Difficulty)}>
-        <option value="normal">Normal</option><option value="hard">Hard</option>
+        <option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option>
       </select></label>
+      </div>
+      {!props.songs.length && <p>Load a track in the studio to host a duel.</p>}
       <button className="primary" disabled={!songId || syncing || !connected} onClick={() => action('create-duel', { songId, difficulty: level })}>Create invite</button>
     </section>}
     {duel && <>
-      <div className="duel-scoreboard" aria-label="Duel scoreboard">
+      {duel.phase !== 'finished' && <div className={`duel-scoreboard duel-${duel.phase}`} aria-label="Duel scoreboard">
         {duel.players.map(player => <section key={player.slot} className="panel duel-player">
           <PlayerCard profile={player.profile} />
           <p>{player.slot === slot ? 'You' : 'Opponent'} · {!player.connected ? 'Disconnected' : duel.phase === 'lobby' ? player.ready ? 'Ready' : 'Getting ready' : `${player.combo} combo`}</p>
-          <strong>{player.score.toLocaleString()} pts</strong>{duel.phase !== 'lobby' && <p>{player.accuracy}% accuracy</p>}
+          <strong>{player.score.toLocaleString()} pts</strong>{duel.phase !== 'lobby' && <p>{player.hits > 0 && player.accuracy === 0 ? '<1' : player.accuracy}% accuracy</p>}
           {duel.phase === 'playing' && <div className="duel-frets" aria-hidden="true">
             {palettes[player.profile.palette].map((color, lane) => <i key={lane} style={{ color }}
               className={player.strike?.lanes.includes(lane) ? player.strike.missed ? 'missed' : 'active' : player.frets.includes(lane) ? 'active' : ''} />)}
           </div>}
         </section>)}
         {duel.players.length < 2 && <section className="panel">Waiting for an opponent</section>}
-      </div>
+      </div>}
       {duel.phase === 'lobby' && <div className="duel-invite">
         {slot === duel.host && <details className="panel" open={duel.players.length < 2}>
           <summary>Share this duel</summary>
@@ -157,9 +157,16 @@ export default function DuelRoom(props: Props) {
         </details>}
         <p>Ready up to start. Playback continues if you switch tabs.</p>
       </div>}
-      {duel.phase === 'finished' && <section className="panel results" aria-live="polite">
+      {duel.phase === 'finished' && <section className="panel results stage-results finale duel-finale" aria-live="polite">
         <h2>{duel.winner === null ? 'Draw' : duel.winner === slot ? 'You won' : 'Your opponent won'}</h2>
-        {me && <p>{me.hits} notes hit · Best combo {me.bestCombo}</p>}
+        <div className="duel-final-scores">
+          {duel.players.map(player => <div key={player.slot}>
+            <PlayerCard profile={player.profile} />
+            <span>{player.slot === slot ? 'You' : 'Opponent'}</span>
+            <strong>{player.score.toLocaleString()}</strong>
+            <p>{player.hits} {player.hits === 1 ? 'note' : 'notes'} hit · Best combo {player.bestCombo}</p>
+          </div>)}
+        </div>
         {duel.reason && <p role="status">{duel.reason}</p>}
         {me?.profile.badges.length > 0 && <p>Earned badges: {me.profile.badges.map(badge => badgeNames[badge]).join(', ')}</p>}
         {slot === duel.host && <button className="primary" disabled={!duel.players.every(player => player.connected) || !connected}
@@ -171,7 +178,9 @@ export default function DuelRoom(props: Props) {
         ? <SoloGame key={duel.id} {...track} difficulty={duel.difficulty} keys={props.keys} calibration={props.calibration}
           profile={props.profile} leave={() => void leave()} match={{
             startAt: duel.startAt ? scheduled.current?.perf ?? null : null, ready: !!me?.ready,
+            ampCharge: me?.ampCharge ?? 0, boostEndMs: me?.boostEndMs ?? null, combo: me?.combo ?? 0,
             onReady: () => send('duel-ready', true),
+            onBoost: timeMs => { if (socket.current?.connected) socket.current.emit('duel-boost', timeMs); },
             onInput: (input: LaneInput) => { if (socket.current?.connected) socket.current.emit('duel-input', input); },
           }} />
         : <div className="panel"><p role="status">Loading the shared track…</p>{error && <button onClick={() => { setError(''); setReload(count => count + 1); }}>Retry track</button>}</div>)}

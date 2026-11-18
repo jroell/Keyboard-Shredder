@@ -12,16 +12,20 @@ export async function withAudioDeadline<T>(operation: Promise<T>, message: strin
 
 export class Transport {
   private source: AudioBufferSourceNode | null = null;
+  private leadSource: AudioBufferSourceNode | null = null;
+  private leadGain: GainNode | null = null;
   private contextStart = 0;
   private offset = 0;
+  private lastInputTime = -Infinity;
 
-  constructor(readonly context: AudioContext, readonly buffer: AudioBuffer) {}
+  constructor(readonly context: AudioContext, readonly buffer: AudioBuffer, readonly leadBuffer?: AudioBuffer) {}
 
   async start(offset = 0, countInMs = 650, scheduledAt?: number) {
     if (this.context.state !== 'running') {
       await withAudioDeadline(this.context.resume(), 'Audio did not resume. Press Play to try again.');
     }
     this.stop();
+    this.lastInputTime = -Infinity;
     if (this.context.state !== 'running') throw new Error('Audio could not start. Press Play to try again.');
     const source = this.context.createBufferSource();
     source.buffer = this.buffer;
@@ -34,6 +38,44 @@ export class Transport {
     this.contextStart = Math.max(current, target);
     this.offset = offset + Math.max(0, current - target) * 1000;
     source.start(this.contextStart, Math.min(this.buffer.duration, this.offset / 1000));
+    if (this.leadBuffer) {
+      const lead = this.context.createBufferSource();
+      const gain = this.context.createGain();
+      gain.gain.value = 0;
+      lead.buffer = this.leadBuffer;
+      lead.connect(gain);
+      gain.connect(this.context.destination);
+      this.leadSource = lead;
+      this.leadGain = gain;
+      lead.start(this.contextStart, Math.min(this.leadBuffer.duration, this.offset / 1000));
+    }
+  }
+
+  soundLead(startMs: number, endMs: number) {
+    if (!this.leadGain) return;
+    const toContext = (ms: number) => this.contextStart + (ms - this.offset) / 1000;
+    const start = Math.max(this.context.currentTime, toContext(startMs));
+    const end = toContext(endMs);
+    if (end <= start) return;
+    const ramp = Math.min(.005, (end - start) / 3);
+    const { gain } = this.leadGain;
+    gain.setValueAtTime(0, start);
+    gain.linearRampToValueAtTime(1, start + ramp);
+    gain.setValueAtTime(1, end - ramp);
+    gain.linearRampToValueAtTime(0, end);
+  }
+
+  muteLead() {
+    if (!this.leadGain) return;
+    const { gain } = this.leadGain;
+    const now = this.context.currentTime;
+    if (typeof gain.cancelAndHoldAtTime === 'function') {
+      gain.cancelAndHoldAtTime(now);
+      gain.linearRampToValueAtTime(0, now + .006);
+    } else {
+      gain.cancelScheduledValues(now);
+      gain.setTargetAtTime(0, now, .002);
+    }
   }
 
   timeMs(now = performance.now()) {
@@ -47,9 +89,20 @@ export class Transport {
     return this.offset + (time - this.contextStart) * 1000 + now - clockNow;
   }
 
+  inputTimeMs(timestamp: number) {
+    // A browser may refresh the output clock between a press and its release.
+    this.lastInputTime = Math.max(this.lastInputTime, this.timeMs(timestamp));
+    return this.lastInputTime;
+  }
+
   stop() {
     this.source?.stop();
     this.source?.disconnect();
     this.source = null;
+    this.leadSource?.stop();
+    this.leadSource?.disconnect();
+    this.leadGain?.disconnect();
+    this.leadSource = null;
+    this.leadGain = null;
   }
 }

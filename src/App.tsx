@@ -1,21 +1,31 @@
-import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { FirebaseOptions } from 'firebase/app';
 import type { Auth, User } from 'firebase/auth';
-import { Guitar, Headphones, Library, Music2, SlidersHorizontal } from 'lucide-react';
+import { Guitar, Library, Music2, Play, SlidersHorizontal, Swords } from 'lucide-react';
 import AccountAccess from './components/AccountAccess';
 import PlayerProfile from './components/PlayerProfile';
 import type { Profile } from '../shared/duel';
 import SoloGame from './components/Game/SoloGame';
+import PracticeSettings from './components/Game/PracticeSettings';
+import { DEFAULT_PRACTICE, normalizePracticeConfig, practiceKeys, PRACTICE_PRESETS } from '../shared/practice';
 import { DEFAULT_KEYS } from '../shared/scoring';
-import type { Chart, Difficulty, Job, Song } from '../shared/song';
+import { loadRecording, type Recording } from './lib/recording';
+import type { Difficulty, Job, Song } from '../shared/song';
 
 const DuelRoom = lazy(() => import('./components/Game/DuelRoom'));
 
 type Config = { authEmulator?: string; firebase: FirebaseOptions | null; localTest: boolean; musicEnabled: boolean; legacyDatabaseId: string | null };
-type Recording = { song: Song; chart: Chart; audio: ArrayBuffer };
 type LegacySong = { id: string; title: string; prompt?: string };
 const defaultPrompt = 'Punchy blues rock with a gritty electric guitar riff and a tight backbeat';
 const stageText = { queued: 'Waiting to generate…', composing: 'Composing your track…', charting: 'Finding guitar notes and chords…' };
+
+function savedPractice() {
+  try {
+    return normalizePracticeConfig(JSON.parse(localStorage.getItem('keyboard-shredder-practice') || 'null'));
+  } catch {
+    return DEFAULT_PRACTICE;
+  }
+}
 
 function savedSettings() {
   try {
@@ -45,6 +55,14 @@ export default function App() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [legacy, setLegacy] = useState<LegacySong[]>([]);
   const [prompt, setPrompt] = useState(defaultPrompt);
+  const [genreFilter, setGenreFilter] = useState('All tracks');
+  const [lengthFilter, setLengthFilter] = useState('All lengths');
+  const [practiceEnabled, setPracticeEnabled] = useState(false);
+  const [practice, setPractice] = useState(savedPractice);
+  const practiceLanes = useMemo(() => practiceKeys(practice), [practice]);
+  useEffect(() => {
+    try { localStorage.setItem('keyboard-shredder-practice', JSON.stringify(practice)); } catch { /* Storage is optional. */ }
+  }, [practice]);
   const [seconds, setSeconds] = useState<30 | 90>(90);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [job, setJob] = useState<Job>();
@@ -159,12 +177,9 @@ export default function App() {
     setLoading(true);
     setError('');
     try {
-      const [manifest, audio] = await Promise.all([
-        call(`/songs/${id}`).then(response => response.json()),
-        call(`/songs/${id}/audio`).then(response => response.arrayBuffer()),
-      ]);
-      setSongs(previous => previous.some(item => item.id === id) ? previous : [manifest.song, ...previous]);
-      setRecording({ ...manifest, audio });
+      const track = await loadRecording(call, `/songs/${id}`);
+      setSongs(previous => previous.some(item => item.id === id) ? previous : [track.song, ...previous]);
+      setRecording(track);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load the track.');
     } finally {
@@ -255,35 +270,92 @@ export default function App() {
     exit={() => { history.replaceState(null, '', location.pathname); setDuelInvite(null); }} /></Suspense>;
 
   const generating = !!job && job.stage !== 'ready' && job.stage !== 'failed';
-  if (recording) return <main className="studio">
-    <SoloGame key={recording.song.id} {...recording} difficulty={difficulty} profile={profile} {...settings} leave={() => setRecording(undefined)} />
+  if (recording) return <main className="studio arcade-stage">
+    <SoloGame key={recording.song.id} {...recording} difficulty={difficulty} profile={profile} {...settings}
+      keys={practiceEnabled ? practiceLanes : settings.keys}
+      practice={practiceEnabled ? PRACTICE_PRESETS[practice.preset].label : undefined}
+      leave={() => setRecording(undefined)} />
   </main>;
 
-  return <main className="studio">
+  const featured = songs[0];
+  const genres = [...new Set(songs.map(song => song.genre || 'My tracks'))];
+  const setlist = songs.filter(song =>
+    (genreFilter === 'All tracks' || (song.genre || 'My tracks') === genreFilter) &&
+    (lengthFilter === 'All lengths' || (song.durationMs >= 60_000) === (lengthFilter === 'Full songs')));
+  const durationLabel = (ms: number) => {
+    const seconds = Math.round(ms / 1000);
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  };
+
+  return <main className="studio arcade-studio">
     <header className="masthead"><div className="brand"><Guitar aria-hidden="true" /><span>Keyboard Shredder</span></div>
-      {canUseLibrary && <button disabled={generating || loading} onClick={() => setDuelInvite('')}>Head-to-head</button>}
-      {user && <button disabled={generating || loading} onClick={() => void import('firebase/auth').then(({ signOut }) => signOut(auth!))}>Sign out</button>}</header>
-    <section className="hero"><h1>Make a track.<br />Play the guitar.</h1>
-      <p>Generate an original guitar track and play its riffs, chords, and solos on your keyboard.</p></section>
+      <div className="arcade-nav">
+        {canUseLibrary && <button disabled={generating || loading} onClick={() => setDuelInvite('')}><Swords size={17} aria-hidden="true" /> Head-to-head</button>}
+        {user && <button disabled={generating || loading} onClick={() => void import('firebase/auth').then(({ signOut }) => signOut(auth!))}>Sign out</button>}
+      </div>
+    </header>
+    <section className="hero arcade-hero">
+      <h1>Keyboard<br />Shredder</h1>
+      <p>{config?.musicEnabled ? 'Play the setlist, create your own riffs, or challenge a friend.'
+        : 'Pick a track from the setlist or challenge a friend.'}</p>
+      {canUseLibrary && featured && <div className="hero-action">
+        <button className="primary" disabled={loading || generating} onClick={() => void openTrack(featured.id)}>
+          <Play size={16} aria-hidden="true" />Play {featured.title}
+        </button>
+        <a href="#setlist">Browse setlist</a>
+        <a href="#keyboard-practice">Keyboard practice</a>
+        {config?.musicEnabled && <a href="#create-track">Create a track</a>}
+      </div>}
+    </section>
     {!config && !error && <p role="status">Connecting to the studio…</p>}
     {config && !canUseLibrary && (auth
       ? <AccountAccess auth={auth} invite={duelInvite !== null} />
       : <p role="status">The studio needs a Firebase sign-in configuration.</p>)}
     {error && <p className="error" role="alert">{error}</p>}
     {canUseLibrary && <div className="studio-grid">
+      <section id="setlist" className="panel library arcade-library"><h2><Library aria-hidden="true" /> Setlist</h2>
+        <div className="setlist-filters">
+          <label>Genre<select value={genreFilter} onChange={event => setGenreFilter(event.target.value)}>
+            <option>All tracks</option>{genres.map(genre => <option key={genre}>{genre}</option>)}
+          </select></label>
+          <label>Difficulty<select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>
+            <option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option>
+          </select></label>
+          <label>Track length<select value={lengthFilter} onChange={event => setLengthFilter(event.target.value)}>
+            <option>All lengths</option><option>Quick songs</option><option>Full songs</option>
+          </select></label>
+        </div>
+        {songs.length > 0 && setlist.length === 0 && <p>No tracks match these filters.</p>}
+        {!songs.length && !legacy.length && <p>Your tracks appear here after you generate them.</p>}
+        {loading && !generating && <p role="status">Loading track…</p>}
+        <ul>
+          {setlist.map(song => <li key={song.id}>
+            <div className="setlist-track"><span className="record-mark" aria-hidden="true" />
+              <div><strong>{song.title}</strong><p>{song.credit && <>{song.credit.artist} · </>}{song.genre || 'My tracks'} · {durationLabel(song.durationMs)}</p>
+                {song.credit && <p><a href={song.credit.source} target="_blank" rel="noreferrer">Source</a> · <a href={song.credit.licenseUrl} target="_blank" rel="noreferrer">{song.credit.license}</a></p>}</div>
+            </div>
+            <button aria-label={`Load ${song.title}`} disabled={loading || generating} onClick={() => void openTrack(song.id)}><Play size={15} aria-hidden="true" /></button>
+          </li>)}
+          {genreFilter === 'All tracks' && lengthFilter === 'All lengths' && legacy.map(song => <li key={song.id}><div><strong>{song.title}</strong><p>Original audio unavailable</p></div>
+            {song.prompt && <button onClick={() => { setPrompt(song.prompt!); document.getElementById('prompt')?.focus(); }}>Use prompt</button>}</li>)}
+        </ul>
+      </section>
       <div>
-        <form className="panel composer" onSubmit={event => void generate(event)}>
+        <section id="keyboard-practice" className="panel settings">
+          <h2>Keyboard practice</h2>
+          <label className="practice-toggle"><input type="checkbox" checked={practiceEnabled}
+            onChange={event => setPracticeEnabled(event.target.checked)} /> Use practice keys in solo tracks</label>
+          {practiceEnabled && <PracticeSettings value={practice} onChange={setPractice} />}
+        </section>
+        {config?.musicEnabled && <form id="create-track" className="panel composer" onSubmit={event => void generate(event)}>
           <h2><Music2 aria-hidden="true" /> Create a track</h2>
           <label htmlFor="prompt">Describe your music</label>
           <textarea id="prompt" maxLength={500} rows={3} value={prompt} onChange={event => setPrompt(event.target.value)} />
           <div className="controls">
             <label>Length<select value={seconds} onChange={event => setSeconds(Number(event.target.value) as 30 | 90)}>
               <option value={90}>Full track · 90s</option><option value={30}>Quick Play · 30s</option></select></label>
-            <label>Difficulty<select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>
-              <option value="normal">Normal</option><option value="hard">Hard</option></select></label>
           </div>
-          <button className="primary" disabled={!prompt.trim() || loading || generating || !config?.musicEnabled}>Generate track</button>
-          {!config?.musicEnabled && <p>Track generation is unavailable until the server music key is configured.</p>}
+          <button disabled={!prompt.trim() || loading || generating || !config?.musicEnabled}>Generate track</button>
           {generating && <div className="job" role="status">
             <p>{reconnecting ? 'Reconnecting to the studio…' : stageText[job.stage as keyof typeof stageText]}</p>
             <progress aria-label="Generating track" />
@@ -293,7 +365,7 @@ export default function App() {
             <p>{job.error || 'Track generation failed.'}</p>
             {job.canRetryChart && <button type="button" disabled={loading} onClick={() => void retryChart()}>Retry chart analysis</button>}
           </div>}
-        </form>
+        </form>}
         {profile && <PlayerProfile key={user?.uid ?? 'local'} profile={profile} save={saveProfile} />}
         {profileError && <p role="status">{profileError}</p>}
         <details className="panel settings">
@@ -309,16 +381,7 @@ export default function App() {
           <button type="button" onClick={() => { setRemapping(undefined); setRemapStatus('Default controls restored.'); setSettings({ keys: DEFAULT_KEYS, calibration: 0 }); }}>Reset controls</button>
         </details>
       </div>
-      <section className="panel library"><h2><Library aria-hidden="true" /> Your tracks</h2>
-        {!songs.length && !legacy.length && <p>Your tracks appear here after you generate them.</p>}
-        {loading && !generating && <p role="status">Working…</p>}
-        <ul>
-          {songs.map(song => <li key={song.id}><div><strong>{song.title}</strong><p>{Math.round(song.durationMs / 1000)} seconds</p></div>
-            <button aria-label={`Load ${song.title}`} disabled={loading || generating} onClick={() => void openTrack(song.id)}><Headphones aria-hidden="true" /> Load</button></li>)}
-          {legacy.map(song => <li key={song.id}><div><strong>{song.title}</strong><p>Original audio unavailable</p></div>
-            {song.prompt && <button onClick={() => { setPrompt(song.prompt!); document.getElementById('prompt')?.focus(); }}>Use prompt</button>}</li>)}
-        </ul>
-      </section>
+
     </div>}
   </main>;
 }
