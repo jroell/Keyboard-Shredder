@@ -146,6 +146,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
 
   useEffect(() => {
     primary.current?.focus({ preventScroll: true });
+    document.querySelector('.results-layer')?.scrollTo(0, 0);
     const timers: ReturnType<typeof setTimeout>[] = [];
     const later = (ms: number, run: () => void) => timers.push(setTimeout(run, ms));
     if (!failed) {
@@ -256,7 +257,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         <div className="results-score">
           <span>{typing ? 'Words per minute' : 'Score'}</span>
           <strong data-testid="final-score">{typing ? (summary.wpm ?? 0).toFixed(1) : shownScore.toLocaleString()}</strong>
-          {!typing && <p className={outcome.newBest && !failed ? 'best new' : 'best'}>
+          {!typing && !(setup.set && !songCleared(summary)) && <p className={outcome.newBest && !failed ? 'best new' : 'best'}>
             {failed ? `Made it ${Math.round(100 * summary.durationMs / recording.chart.durationMs)}% of the way`
               : outcome.newBest ? (outcome.firstClear ? (summary.stars > 0 ? 'First clear!' : 'First time through') : `New personal best! +${(summary.score - outcome.previousBest).toLocaleString()}`)
               : outcome.previousBest > 0 ? `Personal best ${outcome.previousBest.toLocaleString()}` : ''}</p>}

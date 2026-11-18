@@ -15,7 +15,7 @@ import { beatPulse, Highway, StageRenderer, type LaneLayout } from '../game/rend
 import { laneLayout, typingLayout } from '../game/layouts';
 import { FINGER_COLORS } from '../game/themes';
 import { sfx } from '../game/sfx';
-import { padFocus, padName, PadReader, pads } from '../game/gamepad';
+import { looksLikeGuitar, padFocus, padName, PadReader, pads } from '../game/gamepad';
 import { laneColors, saveStore, settingsStore, useCell } from '../state/store';
 import { completeRun, type Outcome } from '../state/progress';
 import PlayerHud, { type HudHandle } from './PlayerHud';
@@ -148,11 +148,11 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
 
   const guitarName = useGuitarName();
   // With one guitar it takes player 2; with two, both seats.
-  const guitarSeats = !guitarName || !setup.party ? [] : pads().length > 1 ? [0, 1] : [1];
+  const guitarSeats = !guitarName ? [] : !setup.party ? (pads().some(looksLikeGuitar) ? [0] : []) : pads().length > 1 ? [0, 1] : [1];
   const layouts = useMemo<LaneLayout[]>(() => players.map((player, index) => typing
     ? typingLayout(player.keys)
     : laneLayout(player.keys, laneColors(settings), !setup.party && (setup.difficulty === 'beginner' || !!setup.tutorial),
-      !!setup.party && guitarSeats.includes(index))),
+      guitarSeats.includes(index))),
   [players, typing, settings, setup.party, guitarSeats.join()]);
 
   const session = useRef<GameSession>(null);
@@ -386,7 +386,9 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       totalNotes: events.length, bestCombo: scoring.bestCombo, fullCombo: !failed && isFullCombo(tally), failed,
       boostsUsed: scoring.boostsUsed, durationMs: Math.max(0, Math.min(chart.durationMs, game.rawTime())),
       // In wait mode speed is the learner's own: letters after the first, over the time from first key to last.
-      wpm: typing ? (game.wait ? wpm(Math.max(0, scoring.hits - 1), Math.max(1000, game.lastKeyAt - game.firstKeyAt)) : wpm(scoring.hits, Math.max(1000, span))) : undefined, won: partyWin, lessonId: setup.typing?.lesson?.id, genre: song.genre,
+      // Party rewards belong to the profile that is signed in on this device, so a win only counts when that player sat in seat 1.
+      won: partyWin && setup.party && setup.party.names[0] !== (save.name || 'Player 1') ? false : partyWin,
+      wpm: typing ? (game.wait ? wpm(Math.max(0, scoring.hits - 1), Math.max(1000, game.lastKeyAt - game.firstKeyAt)) : wpm(scoring.hits, Math.max(1000, span))) : undefined, lessonId: setup.typing?.lesson?.id, genre: song.genre,
     };
     // One decimal, rounded down, so 100% is only ever shown for a clean passage.
     const attempts = scoring.hits + scoring.misses + scoring.wrongKeys;
@@ -674,7 +676,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
             {[0.5, 0.75, 1].map(rate => <button key={rate} type="button" className={setup.practice!.rate === rate ? 'on' : ''} aria-pressed={setup.practice!.rate === rate}
               onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, rate } }); }}>{rate * 100}% speed</button>)}
           </div>
-          <p className="muted">The section loops until you stop. Nothing here is scored or ranked.</p>
+          <p className="muted">The section loops until you stop. Practice scores are shown for feedback only: nothing is saved or ranked.</p>
         </div>}
         {typing ? <>
           <p>Type each letter as its gem reaches the ring. Keep your fingers on the home row and use the finger with the matching color.</p>
