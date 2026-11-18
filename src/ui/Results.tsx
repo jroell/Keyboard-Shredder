@@ -82,7 +82,10 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   const party = setup.party;
   const typing = !!result.typing;
   const failed = summary.failed;
-  const stars = party?.coop ? Math.min(5, Math.round((starsFor(scorings[0].tally) + starsFor(scorings[1].tally)) / 2)) : summary.stars;
+  // A lesson is graded on its own three-star scale.
+  const starSlots = outcome.lesson ? 3 : 5;
+  const stars = outcome.lesson ? outcome.lesson.stars
+    : party?.coop ? Math.min(5, Math.round((starsFor(scorings[0].tally) + starsFor(scorings[1].tally)) / 2)) : summary.stars;
   const shownScore = useCountUp(party?.coop ? finalScore(scorings[0].score + scorings[1].score, setup.mods) : summary.score, 900);
   const before = useMemo(() => levelFor(outcome.save.xp - outcome.xp.total), [outcome]);
   const after = useMemo(() => levelFor(outcome.save.xp), [outcome]);
@@ -96,7 +99,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
     const timers: ReturnType<typeof setTimeout>[] = [];
     const later = (ms: number, run: () => void) => timers.push(setTimeout(run, ms));
     if (!failed) {
-      for (let index = 0; index < Math.min(5, stars); index++) later(350 + index * 190, () => sfx.play('star', { pitch: index * 2 }));
+      for (let index = 0; index < Math.min(starSlots, stars); index++) later(350 + index * 190, () => sfx.play('star', { pitch: index * 2 }));
       if (stars === 6) later(350 + 5 * 190, () => sfx.play('star-gold'));
     }
     later(2050, () => sfx.play('grade-stamp'));
@@ -111,7 +114,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
     }
     outcome.achievements.forEach((_, index) => later(3000 + index * 450, () => sfx.play('achievement')));
     if (outcome.unlocked.length) later(3700, () => sfx.play('unlock'));
-    if (!failed && (summary.fullCombo || stars >= 5) && !settings.calm) {
+    if (!failed && (summary.fullCombo || summary.stars >= 5) && !settings.calm) {
       later(600, () => void confetti({ particleCount: 90, spread: 80, origin: { y: 0.3 }, disableForReducedMotion: true }));
     }
     return () => timers.forEach(clearTimeout);
@@ -157,7 +160,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   const title = failed ? (setup.mods.includes('sudden') ? 'Sudden death' : 'Booed off stage')
     : party ? (party.coop ? 'Set complete' : `${party.names[scorings[0].score >= scorings[1].score ? 0 : 1]} wins!`)
     : outcome.lesson ? (outcome.lesson.passed ? 'Lesson passed' : 'Keep practising')
-    : summary.fullCombo ? 'Full combo!' : stars >= 5 ? 'Standing ovation' : stars >= 3 ? 'Set complete' : 'Rough night';
+    : summary.fullCombo ? 'Full combo!' : summary.stars >= 5 ? 'Standing ovation' : summary.stars >= 3 ? 'Set complete' : 'Rough night';
   const challenge = setup.challenge;
   const beat = challenge && !failed && summary.score > challenge.score;
   const weak = result.keyStats ? weakestKeys(result.keyStats, 3, 3).filter(code => {
@@ -188,8 +191,8 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         })}
         {party.coop && <div className="team-total"><span>Team score</span><strong>{shownScore.toLocaleString()}</strong></div>}
       </div> : <div className="results-hero">
-        <div className="results-stars" role="img" aria-label={`${Math.min(5, stars)} out of 5 stars${stars === 6 ? ', gold' : ''}`} data-gold={stars === 6 ? 'true' : undefined}>
-          {Array.from({ length: 5 }, (_, index) => <Star key={index} aria-hidden="true"
+        <div className="results-stars" role="img" aria-label={`${Math.min(starSlots, stars)} out of ${starSlots} stars${stars === 6 ? ', gold' : ''}`} data-gold={stars === 6 ? 'true' : undefined}>
+          {Array.from({ length: starSlots }, (_, index) => <Star key={index} aria-hidden="true"
             className={index < stars ? 'earned' : ''} style={{ '--delay': `${350 + index * 190}ms` } as CSSProperties} />)}
         </div>
         <div className="results-score">
@@ -210,7 +213,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       {outcome.tour && <p className="challenge-result won" role="status">
         {outcome.tour.firstClear ? 'Song cleared. The next show is unlocked.' : outcome.tour.cleared ? 'Song cleared.' : 'Hit 60% of the notes to clear this song.'}</p>}
       {outcome.lesson && <p className={`challenge-result ${outcome.lesson.passed ? 'won' : 'lost'}`} role="status">
-        {outcome.lesson.passed ? `${outcome.lesson.stars} of 3 stars.${outcome.lesson.firstPass && outcome.lesson.next ? ` Unlocked: ${outcome.lesson.next.title}.` : ''}`
+        {outcome.lesson.passed ? `${outcome.lesson.stars === 3 ? 'Three stars. Nothing left to prove here.' : 'Reach 97% accuracy for three stars.'}${outcome.lesson.firstPass && outcome.lesson.next ? ` Unlocked: ${outcome.lesson.next.title}.` : ''}`
           : `Reach ${setup.typing!.lesson!.goal.accuracy}% accuracy to pass. You hit ${result.typingAccuracy}%.`}</p>}
 
       {!party && <dl className="results-stats">
