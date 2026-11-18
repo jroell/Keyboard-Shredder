@@ -45,6 +45,8 @@ export type RunResult = {
   offsets: number[]; windowMs: number;
   /** The run was paused at least once. */
   paused: boolean;
+  /** Every moment that cost points or the streak: a missed note, a stray press or a hold let go early. */
+  troubles: { timeMs: number; kind: 'miss' | 'stray' | 'drop'; streak: number }[];
   /** A typing run where the song waited for each letter, so timing was not judged. */
   waited: boolean;
 };
@@ -63,6 +65,8 @@ type Props = {
   /** Extra content on the ready card, such as an invite link. */
   readyExtra?: ReactNode;
 };
+
+export const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 
 /** A song is split into this many sections for practice and for the results timeline. */
 export const SECTIONS = 8;
@@ -156,6 +160,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   const handler = useRef<(event: SessionEvent) => void>(() => {});
   const shown = useRef<number[]>([]);
   const typingState = useRef({ index: 0, word: -1 });
+  const troubles = useRef<RunResult['troubles']>([]);
   const boostWasOn = useRef<boolean[]>([]);
 
   const callout = useCallback((text: string, kind = '', player = -1) => {
@@ -394,7 +399,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     }) : { save, xp: { total: 0, parts: [] }, levelBefore: 0, levelAfter: 0, unlocked: [], achievements: [], newBest: false, firstClear: false,
       previousBest: 0, streak: { days: save.streak.days, extended: false } } as Outcome;
     setResult({ summary, outcome, log: game.logs[0], scorings: [...game.scorings], events, keyStats, typing, typingAccuracy,
-      hitOffsetMs: offsets.length >= 20 ? median(offsets) : null, offsets, windowMs: players[0].windowMs, paused: game.paused, waited: game.wait });
+      hitOffsetMs: offsets.length >= 20 ? median(offsets) : null, offsets, windowMs: players[0].windowMs, paused: game.paused, waited: game.wait, troubles: [...troubles.current] });
   }, [players, typing, setup, song, chart.durationMs, bot, save]);
 
   // Session events: sound, callouts and state.
@@ -403,7 +408,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     if (!game) return;
     if (event.type === 'state') {
       setState(event.state);
-      if (event.state === 'playing') setError('');
+      if (event.state === 'playing') { setError(''); if (game.rawTime() <= (setup.practice?.startMs ?? 0)) troubles.current = []; }
       if (event.state === 'finished') {
         sfx.stopCrowd();
         if (setup.practice) {
@@ -443,6 +448,10 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       return;
     }
     highway?.onScore(event.event, now);
+    if (event.player === 0 && (event.event.type === 'miss' || event.event.type === 'wrong' || event.event.type === 'drop')) {
+      const at = event.event.type === 'wrong' ? event.event.timeMs : event.event.event.timeMs;
+      troubles.current.push({ timeMs: at, kind: event.event.type === 'wrong' ? 'stray' : event.event.type, streak: event.event.brokeCombo });
+    }
     score(event.player, event.event, game.scorings[event.player]);
   };
 
@@ -598,7 +607,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   }, [state]);
   const mixed = setup.party?.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1] ? setup.party.difficulties : undefined;
   const modeLine = [typing ? setup.typing?.lesson?.title ?? 'Free typing' : mixed ? `${difficultyNames[mixed[0]]} vs ${difficultyNames[mixed[1]]}` : difficultyNames[setup.difficulty],
-    ...setup.mods.map(id => MODS[id].name), ...(setup.practice ? [setup.practice.endMs - setup.practice.startMs >= chart.durationMs - 1 ? 'Whole song' : `Section ${Math.round(setup.practice.startMs / (chart.durationMs / SECTIONS)) + 1}`, `${setup.practice.rate * 100}% speed`, 'looping'] : [])].join(' · ');
+    ...setup.mods.map(id => MODS[id].name), ...(setup.practice ? [setup.practice.endMs - setup.practice.startMs >= chart.durationMs - 1 ? 'Whole song' : Math.abs(setup.practice.endMs - setup.practice.startMs - chart.durationMs / SECTIONS) > 5 || (setup.practice.startMs % (chart.durationMs / SECTIONS)) > 5 ? `${clock(setup.practice.startMs)} to ${clock(setup.practice.endMs)}` : `Section ${Math.round(setup.practice.startMs / (chart.durationMs / SECTIONS)) + 1}`, `${setup.practice.rate * 100}% speed`, 'looping'] : [])].join(' · ');
   const single = players.length === 1;
   const waitingForMatch = !!match && match.ready && match.startAt === null;
   const startLabel = state === 'starting' ? 'Loading audio…' : match ? match.startAt ? 'Join playback' : match.ready ? 'Ready' : 'Ready up' : 'Start';

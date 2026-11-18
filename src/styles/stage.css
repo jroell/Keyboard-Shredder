@@ -293,3 +293,7 @@
   .results-actions .hint { display: none; }
 }
 .stage[data-typing] .hud-right { padding-left: 3rem; }
+
+.trouble-spots { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; font-size: .82rem; color: var(--muted); }
+.trouble-spots button { min-height: 36px; padding: .2rem .7rem; font-size: .82rem; border-color: #ff5a5a66; }
+.timeline-key { font-size: .74rem; color: var(--muted); }

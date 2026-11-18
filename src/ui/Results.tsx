@@ -11,7 +11,7 @@ import { fetchBoard, submitScore, type Board, type Submitted } from '../lib/api'
 import { sfx } from '../game/sfx';
 import { saveStore, settingsStore, useCell } from '../state/store';
 import { songCleared } from '../App';
-import { SECTIONS, type RunResult, type RunSetup } from './GameScreen';
+import { clock, SECTIONS, type RunResult, type RunSetup } from './GameScreen';
 import KeyboardGuide, { fingerName } from './KeyboardGuide';
 import confetti from 'canvas-confetti';
 
@@ -80,23 +80,35 @@ function Timeline({ result, durationMs, onPractice }: { result: RunResult; durat
     const events = result.events.filter(event => event.timeMs >= index * size && event.timeMs < (index + 1) * size);
     const judged = events.filter(event => scoring.consumed.has(event.id));
     const hits = judged.filter(event => scoring.hitOffsets.has(event.id)).length;
-    return { total: events.length, judged: judged.length, hits };
+    const slips = result.troubles.filter(item => item.kind !== 'miss' && item.timeMs >= index * size && item.timeMs < (index + 1) * size).length;
+    return { total: events.length, judged: judged.length, hits, slips };
   });
+  // The costliest moments: a broken streak first, then anything else, a few seconds apart.
+  const spots = [...result.troubles].sort((a, b) => b.streak - a.streak || a.timeMs - b.timeMs)
+    .filter((item, index, all) => all.findIndex(other => Math.abs(other.timeMs - item.timeMs) < 4000) === index).slice(0, 4).sort((a, b) => a.timeMs - b.timeMs);
+  const label = { miss: 'missed note', stray: 'stray press', drop: 'hold let go early' };
   const weakest = sections.reduce((worst, section, index) => section.judged && section.hits / section.judged < (sections[worst].judged ? sections[worst].hits / sections[worst].judged : 2) ? index : worst, 0);
-  const clean = sections.every(section => section.hits === section.judged);
+  const clean = sections.every(section => section.hits === section.judged && !section.slips);
   return <figure className="timeline">
     <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `Section ${weakest + 1} cost you the most. Click any section to loop it slowly.`}</figcaption>
     <div className="timeline-row">
       {sections.map((section, index) => {
         const rate = section.judged ? section.hits / section.judged : null;
-        return <button key={index} type="button" data-tone={rate === null ? 'none' : rate >= 0.95 ? 'clean' : rate >= 0.75 ? 'ok' : 'rough'}
+        return <button key={index} type="button" data-tone={rate === null ? 'none' : rate >= 0.95 && !section.slips ? 'clean' : rate >= 0.75 ? 'ok' : 'rough'}
           title={section.judged ? `Section ${index + 1}: ${section.hits} of ${section.judged} notes hit` : `Section ${index + 1}: not reached`}
           aria-label={`Practice section ${index + 1}${section.judged ? `, ${section.hits} of ${section.judged} notes hit` : ''}`}
           onClick={() => onPractice({ startMs: Math.round(index * size), endMs: Math.round((index + 1) * size), rate: 0.75 })}>
-          <b>{index + 1}</b><small>{section.judged ? `${section.hits}/${section.judged}` : '·'}</small>
+          <b>{index + 1}</b><small>{section.judged ? `${section.hits}/${section.judged}${section.slips ? ` +${section.slips}` : ''}` : '·'}</small>
         </button>;
       })}
     </div>
+    {spots.length > 0 && <div className="trouble-spots">
+      <span>Loop the exact spot:</span>
+      {spots.map(spot => <button key={spot.timeMs} type="button" title="Loops six seconds around this moment at 75% speed"
+        onClick={() => onPractice({ startMs: Math.max(0, Math.round(spot.timeMs - 3000)), endMs: Math.min(durationMs, Math.round(spot.timeMs + 3000)), rate: 0.75 })}>
+        {clock(spot.timeMs)} {label[spot.kind]}{spot.streak >= 10 ? ` (ended a ${spot.streak} streak)` : ''}</button>)}
+    </div>}
+    <p className="timeline-key">Each box shows notes hit out of notes in that section. A plus counts stray presses and holds let go early.</p>
   </figure>;
 }
 
