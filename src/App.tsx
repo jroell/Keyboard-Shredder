@@ -1,443 +1,261 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { FirebaseOptions } from 'firebase/app';
 import type { Auth, User } from 'firebase/auth';
-import { Guitar, Library, Music2, Play, SlidersHorizontal, Swords } from 'lucide-react';
-import AccountAccess from './components/AccountAccess';
-import PlayerProfile from './components/PlayerProfile';
 import type { Profile } from '../shared/duel';
-import SoloGame from './components/Game/SoloGame';
-import { isTourSongUnlocked, normalizeTourProgress, recordTourResult } from '../shared/tour';
-import { stageArt } from './lib/stage-art';
-import { readPracticeHistory, writePracticeHistory } from './lib/practice-history';
-import type { PracticeRun } from '../shared/practice-progress';
-import PracticeSettings from './components/Game/PracticeSettings';
-import { DEFAULT_PRACTICE, normalizePracticeConfig, practiceKeys, PRACTICE_PRESETS } from '../shared/practice';
-import { DEFAULT_KEYS } from '../shared/scoring';
+import type { Song } from '../shared/song';
+import { DIFFICULTIES, difficultyNames, isDifficulty } from '../shared/difficulty';
+import { normalizeMods } from '../shared/modifiers';
+import { isTourSongCleared, TOUR_TRACKS } from '../shared/tour';
+import { TYPING_LESSONS, type TypingLesson } from '../shared/typing';
+import { call, fetchSongs, guestToken, setTokenSource } from './lib/api';
 import { loadRecording, type Recording } from './lib/recording';
-import type { Difficulty, Job, Song } from '../shared/song';
+import { previewSong, stopPreview } from './lib/preview';
+import { sfx } from './game/sfx';
+import { saveStore, settingsStore, tourStore, useCell } from './state/store';
+import GameScreen, { type RunResult, type RunSetup } from './ui/GameScreen';
+import Title from './ui/Title';
+import MainMenu from './ui/MainMenu';
 
-const Tour = lazy(() => import('./components/Game/Tour'));
-const PracticeProgress = lazy(() => import('./components/Game/PracticeProgress'));
-const DuelRoom = lazy(() => import('./components/Game/DuelRoom'));
+const SongSelect = lazy(() => import('./ui/SongSelect'));
+const TourScreen = lazy(() => import('./ui/TourScreen'));
+const Academy = lazy(() => import('./ui/Academy'));
+const PartySetup = lazy(() => import('./ui/PartySetup'));
+const Online = lazy(() => import('./ui/Online'));
+const Locker = lazy(() => import('./ui/Locker'));
+const SettingsScreen = lazy(() => import('./ui/SettingsScreen'));
+const CreateTrack = lazy(() => import('./ui/CreateTrack'));
 
-type Config = { authEmulator?: string; firebase: FirebaseOptions | null; localTest: boolean; musicEnabled: boolean; legacyDatabaseId: string | null };
-type LegacySong = { id: string; title: string; prompt?: string };
-const defaultPrompt = 'Punchy blues rock with a gritty electric guitar riff and a tight backbeat';
-const stageText = { queued: 'Waiting to generate…', composing: 'Composing your track…', charting: 'Finding guitar notes and chords…' };
+export type Config = { authEmulator?: string; firebase: FirebaseOptions | null; localTest: boolean; musicEnabled: boolean; legacyDatabaseId: string | null; guest?: boolean };
+export type ScreenName = 'title' | 'menu' | 'songs' | 'tour' | 'academy' | 'party' | 'online' | 'locker' | 'settings' | 'create';
+export type Route =
+  | { name: Exclude<ScreenName, 'online'> }
+  | { name: 'online'; invite: string; coop: boolean }
+  | { name: 'play'; recording: Recording; setup: RunSetup; back: Route };
 
-function savedPractice() {
+export type AppApi = {
+  config?: Config; auth?: Auth; user: User | null | undefined; songs: Song[]; profile?: Profile;
+  go: (route: Route) => void;
+  launch: (songId: string, setup: RunSetup, back: Route) => Promise<void>;
+  startLesson: (lesson: TypingLesson, back?: Route) => Promise<void>;
+  refreshSongs: () => Promise<void>;
+  saveProfile: (value: Profile) => Promise<Profile>;
+  refreshProfile: () => void;
+  loading: string;
+  error: string;
+  setError: (message: string) => void;
+};
+
+const AppContext = createContext<AppApi | null>(null);
+export function useApp() {
+  const value = useContext(AppContext);
+  if (!value) throw new Error('App context is missing.');
+  return value;
+}
+
+function localPlayer() {
+  const key = new URLSearchParams(location.search).get('player');
+  const requested = key && /^test-[a-z0-9]{1,40}$/.test(key) ? key : null;
   try {
-    return normalizePracticeConfig(JSON.parse(localStorage.getItem('keyboard-shredder-practice') || 'null'));
+    if (requested) sessionStorage.setItem('shredder-local-player', requested);
+    return sessionStorage.getItem('shredder-local-player') || 'test-player';
   } catch {
-    return DEFAULT_PRACTICE;
+    return requested ?? 'test-player';
   }
 }
 
-function savedSettings() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('keyboard-shredder-controls') || '{}');
-    return {
-      keys: Array.isArray(saved.keys) && saved.keys.length === 5 && saved.keys.every(key => /^(Key[A-Z]|Digit[0-9])$/.test(key)) &&
-        new Set(saved.keys).size === 5 ? saved.keys as string[] : DEFAULT_KEYS,
-      calibration: Number.isFinite(saved.calibration) ? Math.max(-250, Math.min(250, saved.calibration)) : 0,
-    };
-  } catch {
-    return { keys: DEFAULT_KEYS, calibration: 0 };
-  }
-}
-
-async function apiError(response: Response) {
-  const body = await response.json().catch(() => ({}));
-  return new Error(body.error || `Request failed (HTTP ${response.status}). Try again.`);
+type Challenge = { songId: string; setup: RunSetup };
+function readChallenge(): Challenge | null {
+  const raw = new URLSearchParams(location.search).get('c');
+  if (!raw) return null;
+  const [songId, difficulty, score, name, mods = ''] = raw.split('~');
+  if (!/^[a-z0-9-]{1,80}$/i.test(songId ?? '') || !isDifficulty(difficulty) || !Number.isFinite(Number(score))) return null;
+  return { songId, setup: {
+    mode: 'challenge', difficulty, mods: normalizeMods(mods.split('+')),
+    challenge: { name: (name || 'A friend').replace(/[^\p{L}\p{N} ._'-]/gu, '').slice(0, 24) || 'A friend', score: Math.max(0, Math.round(Number(score))) },
+  } };
 }
 
 export default function App() {
-  const [duelInvite, setDuelInvite] = useState<string | null>(() => new URLSearchParams(location.search).get('duel'));
-  const [profile, setProfile] = useState<Profile>();
-  const [profileError, setProfileError] = useState('');
   const [config, setConfig] = useState<Config>();
   const [auth, setAuth] = useState<Auth>();
   const [user, setUser] = useState<User | null>();
   const [songs, setSongs] = useState<Song[]>([]);
-  const [legacy, setLegacy] = useState<LegacySong[]>([]);
-  const [prompt, setPrompt] = useState(defaultPrompt);
-  const [genreFilter, setGenreFilter] = useState('All tracks');
-  const [lengthFilter, setLengthFilter] = useState('All lengths');
-  const [practiceEnabled, setPracticeEnabled] = useState(false);
-  const [practice, setPractice] = useState(savedPractice);
-  const practiceLanes = useMemo(() => practiceKeys(practice), [practice]);
-  useEffect(() => {
-    try { localStorage.setItem('keyboard-shredder-practice', JSON.stringify(practice)); } catch { /* Storage is optional. */ }
-  }, [practice]);
-  const [seconds, setSeconds] = useState<30 | 90>(90);
-  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
-  const [job, setJob] = useState<Job>();
-  const [recording, setRecording] = useState<Recording & { tour?: boolean }>();
-  const [tourOpen, setTourOpen] = useState(false);
-  const [tourDifficulty, setTourDifficulty] = useState<Difficulty>('normal');
-  const [coop, setCoop] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [reconnecting, setReconnecting] = useState(false);
+  const [profile, setProfile] = useState<Profile>();
+  const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
-  const [settings, setSettings] = useState(savedSettings);
-  const [remapping, setRemapping] = useState<number>();
-  const [remapStatus, setRemapStatus] = useState('');
-  const request = useRef<{ key: string; prompt: string; durationSeconds: number }>(null);
+  const invite = useMemo(() => new URLSearchParams(location.search).get('duel'), []);
+  const challenge = useMemo(readChallenge, []);
+  const [route, setRoute] = useState<Route>(invite !== null ? { name: 'online', invite, coop: false } : { name: 'title' });
   const busy = useRef(false);
-  const canUseLibrary = config?.localTest || !!user;
+  const settings = useCell(settingsStore);
+  const save = useCell(saveStore);
+
+  useEffect(() => { sfx.volume = settings.sfxVolume; }, [settings.sfxVolume]);
+  useEffect(() => { document.documentElement.dataset.calm = settings.calm ? 'true' : 'false'; }, [settings.calm]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     let active = true;
     fetch('/api/config').then(async response => {
-      if (!response.ok) throw await apiError(response);
+      if (!response.ok) throw new Error('config');
       const next = await response.json() as Config;
       if (!active) return;
+      if (next.localTest) setTokenSource(async () => localPlayer());
       setConfig(next);
-      if (!next.firebase || next.localTest) return;
+      if (!next.firebase || next.localTest) { setUser(null); return; }
       const [{ initializeApp }, { connectAuthEmulator, getAuth, onAuthStateChanged }] = await Promise.all([import('firebase/app'), import('firebase/auth')]);
       if (!active) return;
-      const firebase = initializeApp(next.firebase);
-      const client = getAuth(firebase);
+      const client = getAuth(initializeApp(next.firebase));
       if (next.authEmulator) connectAuthEmulator(client, next.authEmulator, { disableWarnings: true });
       setAuth(client);
-      unsubscribe = onAuthStateChanged(client, setUser);
-    }).catch(() => { if (active) setError('Could not connect to the studio. Reload the page to try again.'); });
+      unsubscribe = onAuthStateChanged(client, current => {
+        setTokenSource(async () => current ? current.getIdToken() : guestToken());
+        setUser(current);
+      });
+    }).catch(() => { if (active) setError('Could not reach the game server. Reload the page to try again.'); });
     return () => { active = false; unsubscribe?.(); };
   }, []);
 
-  const localPlayer = () => {
-    const key = new URLSearchParams(location.search).get('player');
-    const requested = key && /^test-[a-z0-9]{1,40}$/.test(key) ? key : null;
-    try {
-      if (requested) sessionStorage.setItem('shredder-local-player', requested);
-      return sessionStorage.getItem('shredder-local-player') || 'test-player';
-    } catch {
-      return requested ?? 'test-player';
-    }
-  };
-  const token = async () => config?.localTest ? localPlayer() : user?.getIdToken();
-  const historyScope = user?.uid ?? (config?.localTest ? localPlayer() : 'guest');
-  const tourStorageKey = `shredder-story:${historyScope}`;
-  function readTour() {
-    try { return normalizeTourProgress(JSON.parse(localStorage.getItem(tourStorageKey) || '{}')); }
-    catch { return {}; }
-  }
-  const tourProgress = readTour();
-  const call = async (path: string, options: RequestInit = {}) => {
-    const bearer = await token();
-    const response = await fetch('/api' + path, { ...options, headers: {
-      ...options.headers, Authorization: `Bearer ${bearer || ''}`,
-    }, signal: AbortSignal.timeout(45_000) });
-    if (!response.ok) throw await apiError(response);
-    return response;
-  };
-
+  // Quiet music behind the menus, once the player has pressed a key on the title screen.
+  const menuSong = useRef('');
   useEffect(() => {
-    if (!canUseLibrary) {
-      setSongs([]);
-      setProfile(undefined);
-      setLegacy([]);
-      setJob(undefined);
-      setRecording(undefined);
-      request.current = null;
+    const quiet = ['menu', 'tour', 'academy', 'party', 'locker', 'settings', 'create'].includes(route.name);
+    if (!quiet || !songs.length) {
+      if (route.name !== 'songs') stopPreview();
       return;
     }
-    let active = true;
-    call('/profile').then(response => response.json()).then(value => { if (active) setProfile(value); })
-      .catch(() => { if (active) setProfileError('Player profile unavailable. Reload to retry.'); });
-    call('/songs').then(response => response.json()).then(items => { if (active) setSongs(items); })
-      .catch(reason => { if (active) setError(reason.message); });
-    if (user && auth && config?.legacyDatabaseId) {
-      import('firebase/firestore/lite').then(({ collection, getFirestore, getDocs, query, where }) =>
-        getDocs(query(collection(getFirestore(auth.app, config.legacyDatabaseId!), 'songs'), where('userId', '==', user.uid)))
-      ).then(snapshot => {
-        if (active) setLegacy(snapshot.docs.flatMap(doc => {
-          const data = doc.data();
-          return typeof data.audioUrl === 'string' && data.audioUrl.startsWith('blob:') ? [{
-            id: doc.id, title: typeof data.title === 'string' ? data.title : 'Saved track',
-            prompt: typeof data.genre === 'string' ? data.genre : undefined,
-          }] : [];
-        }));
-      }).catch(() => { if (active) setError('Could not load older library entries.'); });
-    }
-    return () => { active = false; };
-  }, [config, auth, user, canUseLibrary]);
+    const starters = songs.filter(song => song.model === 'starter-setlist' && song.durationMs < 60_000);
+    if (!starters.length) return;
+    menuSong.current ||= starters[Math.floor(Math.random() * starters.length)].id;
+    previewSong(menuSong.current, settings.musicVolume * 0.45);
+  }, [route.name, songs, settings.musicVolume]);
 
+  const ready = !!config && user !== undefined;
+  const refreshSongs = useCallback(() => fetchSongs().then(setSongs), []);
+  const refreshProfile = useCallback(() => {
+    void call('/profile').then(response => response.json()).then(setProfile).catch(() => {});
+  }, []);
   useEffect(() => {
-    localStorage.setItem('keyboard-shredder-controls', JSON.stringify(settings));
-  }, [settings]);
+    if (!ready) return;
+    refreshSongs().catch(reason => setError(reason instanceof Error ? reason.message : 'Could not load the setlist.'));
+    refreshProfile();
+  }, [ready, user, refreshSongs, refreshProfile]);
 
+  // The stage name and lane colours chosen on this device follow the player online.
+  const synced = useRef('');
   useEffect(() => {
-    if (remapping === undefined) return;
-    const remap = (event: KeyboardEvent) => {
-      if (event.code === 'Escape') {
-        setRemapping(undefined);
-        setRemapStatus('Key change canceled.');
-        return;
-      }
-      if (!/^(Key[A-Z]|Digit[0-9])$/.test(event.code) || event.altKey || event.ctrlKey || event.metaKey) return;
-      event.preventDefault();
-      const label = event.code.replace(/^(Key|Digit)/, '');
-      const conflict = settings.keys.findIndex((key, i) => i !== remapping && key === event.code);
-      if (conflict >= 0) {
-        setRemapStatus(`${label} is already assigned to lane ${conflict + 1}. Choose another key.`);
-        return;
-      }
-      setRemapStatus(`Lane ${remapping + 1} now uses ${label}.`);
-      setSettings(previous => ({ ...previous, keys: previous.keys.map((key, i) => i === remapping ? event.code : key) }));
-      setRemapping(undefined);
-    };
-    window.addEventListener('keydown', remap);
-    return () => window.removeEventListener('keydown', remap);
-  }, [remapping, settings.keys]);
+    if (!profile || !save.name) return;
+    const wanted = `${save.name}|${settings.palette}`;
+    if (synced.current === wanted || (profile.name === save.name && profile.palette === settings.palette)) return;
+    synced.current = wanted;
+    void call('/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...profile, name: save.name, palette: settings.palette }) })
+      .then(response => response.json()).then(setProfile).catch(() => {});
+  }, [profile, save.name, settings.palette]);
 
-  const openTrack = async (id: string, tour = false) => {
-    if (busy.current || (tour && !isTourSongUnlocked(id, readTour()))) return;
-    busy.current = true;
-    setLoading(true);
+  const go = useCallback((next: Route) => {
     setError('');
+    if (next.name !== 'online' && new URLSearchParams(location.search).has('duel')) history.replaceState(null, '', location.pathname);
+    setRoute(next);
+  }, []);
+
+  const launch = useCallback(async (songId: string, setup: RunSetup, back: Route) => {
+    if (busy.current) return;
+    busy.current = true;
+    setLoading('Tuning up…');
+    setError('');
+    stopPreview();
     try {
-      const track = await loadRecording(call, `/songs/${id}`);
-      setSongs(previous => previous.some(item => item.id === id) ? previous : [track.song, ...previous]);
-      setRecording({ ...track, tour });
+      const recording = await loadRecording(call, `/songs/${songId}`);
+      setRoute({ name: 'play', recording, setup, back });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load the track.');
     } finally {
-      setLoading(false);
+      setLoading('');
       busy.current = false;
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    if (!job || job.stage === 'ready' || job.stage === 'failed' || !canUseLibrary) return;
-    const id = job.id;
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      try {
-        const next = await call(`/generations/${id}`).then(response => response.json()) as Job;
-        if (!active) return;
-        setReconnecting(false);
-        setJob(next);
-        if (next.stage === 'ready') void openTrack(next.id);
-        else if (next.stage !== 'failed') timer = setTimeout(poll, 900);
-      } catch {
-        if (active) {
-          setReconnecting(true);
-          timer = setTimeout(poll, 3000);
-        }
-      }
-    };
-    timer = setTimeout(poll, 500);
-    return () => { active = false; clearTimeout(timer); };
-  }, [job?.id, job?.stage === 'ready' || job?.stage === 'failed', canUseLibrary, user]);
+  const startLesson = useCallback((lesson: TypingLesson, back: Route = { name: 'academy' }) => launch(lesson.songId, {
+    mode: 'typing', difficulty: lesson.difficulty, mods: [],
+    typing: { lesson, options: { keys: lesson.keys, newKeys: lesson.newKeys, kind: lesson.kind, difficulty: lesson.difficulty, seed: Date.now() % 100_000 } },
+  }, back), [launch]);
 
-  const generate = async (event: FormEvent) => {
-    event.preventDefault();
-    if (busy.current) return;
-    busy.current = true;
-    setLoading(true);
-    setError('');
-    const cleanPrompt = prompt.trim();
-    if (!request.current || request.current.prompt !== cleanPrompt || request.current.durationSeconds !== seconds) {
-      request.current = { prompt: cleanPrompt, durationSeconds: seconds, key: crypto.randomUUID() };
-    }
-    try {
-      const response = await call('/generations', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request.current),
-      });
-      const next = await response.json() as Job;
-      request.current = null;
-      setJob(next);
-      if (next.stage === 'ready') {
-        busy.current = false;
-        await openTrack(next.id);
-      }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not start generation.');
-    } finally {
-      setLoading(false);
-      busy.current = false;
-    }
-  };
-
-  const retryChart = async () => {
-    if (!job || busy.current) return;
-    busy.current = true;
-    setLoading(true);
-    setError('');
-    try {
-      const response = await call(`/generations/${job.id}/retry`, { method: 'POST' });
-      setJob(await response.json());
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not retry analysis.');
-    } finally {
-      busy.current = false;
-      setLoading(false);
-    }
-  };
-
-  async function saveProfile(value: Profile) {
+  const saveProfile = useCallback(async (value: Profile) => {
     const response = await call('/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
     const saved: Profile = await response.json();
     setProfile(saved);
     return saved;
+  }, []);
+
+  // A challenge link opens straight into the song once the setlist is known.
+  const challenged = useRef(false);
+  useEffect(() => {
+    if (!challenge || challenged.current || !ready || !songs.length) return;
+    challenged.current = true;
+    history.replaceState(null, '', location.pathname);
+    void launch(challenge.songId, challenge.setup, { name: 'menu' });
+  }, [challenge, ready, songs.length, launch]);
+
+  const api: AppApi = { config, auth, user, songs, profile, go, launch, startLesson, refreshSongs, saveProfile, refreshProfile, loading, error, setError };
+
+  const next = useCallback((result: RunResult) => {
+    if (route.name !== 'play') return undefined;
+    const { setup, recording, back } = route;
+    if (setup.tutorial) return { label: 'Pick a song', run: () => go({ name: 'songs' }) };
+    if (result.summary.failed && !setup.typing && !setup.party && !setup.daily && !setup.challenge) {
+      const easier = DIFFICULTIES[DIFFICULTIES.indexOf(setup.difficulty) - 1];
+      return easier ? { label: `Try ${difficultyNames[easier]}`, run: () => void launch(recording.song.id, { ...setup, difficulty: easier, mods: setup.mods.filter(id => id !== 'sudden') }, back) } : undefined;
+    }
+    if (setup.tour) {
+      const progress = tourStore.get();
+      const index = TOUR_TRACKS.findIndex(track => track.id === recording.song.id);
+      const following = TOUR_TRACKS[index + 1];
+      if (following && isTourSongCleared(recording.song.id, progress)) {
+        return { label: `Next: ${following.title}`, run: () => void launch(following.id, setup, back) };
+      }
+      return undefined;
+    }
+    if (setup.typing?.lesson) {
+      const following = result.outcome.lesson?.passed
+        ? TYPING_LESSONS[TYPING_LESSONS.findIndex(lesson => lesson.id === setup.typing!.lesson!.id) + 1] : undefined;
+      return following ? { label: `Next: ${following.title}`, run: () => void startLesson(following, back) } : undefined;
+    }
+    if (setup.mode === 'quickplay' && !result.summary.failed) {
+      const index = songs.findIndex(song => song.id === recording.song.id);
+      const following = songs[(index + 1) % songs.length];
+      if (following && following.id !== recording.song.id) return { label: `Next: ${following.title}`, run: () => void launch(following.id, setup, back) };
+    }
+    return undefined;
+  }, [route, songs, go, launch, startLesson]);
+
+  let view;
+  if (route.name === 'play') {
+    view = <GameScreen key={`${route.recording.song.id}:${route.setup.mode}:${route.setup.difficulty}:${route.setup.typing?.lesson?.id ?? ''}`}
+      recording={route.recording} setup={route.setup} onExit={() => go(route.back)} next={next}
+      exitLabel={route.back.name === 'tour' ? 'Back to tour' : route.back.name === 'academy' ? 'Back to academy' : route.back.name === 'songs' ? 'Back to songs' : 'Back to menu'} />;
+  } else if (route.name === 'title') {
+    view = <Title ready={ready} onStart={() => go({ name: 'menu' })} />;
+  } else if (route.name === 'menu') {
+    view = <MainMenu />;
+  } else {
+    view = <Suspense fallback={<main className="screen"><p role="status" className="loading-line">Loading…</p></main>}>
+      {route.name === 'songs' && <SongSelect />}
+      {route.name === 'tour' && <TourScreen />}
+      {route.name === 'academy' && <Academy />}
+      {route.name === 'party' && <PartySetup />}
+      {route.name === 'online' && <Online key={user?.uid ?? 'guest'} invite={route.invite} initialCoop={route.coop} />}
+      {route.name === 'locker' && <Locker />}
+      {route.name === 'settings' && <SettingsScreen />}
+      {route.name === 'create' && <CreateTrack />}
+    </Suspense>;
   }
 
-  const savePracticeRun = useCallback((run: PracticeRun) =>
-    writePracticeHistory(historyScope, [run, ...readPracticeHistory(historyScope)].slice(0, 30)), [historyScope]);
-
-  const saveTourRun = useCallback((id: string, accuracy: number) => {
-    try {
-      const saved = normalizeTourProgress(JSON.parse(localStorage.getItem(tourStorageKey) || '{}'));
-      localStorage.setItem(tourStorageKey, JSON.stringify(recordTourResult(saved, id, accuracy)));
-      return true;
-    } catch {
-      return false;
-    }
-  }, [tourStorageKey]);
-
-  if (canUseLibrary && duelInvite !== null) return <Suspense fallback={<main className="studio"><p role="status">Opening duel…</p></main>}><DuelRoom key={user?.uid ?? 'local'} invite={duelInvite} initialCoop={coop}
-    token={token} call={call} songs={songs} difficulty={coop ? tourDifficulty : difficulty} profile={profile} {...settings}
-    refresh={() => { void call('/profile').then(response => response.json()).then(setProfile).catch(() => {}); }}
-    exit={() => { history.replaceState(null, '', location.pathname); setDuelInvite(null); setCoop(false); }} /></Suspense>;
-
-  const generating = !!job && job.stage !== 'ready' && job.stage !== 'failed';
-  if (recording) return <main className="studio arcade-stage">
-    <SoloGame key={recording.song.id} {...recording} difficulty={recording.tour ? tourDifficulty : difficulty} profile={profile} {...settings}
-      keys={practiceEnabled && !recording.tour ? practiceLanes : settings.keys}
-      practice={practiceEnabled && !recording.tour ? PRACTICE_PRESETS[practice.preset].label : undefined}
-      onPracticeRun={savePracticeRun}
-      onTourResult={recording.tour ? saveTourRun : undefined}
-      leave={() => setRecording(undefined)} />
-  </main>;
-
-  if (canUseLibrary && tourOpen) return <main className="studio arcade-studio">
-    <header className="masthead">
-      <button onClick={() => setTourOpen(false)} disabled={loading}>Back to studio</button>
-      <button onClick={() => { setCoop(true); setDuelInvite(''); }} disabled={loading}>Tour with a friend</button>
-    </header>
-    {error && <p className="error" role="alert">{error}</p>}
-    {loading && <p role="status">Loading tour track…</p>}
-    <Suspense fallback={<p role="status">Opening tour…</p>}>
-      <Tour progress={tourProgress} difficulty={tourDifficulty} onDifficultyChange={setTourDifficulty}
-        busy={loading || generating} onOpen={id => void openTrack(id, true)} artForTrack={stageArt} />
-    </Suspense>
-  </main>;
-
-  const featured = songs[0];
-  const genres = [...new Set(songs.map(song => song.genre || 'My tracks'))];
-  const setlist = songs.filter(song =>
-    (genreFilter === 'All tracks' || (song.genre || 'My tracks') === genreFilter) &&
-    (lengthFilter === 'All lengths' || (song.durationMs >= 60_000) === (lengthFilter === 'Full songs')));
-  const durationLabel = (ms: number) => {
-    const seconds = Math.round(ms / 1000);
-    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-  };
-
-  return <main className="studio arcade-studio">
-    <header className="masthead"><div className="brand"><Guitar aria-hidden="true" /><span>Keyboard Shredder</span></div>
-      <div className="arcade-nav">
-        {canUseLibrary && <button disabled={generating || loading} onClick={() => setDuelInvite('')}><Swords size={17} aria-hidden="true" /> Head-to-head</button>}
-        {user && <button disabled={generating || loading} onClick={() => void import('firebase/auth').then(({ signOut }) => signOut(auth!))}>Sign out</button>}
-      </div>
-    </header>
-    <section className="hero arcade-hero">
-      <h1>Keyboard<br />Shredder</h1>
-      <p>{config?.musicEnabled ? 'Play the setlist, create your own riffs, or challenge a friend.'
-        : 'Pick a track from the setlist or challenge a friend.'}</p>
-      {canUseLibrary && featured && <div className="hero-action">
-        <button className="primary" disabled={loading || generating} onClick={() => void openTrack(featured.id)}>
-          <Play size={16} aria-hidden="true" />Play {featured.title}
-        </button>
-        <button onClick={() => setTourOpen(true)} disabled={loading || generating}>Story mode</button>
-        <a href="#setlist">Browse setlist</a>
-        <a href="#keyboard-practice">Keyboard practice</a>
-        {config?.musicEnabled && <a href="#create-track">Create a track</a>}
-      </div>}
-    </section>
-    {!config && !error && <p role="status">Connecting to the studio…</p>}
-    {config && !canUseLibrary && (auth
-      ? <AccountAccess auth={auth} invite={duelInvite !== null} />
-      : <p role="status">The studio needs a Firebase sign-in configuration.</p>)}
-    {error && <p className="error" role="alert">{error}</p>}
-    {canUseLibrary && <div className="studio-grid">
-      <section id="setlist" className="panel library arcade-library"><h2><Library aria-hidden="true" /> Setlist</h2>
-        <div className="setlist-filters">
-          <label>Genre<select value={genreFilter} onChange={event => setGenreFilter(event.target.value)}>
-            <option>All tracks</option>{genres.map(genre => <option key={genre}>{genre}</option>)}
-          </select></label>
-          <label>Difficulty<select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>
-            <option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option>
-          </select></label>
-          <label>Track length<select value={lengthFilter} onChange={event => setLengthFilter(event.target.value)}>
-            <option>All lengths</option><option>Quick songs</option><option>Full songs</option>
-          </select></label>
-        </div>
-        {songs.length > 0 && setlist.length === 0 && <p>No tracks match these filters.</p>}
-        {!songs.length && !legacy.length && <p>Your tracks appear here after you generate them.</p>}
-        {loading && !generating && <p role="status">Loading track…</p>}
-        <ul>
-          {setlist.map(song => <li key={song.id}>
-            <div className="setlist-track"><span className="record-mark" aria-hidden="true" />
-              <div><strong>{song.title}</strong><p>{song.credit && <>{song.credit.artist} · </>}{song.genre || 'My tracks'} · {durationLabel(song.durationMs)}</p>
-                {song.credit && <p><a href={song.credit.source} target="_blank" rel="noreferrer">Source</a> · <a href={song.credit.licenseUrl} target="_blank" rel="noreferrer">{song.credit.license}</a></p>}</div>
-            </div>
-            <button aria-label={`Load ${song.title}`} disabled={loading || generating} onClick={() => void openTrack(song.id)}><Play size={15} aria-hidden="true" /></button>
-          </li>)}
-          {genreFilter === 'All tracks' && lengthFilter === 'All lengths' && legacy.map(song => <li key={song.id}><div><strong>{song.title}</strong><p>Original audio unavailable</p></div>
-            {song.prompt && <button onClick={() => { setPrompt(song.prompt!); document.getElementById('prompt')?.focus(); }}>Use prompt</button>}</li>)}
-        </ul>
-      </section>
-      <div>
-        <section id="keyboard-practice" className="panel settings">
-          <h2>Keyboard practice</h2>
-          <label className="practice-toggle"><input type="checkbox" checked={practiceEnabled}
-            onChange={event => setPracticeEnabled(event.target.checked)} /> Use practice keys in solo tracks</label>
-          {practiceEnabled && <PracticeSettings value={practice} onChange={setPractice} />}
-          <details className="practice-history">
-            <summary>Practice progress</summary>
-            <Suspense fallback={<p role="status">Loading practice history…</p>}>
-              <PracticeProgress history={readPracticeHistory(historyScope)} />
-            </Suspense>
-          </details>
-        </section>
-        {config?.musicEnabled && <form id="create-track" className="panel composer" onSubmit={event => void generate(event)}>
-          <h2><Music2 aria-hidden="true" /> Create a track</h2>
-          <label htmlFor="prompt">Describe your music</label>
-          <textarea id="prompt" maxLength={500} rows={3} value={prompt} onChange={event => setPrompt(event.target.value)} />
-          <div className="controls">
-            <label>Length<select value={seconds} onChange={event => setSeconds(Number(event.target.value) as 30 | 90)}>
-              <option value={90}>Full track · 90s</option><option value={30}>Quick Play · 30s</option></select></label>
-          </div>
-          <button disabled={!prompt.trim() || loading || generating || !config?.musicEnabled}>Generate track</button>
-          {generating && <div className="job" role="status">
-            <p>{reconnecting ? 'Reconnecting to the studio…' : stageText[job.stage as keyof typeof stageText]}</p>
-            <progress aria-label="Generating track" />
-            {reconnecting && <button type="button" onClick={() => { setReconnecting(false); setJob(undefined); }}>Back to studio</button>}
-          </div>}
-          {job?.stage === 'failed' && <div className="error" role="alert">
-            <p>{job.error || 'Track generation failed.'}</p>
-            {job.canRetryChart && <button type="button" disabled={loading} onClick={() => void retryChart()}>Retry chart analysis</button>}
-          </div>}
-        </form>}
-        {profile && <PlayerProfile key={user?.uid ?? 'local'} profile={profile} save={saveProfile} />}
-        {profileError && <p role="status">{profileError}</p>}
-        <details className="panel settings">
-          <summary><SlidersHorizontal aria-hidden="true" /> Controls and timing</summary>
-          <p>Choose a lane, then press a letter or number to remap it. Press Escape to cancel.</p>
-          <div className="key-settings">{settings.keys.map((key, lane) => <button key={lane} type="button"
-            aria-label={`Remap lane ${lane + 1}, current key ${key}`} aria-pressed={remapping === lane}
-            onClick={() => { setRemapping(lane); setRemapStatus(`Press a new key for lane ${lane + 1}.`); }}>{remapping === lane ? '…' : key.replace(/^(Key|Digit)/, '')}</button>)}</div>
-          <p role="status">{remapStatus}</p>
-          <label>Timing offset (ms)<input type="number" min={-250} max={250} step={5} value={settings.calibration}
-            onChange={event => setSettings(previous => ({ ...previous, calibration: Math.max(-250, Math.min(250, Number(event.target.value))) }))} /></label>
-          <p>Increase the offset if your hits consistently register late.</p>
-          <button type="button" onClick={() => { setRemapping(undefined); setRemapStatus('Default controls restored.'); setSettings({ keys: DEFAULT_KEYS, calibration: 0 }); }}>Reset controls</button>
-        </details>
-      </div>
-
-    </div>}
-  </main>;
+  return <AppContext.Provider value={api}>
+    <div className="app" data-route={route.name} data-level={save.xp > 0 ? 'known' : 'new'}>
+      {view}
+      {loading && <div className="loading-veil" role="status"><div className="loading-amp"><i /><i /><i /><i /><i /></div><p>{loading}</p></div>}
+      {error && route.name !== 'play' && <div className="toast error" role="alert">{error}<button className="link" onClick={() => setError('')}>Dismiss</button></div>}
+    </div>
+  </AppContext.Provider>;
 }
