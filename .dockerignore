@@ -9,3 +9,6 @@ analysis/.venv
 analysis/weights
 **/__pycache__
 catalog/*/*.audio
+.tmp-shots
+.remember
+tests

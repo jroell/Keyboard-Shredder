@@ -16,6 +16,7 @@ COPY analysis/ ./analysis/
 COPY backend/ ./backend/
 COPY shared/ ./shared/
 COPY src/ ./src/
+COPY public/ ./public/
 COPY catalog/ ./catalog/
 COPY --chmod=755 scripts/container-start.sh /usr/local/bin/keyboard-shredder-start
 RUN npm run build

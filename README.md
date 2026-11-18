@@ -1,6 +1,40 @@
 # Keyboard Shredder
 
-Create an original guitar track, then play its riffs, chords, and sustains on five keyboard lanes. A full track runs about 90 seconds. Quick Play takes 30 seconds. Easy, Normal, and Hard use the same recording. Easy uses fewer notes and keeps chords to one lane. Normal and Hard add denser phrases and multi-lane chords.
+Keyboard Shredder is a browser rhythm game. Gems slide down a 3D guitar neck, and you press the matching key when a gem reaches its ring at the strike line. It teaches touch typing in the Typing academy, where gems carry letters. Play free at https://shredder.jasonroell.com.
+
+## Game modes
+
+- **Quick play:** Pick a song, a difficulty and optional modifiers. The list plays a preview of the highlighted song and shows your best stars and grade.
+- **World tour:** Play six venues and a sunrise encore across 25 songs. Hit 60% of the notes to clear a song and unlock the next. Tour with a friend is an online co-op tour with one team target.
+- **Typing academy:** Study 27 lessons in six units, including coder keys and a Vim keys lesson. Finger columns are colour coded, and an on-screen keyboard lights the next key and names the finger. Pass key drills at 80% accuracy and words and sentences at 85%. Results show words per minute, accuracy and a heat map of missed keys.
+- **Party mode:** Two players share one keyboard. Player 1 uses A S D F G and Space. Player 2 uses H J K L ; and Enter. Battle is highest score wins, and overdrive shakes the other player's neck. Co-op uses one team score, and solo play can battle the computer at three skill levels.
+- **Play online:** Create an invite link, send it to a friend, and both press Ready. Choose head-to-head play or a co-op tour. The server keeps both players in sync and scores both, and duels award badges.
+- **Daily challenge:** One song, difficulty and modifier set is fixed for everyone each UTC day, with its own leaderboard.
+- **Locker:** Equip unlocked necks (7), gem styles (8) and hit effects (6), and view 42 achievements and lifetime stats.
+- **Create a track:** When the server has a music key, sign in with Google or email through Firebase and describe any style of music. You get a 30 or 90 second track with a playable chart about a minute later.
+
+## How to play
+
+Beginner: three keys, one note per beat, cannot fail. Easy: five keys, single notes. Medium: faster riffs and a few two-key chords. Hard: full riffs with chords. Expert: every note, tight timing. An empty crowd meter ends Hard and Expert sets early.
+
+Press A S D F G. Press chord keys together and hold long notes until the tail ends. Perfect is within 45 ms (100 points), Great within 80 ms (75) and Good within the window from 160 ms on Beginner to 85 ms on Expert (50 per key).
+
+Streaks of 10, 20 and 30 notes give 2x, 3x and 4x. A miss or stray press resets the streak. Accurate hits charge the amp, and Space gives double points for 8 seconds in overdrive. Runs earn 0 to 5 stars and a grade from D to S, with a gold star and S+ for a full combo at 96% or better. Modifiers: Hyperspeed (+10%), Fade out (+15%), Precision (+20%), Sudden death (+25%). Mirror flips the chart with no bonus.
+
+Escape pauses. On a phone or tablet, five touch pads sit under the lanes and a lightning button starts overdrive. Typing lessons need a physical keyboard.
+
+## Progress and leaderboards
+
+Progress saves in the browser, including level, stars, unlocks, typing history and settings. Runs earn experience to level 50 and unlock cosmetics. The server re-scores finished setlist runs from recorded key presses before they join a leaderboard.
+
+## How it is built
+
+- React 19 and TypeScript, built with Vite.
+- The neck is drawn on a canvas in `src/game/renderer.ts`.
+- Game rules for browser and server live in `shared/`.
+- The Express and Socket.IO server in `server.ts` and `backend/` uses SQLite files on the data volume.
+- `npm run dev:fixture` starts a local server at http://localhost:3000 with test sign-in and a fake music generator.
+- Add `?bot=0.9` to let the computer play at 90% skill for demos. Bot runs are not saved or ranked.
 
 ## Play locally
 
@@ -28,35 +62,7 @@ docker run --rm --env-file .env -e SONG_DATA_DIR=/app/data -p 127.0.0.1:3000:300
   --mount source=keyboard-shredder-data,target=/app/data keyboard-shredder
 ```
 
-## Starter setlist
-
-Every account starts with 20 short songs and five full songs across eleven genres. Open **Setlist** to filter by genre or length. Every song has Easy, Normal, and Hard charts. New tracks you generate appear under **My tracks**. The starter songs come with the game and play without a music generation key.
-
-The full songs include the originals “Voltage Parade” and “Copper Moon” and three [Creative Commons recordings](catalog/CREDITS.md). The recordings and charts live under `catalog/`. Keep that directory alongside the app when deploying. Each starter song has its own stage and is available in free play, story mode, and multiplayer.
-
-## Play the tour
-
-Open **Story mode** and work through six venues and a sunrise encore. Earn at least 60% accuracy to clear a song and unlock the next one. Clear every song at a venue to earn the next booking. Solo tour progress is saved for this account in the current browser.
-
-Choose **Tour with a friend** to start a co-op tour. Share the invite and ready up together. Each player has an individual score and fret display. Your combined points have to reach the target to unlock the next song. The host can load it into the same room. Co-op progress is saved to the host's account on the server.
-
-## Play head-to-head
-
-Open **Head-to-head**, choose a saved track and difficulty, and copy the invite link. The guest signs in to a separate account and opens the link to join. Both players select **Ready up** after loading. The match starts on a shared countdown and shows both scores, combos, and fret activity. The room keeps playing during a disconnect. Reopen its invite to join the current position. The host can set up a rematch from the results screen.
-
-Open **Player profile** to choose a display name, avatar, fret colors, and scroll speed. Duels award badges for finishing a match, winning, reaching 95% accuracy, building a 25-note combo, and completing ten matches. Feature an earned badge to show it on your player card.
-
-For local two-player testing, use the loopback fixture server and open the invite in a second browser context with `&player=test-guest` appended. The default context uses `test-player`. This switch is available only in loopback test mode. Rooms live in memory and expire after 30 minutes of inactivity. Saved profiles and results survive restarts.
-
-## Controls
-
-Press **A S D F G** as the corresponding notes reach the line. Press all shown keys together for chords. Hold down long notes. On a touch screen, use the five pads below the fretboard and press chords with multiple fingers. Land notes and chords to charge the amp. When it is full, press Space or tap Boost to double your note multiplier for six seconds. Press Escape to pause a solo track. Open Controls and timing to remap keys or save a latency offset.
-
-The backing mix runs throughout the song. A hit brings in the recorded guitar, a chord needs all its keys, and releasing a sustain early cuts its guitar. The isolated guitar stays silent on misses. Older personal tracks saved as a full mix still play and identify the mix below the countdown controls.
-
-### Keyboard practice
-
-Open **Keyboard practice** in the studio, enable practice keys, and pick any solo track. Choose Home row, Number row, Vim navigation, Touch typing, or Custom. Custom layouts support 5–12 keys across the four keyboard rows. Practice charts reuse the song's timing and spread notes across your selected keys. Chords use at most two keys. Vim navigation rehearses the positions of movement and word keys. Open **Practice progress** in the studio to see hit rates and timing for individual keys and exact chord combinations. Compare up to five recent runs with the same number of earlier runs at the selected difficulty. The browser keeps the latest 30 completed practice runs for the signed-in account.
+The recordings and charts live under `catalog/`. Keep that directory alongside the app when deploying.
 
 ## Verify changes
 
