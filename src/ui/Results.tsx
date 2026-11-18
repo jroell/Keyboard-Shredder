@@ -265,7 +265,14 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         {outcome.lesson.passed ? `${outcome.lesson.stars === 3 ? 'Three stars. Nothing left to prove here.' : 'Reach 97% accuracy for three stars.'}${outcome.lesson.firstPass && outcome.lesson.next ? ` Unlocked: ${outcome.lesson.next.title}.` : ''}`
           : `Reach ${setup.typing!.lesson!.goal.accuracy}% accuracy to pass. You hit ${result.typingAccuracy}%.`}</p>}
 
-      {!party && <dl className="results-stats">
+      {!party && result.waited && <dl className="results-stats">
+        <div data-tone="great"><dt>Correct letters</dt><dd>{summary.perfects + summary.greats + summary.goods}</dd></div>
+        <div data-tone="miss"><dt>Wrong keys</dt><dd>{summary.wrongKeys}</dd></div>
+        <div><dt>Accuracy</dt><dd>{result.typingAccuracy}%</dd></div>
+        <div><dt>Best streak</dt><dd>{summary.bestCombo}</dd></div>
+      </dl>}
+      {typing && !result.waited && summary.misses >= 6 && <p className="offset-hint">Letters arriving too fast? Choose "The song waits for me" on the lesson card and type at your own pace.</p>}
+      {!party && !result.waited && <dl className="results-stats">
         <div data-tone="perfect"><dt>Perfect</dt><dd>{summary.perfects}</dd></div>
         <div data-tone="great"><dt>Great</dt><dd>{summary.greats}</dd></div>
         <div data-tone="good"><dt>Good</dt><dd>{summary.goods}</dd></div>

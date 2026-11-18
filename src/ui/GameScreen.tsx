@@ -362,6 +362,12 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     }
     const fair = !!setup.party?.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1];
     const other = game.scorings[1];
+    if (keyStats && typing) {
+      for (const lane of game.confused) {
+        const stat = keyStats[baseKey(typing.keys[lane])] ??= { attempts: 0, hits: 0, timingTotal: 0 };
+        stat.attempts++;
+      }
+    }
     const partyWin = setup.party && !setup.party.coop && other ? (fair ? scoring.rating > other.rating : scoring.score > other.score) : undefined;
     const summary: RunSummary = {
       songId: song.id, mode: setup.mode, difficulty: setup.difficulty, mods: setup.mods,

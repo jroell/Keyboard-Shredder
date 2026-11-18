@@ -95,6 +95,8 @@ export class GameSession {
   playedMs = 0;
   private holding: SongEvent | null = null;
   private waitCursor = 0;
+  /** Lanes the learner was meant to press when they hit a wrong key, for the weak-key report. */
+  readonly confused: number[] = [];
   private lastFrame = 0;
 
   constructor(readonly options: {
@@ -145,6 +147,7 @@ export class GameSession {
     this.holding = null;
     this.waitCursor = 0;
     this.playedMs = 0;
+    this.confused.length = 0;
   }
 
   private setState(state: SessionState) {
@@ -385,8 +388,24 @@ export class GameSession {
         void this.transport.start(this.offset, 0).then(() => { if (this.options.openLead) this.transport?.openLead(); }).catch(() => {});
         return true;
       }
-      if (shifted || plain || this.options.strayCodes?.has(event.code)) { scoring.stray(waited.timeMs); return true; }
+      if (shifted || plain || this.options.strayCodes?.has(event.code)) { scoring.stray(waited.timeMs); this.confused.push(waited.lanes[0]); return true; }
       return false;
+    }
+    if (this.wait && this.transport && !event.repeat && this.transport.inputTimeMs(event.timeStamp) >= this.offset) {
+      // A quick typist may run ahead of the song: the next letter counts as soon as it is typed.
+      const scoring = this.scorings[0];
+      const events = this.options.players[0].events;
+      let cursor = this.waitCursor;
+      while (cursor < events.length && scoring.consumed.has(events[cursor].id)) cursor++;
+      const upcoming = events[cursor];
+      if (upcoming && (shifted || plain || this.options.strayCodes?.has(event.code))) {
+        if (target && upcoming.lanes.includes(target.lane)) {
+          this.options.onEvent({ type: 'press', player: 0, lane: target.lane });
+          scoring.press(target.lane, upcoming.timeMs);
+          scoring.release(target.lane, upcoming.timeMs + 1);
+        } else { scoring.stray(this.transport.inputTimeMs(event.timeStamp) - this.calibration); this.confused.push(upcoming.lanes[0]); }
+        return true;
+      }
     }
     if (!target && (shifted || plain)) {
       // The right letter in the wrong case.

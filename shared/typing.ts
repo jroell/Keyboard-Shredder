@@ -300,10 +300,15 @@ function typingGroups(length: number, options: TypingOptions): { groups: string[
     if (!cased) return phrase;
     if (options.kind !== 'sentences') return phrase[0].toUpperCase() + phrase.slice(1);
     const body = phrase.split(' ').map(word => word === 'i' ? 'I' : word).join(' ');
-    return body[0].toUpperCase() + body.slice(1) + (marks.length ? marks[index % marks.length] : '');
+    return body[0].toUpperCase() + body.slice(1) + (allowed.has('.') ? '.' : '');
   };
+  // Question marks only follow real questions, and exclamation marks real shouts.
+  const marked = [
+    ...(allowed.has('?') ? QUESTIONS.filter(plain).map(text => dress(text, 0).replace(/\.$/, '') + '?') : []),
+    ...(allowed.has('!') ? SHOUTS.filter(plain).map(text => dress(text, 0).replace(/\.$/, '') + '!') : []),
+  ];
   const source = vim ? VIM_MOVES : sentences.length ? sentences : words.length >= 8 ? words : [];
-  const bank = source.map(dress).filter(isTypeable);
+  const bank = (options.kind === 'sentences' && marked.length ? [...marked, ...source.slice(0, marked.length).map(dress)] : source.map(dress)).filter(isTypeable);
   const preferredWords = sentences.length ? [] : bank.filter(word => Array.from(word).some(char => preferred.has(char)));
   const separator = bank.length || options.keys.includes('Space') ? ' ' : '';
   const groups: string[] = [];
@@ -322,9 +327,13 @@ function typingGroups(length: number, options: TypingOptions): { groups: string[
     remaining -= phrase.length + separator.length;
   }
 
-  groups.push(...drillGroups(remaining, chars, preferred, separator, random));
+  // A lesson of words or sentences ends on a whole one. Only key drills are filled with letter groups.
+  if (!groups.length) groups.push(...drillGroups(remaining, chars, preferred, separator, random));
   return { groups, separator };
 }
+
+const QUESTIONS = ['can you play the drums fast', 'who wants to sing along today', 'what song should we play next', 'can you hear the guitar solo', 'do you like this happy tune', 'who is ready to dance now', 'can we make music together friends', 'what instrument do you like best', 'is the band ready to play', 'can you clap to the beat', 'who loves a fun music show', 'do you want to join us', 'can you sing a high note', 'what music makes you smile most'];
+const SHOUTS = ['we love this song so much', 'play it again please friends', 'best band ever yay team', 'dance with us right now', 'sing it loud and proud', 'hooray for the music show', 'that guitar sounds so cool', 'clap your hands with joy', 'we did it together band', 'more music more fun please'];
 
 /** Real Vim motions: move by character, by word, to the top and to the end of a word. */
 const VIM_MOVES = ['hjkl', 'jjj', 'kkk', 'hhh', 'lll', 'jk', 'kj', 'hl', 'lh', 'www', 'bbb', 'wb', 'bw', 'eee', 'we', 'gg', 'ge', 'jjkk', 'hhll', 'wwbb', 'ggjj', 'lwe', 'kbh'];
