@@ -300,7 +300,7 @@ export default function App() {
       recording={route.recording} setup={route.setup} onExit={() => go(route.back)} next={next}
       exitLabel={route.back.name === 'tour' ? 'Back to tour' : route.back.name === 'party' ? 'Change song or players' : route.back.name === 'academy' ? 'Back to academy' : route.back.name === 'songs' ? 'Back to songs' : 'Back to menu'} />;
   } else if (route.name === 'title') {
-    view = <Title ready={ready} onStart={() => go({ name: 'menu' })} />;
+    view = <Title ready={ready && !notice} onStart={() => go({ name: 'menu' })} />;
   } else if (route.name === 'menu') {
     view = <MainMenu />;
   } else {

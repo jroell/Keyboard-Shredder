@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Guitar } from 'lucide-react';
 import { sfx } from '../game/sfx';
 import { laneColors, saveStore, settingsStore, useCell } from '../state/store';
@@ -9,6 +9,7 @@ export default function Title({ ready, onStart }: { ready: boolean; onStart: () 
   const save = useCell(saveStore);
   const settings = useCell(settingsStore);
   const [leaving, setLeaving] = useState(false);
+  const leave = useRef<ReturnType<typeof setTimeout>>(undefined);
   const colors = useMemo(() => laneColors(settings), [settings]);
   const look = useMemo(() => ({ theme: save.equipped.highway, gem: save.equipped.gem, fx: save.equipped.fx, hidden: false, calm: settings.calm }),
     [save.equipped, settings.calm]);
@@ -17,8 +18,10 @@ export default function Title({ ready, onStart }: { ready: boolean; onStart: () 
     if (!ready || leaving) return;
     setLeaving(true);
     sfx.play('riff');
-    setTimeout(onStart, 420);
+    leave.current = setTimeout(onStart, 420);
   };
+  // A screen change during the riff must not be undone by the pending start.
+  useEffect(() => () => clearTimeout(leave.current), []);
   useEffect(() => {
     if (!ready || leaving) return;
     const start = (event: Event) => {
