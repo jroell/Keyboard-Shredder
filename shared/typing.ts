@@ -107,6 +107,7 @@ const units: { name: string; lessons: LessonRow[] }[] = [
   { name: 'Capitals and punctuation', lessons: [
     ['capital-words', 'Capital letters', 'Hold Shift with the little finger of the other hand, then press the letter.', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'words', 'umbra-samba', 30],
     ['proper-sentences', 'Proper sentences', 'Start each sentence with a capital and end it with a full stop.', '', 'sentences', 'copper-moon', 34],
+    ['commas-apostrophes', 'Commas and apostrophes', 'Use your right middle finger for the comma and your right little finger for the apostrophe.', "'", 'sentences', 'lantern-lofi', 30],
     ['questions', 'Questions and shouts', 'Hold Shift for the question mark and the exclamation mark.', '?!', 'sentences', 'voltage-parade', 36],
   ] },
   { name: 'Numbers', lessons: [
@@ -169,6 +170,30 @@ yacht yam yard yarn yawn year yeast yell yoga yoke yolk you young your youth yum
 `.trim().split(/\s+/);
 
 export const SENTENCES: readonly string[] = [
+  'the drummer tapped a soft steady beat',
+  'we carried the guitars into the hall',
+  'the singer wore a bright red scarf',
+  'the piano sat near the open window',
+  'our teacher counted us in with care',
+  'the flute player smiled at the crowd',
+  'we practiced the chorus after lunch today',
+  'the trumpet shone under the stage lights',
+  'children folded the chairs after the concert',
+  'the violin strings sang sweet and clear',
+  'we hung the banner above the door',
+  'the bass drum thumped low and slow',
+  'my friend kept time with her hands',
+  'the hall smelled of wood and polish',
+  'we shared warm rolls after the show',
+  'the guitarist changed a string before rehearsal',
+  'soft music drifted out into the street',
+  'the audience hummed along with the band',
+  'we left our coats by the stairs',
+  'the cello rested against the wooden wall',
+  'rain pattered lightly on the hall roof',
+  'the music books lay open on stands',
+  'we waved to families in the front',
+  'the last note faded into warm silence',
   'the quick brown fox jumps over the lazy dog',
   'the whole room clapped along with the drummer',
   'we tuned our guitars before the sun came up',
@@ -293,7 +318,8 @@ function typingGroups(length: number, options: TypingOptions): { groups: string[
   const random = seededRandom(options.seed);
   const isTypeable = (phrase: string) => Array.from(phrase).every(char => char === ' ' || allowed.has(char));
   const plain = (phrase: string) => Array.from(phrase).every(char => char === ' ' || allowed.has(char));
-  const sentences = options.kind === 'sentences' ? SENTENCES.filter(plain) : [];
+  // The lesson that introduces the apostrophe draws on sentences that use it, and commas, every time.
+  const sentences = options.kind === 'sentences' ? (preferred.has("'") ? PUNCTUATED : SENTENCES).filter(plain) : [];
   const words = options.kind !== 'drill' && !sentences.length ? WORDS.filter(word => plain(word) && word.length >= (options.minLength ?? 0)) : [];
   const vim = options.kind === 'drill' && options.keys.length <= 9 && ['KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyW', 'KeyB'].every(code => options.keys.includes(code));
   const cased = options.keys.some(needsShift);
@@ -338,8 +364,10 @@ function typingGroups(length: number, options: TypingOptions): { groups: string[
   return { groups, separator };
 }
 
-const QUESTIONS = ['can you play the drums fast', 'who wants to sing along today', 'what song should we play next', 'can you hear the guitar solo', 'do you like this happy tune', 'who is ready to dance now', 'can we make music together friends', 'what instrument do you like best', 'is the band ready to play', 'can you clap to the beat', 'who loves a fun music show', 'do you want to join us', 'can you sing a high note', 'what music makes you smile most'];
-const SHOUTS = ['we love this song so much', 'play it again please friends', 'best band ever yay team', 'dance with us right now', 'sing it loud and proud', 'hooray for the music show', 'that guitar sounds so cool', 'clap your hands with joy', 'we did it together band', 'more music more fun please'];
+/** Sentences with commas and apostrophes, for the lesson that teaches them. */
+const PUNCTUATED: readonly string[] = ["after lunch, we don't rush the first song", "the drummer's sticks, they tap the drum lightly", "when it's quiet, we listen for the piano", "please don't hum, the singer needs quiet time", "we're ready, so bring the guitars in now", "the singer's scarf, it waved in the breeze", "if you're late, knock soft on the door", "don't worry, the flute will join us soon", "the band's banner, it hung above the stage", "we're clapping, and the beat feels just right", "it's time, so tune the violin strings now", "the teacher's hands, they show us the rhythm", "after practice, we'll share juice and warm rolls", "don't shout, the baby sleeps near the hall", "the hall's lights, they glow soft and gold", "you're brave, so step up and sing loud", "it isn't hard, just follow the drum beat", "the crowd's hands, they rose in the air", "let's rest, then play the chorus once more", "she can't hear, so wave from the front", "the piano's lid, it opened with a creak", "we've finished, and the room feels warm now", "don't drop it, the trumpet needs gentle hands", "the stage's edge, it sparkled in the light"];
+const QUESTIONS = ['can you hear the trumpet from here', 'who will play the piano this time', 'did the drummer bring extra sticks today', 'where did we leave the music books', 'will you sing the low part with me', 'is the guitar tuned and ready now', 'can we practice the chorus once more', 'who clapped loudest at the last song', 'did you hear the flute at the end', 'where should the drums sit on stage', 'will the band play after lunch today', 'can you keep the beat with your feet', 'is that violin yours or mine', 'who will count us in this time', 'did the crowd like the new song', 'can we hear the singer from the back', 'can you play the drums fast', 'who wants to sing along today', 'what song should we play next', 'can you hear the guitar solo', 'do you like this happy tune', 'who is ready to dance now', 'can we make music together friends', 'what instrument do you like best', 'is the band ready to play', 'can you clap to the beat', 'who loves a fun music show', 'do you want to join us', 'can you sing a high note', 'what music makes you smile most'];
+const SHOUTS = ['hooray the band sounds so great', 'wow what a bright happy tune', 'yay we played it all together', 'bravo that drum beat was amazing', 'hooray the crowd loved our song', 'wow the trumpets sound so bold', 'yay the singer hit that note', 'bravo what a fun fast chorus', 'hooray we did it dear friends', 'wow the stage lights look lovely', 'yay that guitar part sounded perfect', 'bravo the flutes played so sweetly', 'hooray our concert starts right now', 'wow everyone clapped and smiled wide', 'yay the piano part was beautiful', 'bravo we finished strong and proud', 'we love this song so much', 'play it again please friends', 'best band ever yay team', 'dance with us right now', 'sing it loud and proud', 'hooray for the music show', 'that guitar sounds so cool', 'clap your hands with joy', 'we did it together band', 'more music more fun please'];
 
 /** Real Vim motions: move by character, by word, to the top and to the end of a word. */
 const VIM_MOVES = ['hjkl', 'jjj', 'kkk', 'hhh', 'lll', 'jk', 'kj', 'hl', 'lh', 'www', 'bbb', 'wb', 'bw', 'eee', 'we', 'gg', 'ge', 'jjkk', 'hhll', 'wwbb', 'ggjj', 'lwe', 'kbh'];

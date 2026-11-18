@@ -18,8 +18,8 @@ export function fingerName(code: string) {
  * An on-screen keyboard colored by finger. During play it lights the next key.
  * With `stats` it becomes a heat map: weak keys glow red, strong keys green.
  */
-const KeyboardGuide = forwardRef<KeyboardHandle, { active?: readonly string[]; stats?: KeyStats; compact?: boolean }>(
-  function KeyboardGuide({ active, stats, compact }, ref) {
+const KeyboardGuide = forwardRef<KeyboardHandle, { active?: readonly string[]; stats?: KeyStats; compact?: boolean; shift?: boolean }>(
+  function KeyboardGuide({ active, stats, compact, shift }, ref) {
     const root = useRef<HTMLDivElement>(null);
     const hint = useRef<HTMLParagraphElement>(null);
     const next = useRef<string | null>(null);
@@ -28,8 +28,11 @@ const KeyboardGuide = forwardRef<KeyboardHandle, { active?: readonly string[]; s
       setNext(code) {
         if (code === next.current) return;
         if (next.current) find(baseKey(next.current))?.classList.remove('next');
+        root.current?.querySelectorAll('.kb-shift.next').forEach(key => key.classList.remove('next'));
         next.current = code;
         if (code) find(baseKey(code))?.classList.add('next');
+        // A capital is typed with the Shift key on the other hand.
+        if (code && needsShift(code)) find(keyInfo(code)?.hand === 'L' ? 'ShiftRight' : 'ShiftLeft')?.classList.add('next');
         if (hint.current) {
           const shift = code && needsShift(code) ? `Shift (${keyInfo(code)?.hand === 'L' ? 'right' : 'left'} pinky) + ` : '';
           hint.current.textContent = code ? `${shift}${code === 'Space' ? 'Space' : keyLabel(baseKey(code))} · ${fingerName(code)}` : '';
@@ -54,13 +57,15 @@ const KeyboardGuide = forwardRef<KeyboardHandle, { active?: readonly string[]; s
       return { '--finger': `hsl(${hue} 85% 55%)` } as CSSProperties;
     };
     return <div className={`kb${compact ? ' kb-compact' : ''}${stats ? ' kb-heat' : ''}`} ref={root} aria-hidden={stats ? undefined : true}>
-      {PRACTICE_ROWS.map((row, index) => <div className="kb-row" key={row.name} style={{ '--indent': index } as CSSProperties}>
+      {PRACTICE_ROWS.map((row, index) => <div className="kb-row" key={row.name} style={{ '--indent': shift && index === PRACTICE_ROWS.length - 1 ? 0 : index } as CSSProperties}>
+        {shift && index === PRACTICE_ROWS.length - 1 && <span data-code="ShiftLeft" className="kb-shift" style={{ '--finger': FINGER_COLORS['L-pinky'] } as CSSProperties}>shift</span>}
         {row.keys.map(code => {
           const stat = stats?.[code];
           return <span key={code} data-code={code} className={enabled && !enabled.has(code) ? 'off' : ''} style={heat(code)}
             title={stat && stat.attempts ? `${keyLabel(code)}: ${Math.round(100 * stat.hits / stat.attempts)}% of ${stat.attempts}` : undefined}>
             {keyLabel(code)}</span>;
         })}
+        {shift && index === PRACTICE_ROWS.length - 1 && <span data-code="ShiftRight" className="kb-shift" style={{ '--finger': FINGER_COLORS['R-pinky'] } as CSSProperties}>shift</span>}
       </div>)}
       <div className="kb-row kb-space"><span data-code="Space" className={enabled && !enabled.has('Space') ? 'off' : ''}
         style={{ '--finger': stats ? '#4b4660' : FINGER_COLORS.thumb } as CSSProperties}>space</span></div>

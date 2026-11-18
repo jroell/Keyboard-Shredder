@@ -8,7 +8,7 @@ import { useApp, type Route } from '../App';
 import { fetchDaily, type Daily } from '../lib/api';
 import { stageArt } from '../lib/stage-art';
 import { sfx } from '../game/sfx';
-import { lessonStore, saveStore, tourStore, useCell } from '../state/store';
+import { currentPlayer, lessonStore, listPlayers, saveStore, settingsStore, switchPlayer, tourStore, useCell } from '../state/store';
 import { PlayerChip, useMenuKeys } from './common';
 import cover from '../assets/arcade-cover.webp';
 import band from '../assets/warehouse-band.webp';
@@ -19,7 +19,10 @@ export default function MainMenu() {
   const save = useCell(saveStore);
   const tour = useCell(tourStore);
   const lessons = useCell(lessonStore);
-  const [index, setIndex] = useState(0);
+  // A player who came to learn typing lands on the academy until the first lesson is passed.
+  const learner = (() => { try { return localStorage.getItem(`ks:learner:${currentPlayer}`) === '1'; } catch { return false; } })();
+  const [index, setIndex] = useState(() => learner && TYPING_LESSONS.every(lesson => lessonStatus(lesson.id, lessonStore.get()) !== 'passed') ? 2 : 0);
+  const [switching, setSwitching] = useState(false);
   const [daily, setDaily] = useState<Daily>();
   const [welcome, setWelcome] = useState(!save.seenTutorial && !save.name);
   const [name, setName] = useState(save.name);
@@ -58,7 +61,7 @@ export default function MainMenu() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.songs.length, app.config, app.user, app.profile, daily, dailyDone, tourCleared, nextTour, lessonsPassed, starTotal, save.achievements, save.totals.bestWpm]);
 
-  useMenuKeys({ count: items.length, index, setIndex, enabled: !welcome, onPick: picked => { sfx.play('ui-select'); items[picked].run(); } });
+  useMenuKeys({ count: items.length, index, setIndex, enabled: !welcome && !switching, onPick: picked => { sfx.play('ui-select'); items[picked].run(); } });
   const current = items[Math.min(index, items.length - 1)];
 
   const finishWelcome = (tutorial: boolean) => (event?: FormEvent) => {
@@ -76,7 +79,13 @@ export default function MainMenu() {
     <header className="menu-head">
       <div className="brand"><Guitar aria-hidden="true" /><span>Keyboard Shredder</span></div>
       <div className="menu-player">
-        <button className="ghost" onClick={() => { try { sessionStorage.setItem('ks:lockerTab', 'Profile'); } catch { /* optional */ } app.go({ name: 'locker' }); }}>Switch player</button>
+        <button className="ghost" aria-expanded={switching} onClick={() => setSwitching(open => !open)}>Switch player</button>
+        {switching && <div className="player-menu" role="menu" aria-label="Players on this device">
+          {listPlayers().map(player => <button key={player.id} role="menuitem" disabled={player.id === currentPlayer} onClick={() => switchPlayer(player.id)}>
+            <span className="chip-level">{player.level}</span><strong>{player.name}</strong>
+            <em>{player.id === currentPlayer ? 'Playing now' : player.bestWpm ? `best ${player.bestWpm} WPM` : 'no typing yet'}</em></button>)}
+          <button role="menuitem" onClick={() => { try { sessionStorage.setItem('ks:lockerTab', 'Profile'); } catch { /* optional */ } app.go({ name: 'locker' }); }}>Add or manage players</button>
+        </div>}
         <PlayerChip onClick={() => app.go({ name: 'locker' })} />
       </div>
     </header>
@@ -108,7 +117,12 @@ export default function MainMenu() {
         <p>The warm-up takes half a minute and shows you how to play. You can skip it and jump straight in.</p>
         <div className="modal-actions">
           <button type="submit" className="primary big">Play the warm-up</button>
-          <button type="button" onClick={() => { finishWelcome(false)(); app.go({ name: 'academy' }); }}>I am here to learn typing</button>
+          <button type="button" onClick={() => {
+            try { localStorage.setItem(`ks:learner:${currentPlayer}`, '1'); } catch { /* optional */ }
+            // A new typist who later tries a song should start on the gentlest chart.
+            settingsStore.set(previous => ({ ...previous, difficulty: 'beginner' }));
+            finishWelcome(false)(); app.go({ name: 'academy' });
+          }}>I am here to learn typing</button>
           <button type="button" onClick={() => finishWelcome(false)()}>Skip to the menu</button>
         </div>
       </form>

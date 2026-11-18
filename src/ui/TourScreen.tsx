@@ -77,6 +77,8 @@ export default function TourScreen() {
               <Disc3 size={15} aria-hidden="true" />Headline set</button>
             {best ? <span className={best.platinum ? 'gold platinum' : best.rating >= 80 ? 'gold' : ''}>{best.platinum ? 'Platinum record · ' : best.rating >= 80 ? 'Gold record · ' : ''}{best.score.toLocaleString()} on {difficultyNames[settings.difficulty]}</span>
               : <span>{done ? `${venue.tracks.length} songs, one score. A record for each difficulty.` : 'Clear the venue to unlock'}</span>}
+            {best && <small className="venue-set-note">{best.rating.toFixed(1)}% average timing
+              {best.platinum ? '' : best.rating >= 80 ? ' · platinum needs 85% on every song' : ` · ${(80 - best.rating).toFixed(1)} short of gold`}</small>}
           </div>}
         </li>;
       })}

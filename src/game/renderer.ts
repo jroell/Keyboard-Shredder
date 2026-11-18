@@ -9,7 +9,8 @@ export type LaneLayout = {
   color: (lane: number) => string;
   /** Text printed on the gem. Empty for plain gems. */
   gemLabel: (lane: number) => string;
-  targets: { label: string; color: string }[];
+  /** `unused` marks a ring no note in this chart uses. It is drawn faint and without its label. */
+  targets: { label: string; color: string; unused?: boolean }[];
 };
 
 export type HighwayLook = { theme: string; gem: string; fx: string; lookahead: number; hidden: boolean; calm: boolean; /** Show a plain tick for hits, for modes that do not judge timing. */ plainHits?: boolean };
@@ -592,6 +593,15 @@ export class Highway {
       const down = held.has(column);
       const flash = this.targetFlash[column];
       const flashing = flash && flash.until > now ? (flash.until - now) / 220 : 0;
+      if (target.unused && !down && !flashing) {
+        if (!top) {
+          ellipse(ctx, x, y, rx, ry);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = rgba(color, 0.22);
+          ctx.stroke();
+        }
+        continue;
+      }
       if (!top) {
         ellipse(ctx, x, y + 3, rx * 1.06, ry * 1.1);
         ctx.fillStyle = 'rgba(0,0,0,.55)';

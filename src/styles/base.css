@@ -160,6 +160,7 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--pink); }
 @keyframes key-good { 30% { transform: translateY(2px); background: #fff; color: #000; } }
 @keyframes key-bad { 30% { background: var(--red); transform: translateX(-3px); } 60% { transform: translateX(3px); } }
 .kb-space { justify-content: center; }
+.kb span.kb-shift { width: 52px; font-size: .62rem; letter-spacing: .06em; }
 .kb-space span { width: 210px; font-size: .7rem; letter-spacing: .1em; }
 .kb-hint { text-align: center; min-height: 1.3em; color: var(--text); font-size: .9rem; }
 .kb-compact span { width: 28px; height: 28px; font-size: .72rem; }

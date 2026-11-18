@@ -72,15 +72,15 @@ function activeProfile() {
 const profile = activeProfile();
 const scoped = (key: string) => profile ? key.replace(/^ks:/, `ks:${profile}:`) : key;
 
-export function listPlayers(): { id: string; name: string; level: number }[] {
+export function listPlayers(): { id: string; name: string; level: number; bestWpm: number }[] {
   try {
     const ids: string[] = JSON.parse(localStorage.getItem('ks:profiles') || '[]');
     return ['', ...ids.filter(id => typeof id === 'string' && /^[a-z0-9]{1,12}$/.test(id))].map(id => {
       const raw = JSON.parse(localStorage.getItem(id ? `ks:${id}:save` : 'ks:save') || 'null');
       const save = raw ? normalizeSave(raw) : emptySave();
-      return { id, name: save.name || (id ? 'New player' : 'Player 1'), level: levelFor(save.xp).level };
+      return { id, name: save.name || (id ? 'New player' : 'Player 1'), level: levelFor(save.xp).level, bestWpm: Math.round(save.totals.bestWpm || 0) };
     });
-  } catch { return [{ id: '', name: 'Player 1', level: 1 }]; }
+  } catch { return [{ id: '', name: 'Player 1', level: 1, bestWpm: 0 }]; }
 }
 export const currentPlayer = profile;
 /** Switches the active player and reloads, so every screen reads that player's progress. */

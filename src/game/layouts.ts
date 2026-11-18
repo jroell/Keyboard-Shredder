@@ -29,6 +29,8 @@ export function typingLayout(keys: string[]): LaneLayout {
     column: lane => info[lane]?.code === 'Space' ? -1 : Math.max(0, Math.min(9, Math.round(info[lane]?.column ?? 4))),
     color: lane => FINGER_COLORS[info[lane]?.finger ?? 'thumb'],
     gemLabel: lane => info[lane]?.code === 'Space' ? '' : cased ? info[lane]?.char ?? '' : (info[lane]?.label ?? '').toUpperCase(),
-    targets: COLUMN_FINGERS.map((finger, column) => ({ label: HOME_ROW[column], color: FINGER_COLORS[finger] })),
+    // A lesson on two keys shows two bright rings, so a learner is not hunting among ten.
+    targets: COLUMN_FINGERS.map((finger, column) => ({ label: HOME_ROW[column], color: FINGER_COLORS[finger],
+      unused: !info.some(key => key && key.code !== 'Space' && Math.max(0, Math.min(9, Math.round(key.column ?? 4))) === column) })),
   };
 }

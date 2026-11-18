@@ -679,7 +679,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       boostKey={guitar && !typing && (players.length === 1 || index === 1) ? 'Select' : player.boostKey === 'Enter' ? 'Enter' : 'Space'} />)}
     {setup.party && !setup.party.coop && <div className="versus-bar" ref={versus} aria-hidden="true"><i /></div>}
     {typing && <div className="word-ribbon" ref={ribbon} aria-hidden="true" />}
-    {typing && settings.showKeyboard && <KeyboardGuide ref={keyboard} active={typing.keys} compact />}
+    {typing && settings.showKeyboard && <KeyboardGuide ref={keyboard} active={typing.keys} compact shift={typing.keys.some(code => code.startsWith('Shift+'))} />}
     {setup.tutorial && tip >= 0 && state === 'playing' && <div className="coach" key={`tip-${tip}`} role="status">{TUTORIAL_TIPS[tip][1]}</div>}
     {count !== null && state === 'playing' && <div className="count-in" key={`count-${count}`} data-go={count === 0 ? 'true' : undefined}>
       <strong>{count === 0 ? (typing ? 'Type!' : 'Rock!') : count}</strong>
