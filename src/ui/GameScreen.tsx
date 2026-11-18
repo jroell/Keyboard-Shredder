@@ -653,6 +653,39 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   const waitingForMatch = !!match && match.ready && match.startAt === null;
   const startLabel = state === 'starting' ? 'Loading audio…' : match ? match.startAt ? 'Join playback' : match.ready ? 'Ready' : 'Ready up' : 'Start';
 
+  const practicePick = setup.practice && retune ? <div className="practice-pick">
+          <div className="segments" role="group" aria-label="Section">
+            {Array.from({ length: SECTIONS }, (_, index) => {
+              const size = chart.durationMs / SECTIONS;
+              const on = setup.practice!.startMs < (index + 1) * size - 1 && setup.practice!.endMs > index * size + 1;
+              return <button key={index} type="button" className={on ? 'on' : ''} aria-pressed={on}
+                title={names[index]} aria-label={`Section ${index + 1}, ${names[index]}`}
+                onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, startMs: Math.round(index * size), endMs: Math.round((index + 1) * size) } }); }}>{index + 1}<small>{names[index]}</small></button>;
+            })}
+            <button type="button" className={setup.practice.startMs === 0 && setup.practice.endMs >= chart.durationMs ? 'on' : ''}
+              onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, startMs: 0, endMs: chart.durationMs } }); }}>All</button>
+          </div>
+          {(() => {
+            const beat = 60000 / chart.bpm;
+            const { startMs, endMs } = setup.practice;
+            const move = (from: number, to: number) => {
+              const start = Math.max(0, Math.min(Math.round(from), chart.durationMs - 4 * beat));
+              const end = Math.max(start + 4 * beat, Math.min(Math.round(to), chart.durationMs));
+              retune({ ...setup, practice: { ...setup.practice!, startMs: Math.round(start), endMs: Math.round(end) } });
+            };
+            const step = (label: string, title: string, run: () => void) => <button type="button" aria-label={title} title={title}
+              onClick={event => { event.currentTarget.blur(); run(); }}>{label}</button>;
+            return <div className="range-pick" role="group" aria-label="Loop range">
+              <span>Start</span>{step('−', 'Start one beat earlier', () => move(startMs - beat, endMs))}<b>{fineClock(startMs)}</b>{step('+', 'Start one beat later', () => move(Math.min(startMs + beat, endMs - 4 * beat), endMs))}
+              <span>End</span>{step('−', 'End one beat earlier', () => move(startMs, Math.max(endMs - beat, startMs + 4 * beat)))}<b>{fineClock(endMs)}</b>{step('+', 'End one beat later', () => move(startMs, endMs + beat))}
+            </div>;
+          })()}
+          <div className="segments" role="group" aria-label="Speed">
+            {[0.5, 0.75, 1].map(rate => <button key={rate} type="button" className={setup.practice!.rate === rate ? 'on' : ''} aria-pressed={setup.practice!.rate === rate}
+              onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, rate } }); }}>{rate * 100}% speed</button>)}
+          </div>
+          <p className="muted">The section loops until you stop. Practice scores are shown for feedback only: nothing is saved or ranked. A full combo means every note hit and no stray press. A hold let go early keeps the combo but loses its bonus.</p>
+        </div> : null;
   // The stage never scrolls. Focus moving to an off-screen control can still scroll a hidden-overflow box, which would push the results heading out of view.
   return <section className="stage" ref={stage} onScroll={event => { if (event.target === event.currentTarget) event.currentTarget.scrollTo(0, 0); }} data-state={state} data-boost="off" data-heat="cool" data-players={players.length}
     data-typing={typing ? 'true' : undefined} data-practice={setup.practice ? 'true' : undefined} data-calm={settings.calm ? 'true' : undefined} data-duel={match ? 'true' : undefined}
@@ -701,39 +734,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
           return <span key={index}>{players.length > 1 ? `${setup.party!.names[index]}: ` : ''}{player.events.length} {player.events.length === 1 ? 'note' : 'notes'}
             {chords ? ` · ${chords} ${chords === 1 ? 'chord' : 'chords'}` : ''}{holds ? ` · ${holds} ${holds === 1 ? 'hold' : 'holds'}` : ''}</span>;
         })}</p>
-        {setup.practice && retune && <div className="practice-pick">
-          <div className="segments" role="group" aria-label="Section">
-            {Array.from({ length: SECTIONS }, (_, index) => {
-              const size = chart.durationMs / SECTIONS;
-              const on = setup.practice!.startMs < (index + 1) * size - 1 && setup.practice!.endMs > index * size + 1;
-              return <button key={index} type="button" className={on ? 'on' : ''} aria-pressed={on}
-                title={names[index]} aria-label={`Section ${index + 1}, ${names[index]}`}
-                onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, startMs: Math.round(index * size), endMs: Math.round((index + 1) * size) } }); }}>{index + 1}<small>{names[index]}</small></button>;
-            })}
-            <button type="button" className={setup.practice.startMs === 0 && setup.practice.endMs >= chart.durationMs ? 'on' : ''}
-              onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, startMs: 0, endMs: chart.durationMs } }); }}>All</button>
-          </div>
-          {(() => {
-            const beat = 60000 / chart.bpm;
-            const { startMs, endMs } = setup.practice;
-            const move = (from: number, to: number) => {
-              const start = Math.max(0, Math.min(Math.round(from), chart.durationMs - 4 * beat));
-              const end = Math.max(start + 4 * beat, Math.min(Math.round(to), chart.durationMs));
-              retune({ ...setup, practice: { ...setup.practice!, startMs: Math.round(start), endMs: Math.round(end) } });
-            };
-            const step = (label: string, title: string, run: () => void) => <button type="button" aria-label={title} title={title}
-              onClick={event => { event.currentTarget.blur(); run(); }}>{label}</button>;
-            return <div className="range-pick" role="group" aria-label="Loop range">
-              <span>Start</span>{step('−', 'Start one beat earlier', () => move(startMs - beat, endMs))}<b>{fineClock(startMs)}</b>{step('+', 'Start one beat later', () => move(Math.min(startMs + beat, endMs - 4 * beat), endMs))}
-              <span>End</span>{step('−', 'End one beat earlier', () => move(startMs, Math.max(endMs - beat, startMs + 4 * beat)))}<b>{fineClock(endMs)}</b>{step('+', 'End one beat later', () => move(startMs, endMs + beat))}
-            </div>;
-          })()}
-          <div className="segments" role="group" aria-label="Speed">
-            {[0.5, 0.75, 1].map(rate => <button key={rate} type="button" className={setup.practice!.rate === rate ? 'on' : ''} aria-pressed={setup.practice!.rate === rate}
-              onClick={event => { event.currentTarget.blur(); retune({ ...setup, practice: { ...setup.practice!, rate } }); }}>{rate * 100}% speed</button>)}
-          </div>
-          <p className="muted">The section loops until you stop. Practice scores are shown for feedback only: nothing is saved or ranked. A full combo means every note hit and no stray press. A hold let go early keeps the combo but loses its bonus.</p>
-        </div>}
+        {practicePick}
         {typing ? <>
           <p>Type each letter as its gem reaches the ring. Keep your fingers on the home row and use the finger with the matching color.</p>
           {setup.typing?.lesson && setup.typing.lesson.unit === 1 && <HomePosition />}
@@ -791,6 +792,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         <label className="pause-setting">Timing offset {settings.calibration} ms
           <input type="range" min={-250} max={250} step={5} value={settings.calibration}
             onChange={event => settingsStore.set(previous => ({ ...previous, calibration: Number(event.target.value) }))} /></label>
+        {practicePick && <details className="pause-practice"><summary>Change the loop or speed</summary>{practicePick}</details>}
         <p className="hint"><kbd>Esc</kbd> resume · <kbd>R</kbd> restart</p>
       </div>
     </div>}

@@ -19,6 +19,7 @@ export default function MainMenu() {
   const save = useCell(saveStore);
   const tour = useCell(tourStore);
   const lessons = useCell(lessonStore);
+  const settings = useCell(settingsStore);
   // A player who came to learn typing lands on the academy until the first lesson is passed.
   const learner = (() => { try { return localStorage.getItem(`ks:learner:${currentPlayer}`) === '1'; } catch { return false; } })();
   const [index, setIndex] = useState(() => learner && TYPING_LESSONS.every(lesson => lessonStatus(lesson.id, lessonStore.get()) !== 'passed') ? 2 : 0);
@@ -101,6 +102,9 @@ export default function MainMenu() {
       <p className="eyebrow">{current.label}</p>
       <h2>{current.blurb}</h2>
       {current.detail && <p>{current.detail}</p>}
+      {current.id === 'tour' && nextTourId && nextTour && tourCleared > 0 && <button className="continue-tour"
+        onClick={() => { sfx.play('ui-select'); void app.launch(nextTourId, { mode: 'tour', difficulty: settings.difficulty, mods: [], tour: true }, { name: 'tour' }); }}>
+        <Play aria-hidden="true" size={16} />Continue tour: {nextTour}</button>}
       {current.id === 'daily' && daily && daily.entries.length > 0 && <ol className="mini-board">
         {daily.entries.slice(0, 5).map(entry => <li key={entry.rank + entry.name} className={entry.you ? 'you' : ''}>
           <span>{entry.rank}</span><strong>{entry.name}</strong><em>{entry.score.toLocaleString()}</em></li>)}

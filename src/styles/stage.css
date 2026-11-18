@@ -368,3 +368,19 @@
 /* Stat tiles: one or two line labels keep their numbers on one baseline. */
 .results-stats > div { display: grid; grid-template-rows: 1fr auto; }
 .results-stats dt { align-self: center; }
+.pause-practice { width: 100%; } .pause-practice summary { cursor: pointer; color: var(--muted); font-size: .9rem; padding: .4rem; min-height: 44px; display: grid; place-items: center; } .pause-practice .muted { display: none; }
+
+/* Phone landscape results: one compact header row, so the first stat tiles show without scrolling. */
+@media (max-height: 520px) {
+  .results { gap: .45rem; padding-top: .7rem !important; }
+  .results h1 { font-size: 1.7rem; }
+  .results-hero { grid-template-columns: auto 1fr auto; grid-template-areas: "stars score grade"; gap: .3rem 1.2rem; }
+  .results-stars svg { width: 28px; height: 28px; }
+  .results-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem .7rem; }
+  .results-score strong { font-size: 2rem; }
+  .results .grade { font-size: 3rem; }
+  .results-actions { position: static; margin: 0; padding: .1rem 0; background: none; flex-wrap: wrap; overflow: visible; justify-content: center; }
+  .results-stats { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .results-stats dd { font-size: 1.2rem; }
+  .results-stats dt { font-size: .5rem; letter-spacing: .02em; }
+}

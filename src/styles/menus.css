@@ -352,7 +352,7 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
 @media (max-width: 520px) { .menu-player .ghost { display: none; } }
 
 @media (max-width: 860px), (max-height: 640px) { .song-actions { background: #120a1f; } }
-@media (max-height: 520px) { .songs-screen .genre-select { position: static; width: 200px; } .songs-screen .screen-head { margin-bottom: -.4rem; } }
+@media (max-height: 520px) { .songs-screen .genre-select { position: absolute; top: .55rem; right: 1rem; width: 250px; display: flex; align-items: center; gap: .5rem; z-index: 3; } .songs-screen .genre-select select { flex: 1; min-height: 40px; } }
 .party-players .panel { align-content: start; }
 .party-players input { min-height: 44px; height: 44px; }
 .drill-hint { font-size: .85rem; color: var(--muted); }
@@ -379,3 +379,4 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
 .player-menu button em { font-style: normal; font-size: .78rem; color: var(--muted); }
 .player-menu button:last-child { grid-template-columns: 1fr; color: var(--muted); }
 .venue-set-note { flex-basis: 100%; color: var(--muted); font-size: .78rem; }
+.continue-tour { margin-top: .6rem; display: inline-flex; gap: .4rem; align-items: center; min-height: 44px; }

@@ -6,11 +6,11 @@ import { recordKey } from '../../shared/progression';
 import { useApp } from '../App';
 import { call, fetchBoard, type Board } from '../lib/api';
 import { notesFor } from '../../shared/difficulty';
-import type { Chart } from '../../shared/song';
+import type { Chart, Difficulty } from '../../shared/song';
 import { previewSong, stopPreview } from '../lib/preview';
 import { stageArt } from '../lib/stage-art';
 import { sfx } from '../game/sfx';
-import { saveStore, settingsStore, useCell } from '../state/store';
+import { currentPlayer, saveStore, settingsStore, useCell } from '../state/store';
 import { formatLength, Screen, Stars, useMenuKeys } from './common';
 import fallbackArt from '../assets/concert-stage.webp';
 
@@ -30,8 +30,11 @@ export default function SongSelect() {
   const [board, setBoard] = useState<Board>();
   const list = useRef<HTMLUListElement>(null);
   const difficulty = settings.difficulty;
-  const genres = useMemo(() => ['All', ...new Set(app.songs.map(song => song.genre || 'My tracks'))], [app.songs]);
-  const songs = useMemo(() => app.songs.filter(song => genre === 'All' || (song.genre || 'My tracks') === genre), [app.songs, genre]);
+  // The last few songs this player started, newest first, so a returning player is one press from their song.
+  const recent = useMemo<string[]>(() => { try { return JSON.parse(localStorage.getItem(`ks:recent:${currentPlayer}`) || '[]'); } catch { return []; } }, []);
+  const genres = useMemo(() => ['All', ...(recent.some(id => app.songs.some(song => song.id === id)) ? ['Recent'] : []), ...new Set(app.songs.map(song => song.genre || 'My tracks'))], [app.songs, recent]);
+  const songs = useMemo(() => genre === 'Recent' ? recent.flatMap(id => app.songs.filter(song => song.id === id))
+    : app.songs.filter(song => genre === 'All' || (song.genre || 'My tracks') === genre), [app.songs, genre, recent]);
   const song = songs[Math.min(index, songs.length - 1)];
   const record = song ? save.records[recordKey(song.id, difficulty)] : undefined;
 
@@ -45,6 +48,7 @@ export default function SongSelect() {
     if (!song) return;
     sfx.play('ui-select');
     stopPreview();
+    try { localStorage.setItem(`ks:recent:${currentPlayer}`, JSON.stringify([song.id, ...recent.filter(id => id !== song.id)].slice(0, 6))); } catch { /* optional */ }
     void app.launch(song.id, { mode: 'quickplay', difficulty, mods }, { name: 'songs' });
   };
   useMenuKeys({ count: songs.length, index, setIndex, onPick: play, onSide: setDifficulty });
@@ -101,17 +105,17 @@ export default function SongSelect() {
     const events = notesFor(chart, difficulty);
     return { notes: events.length, chords: events.filter(event => event.lanes.length > 1).length, holds: events.filter(event => event.durationMs > 0).length };
   }, [chart, difficulty]);
-  const practice = (drill = false) => {
+  const practice = (drill = false, level: Difficulty = difficulty) => {
     if (!song) return;
     sfx.play('ui-select');
     stopPreview();
     // The drill opens on the section with the most chords and holds.
     const size = song.durationMs / 8;
-    const events = chart && drill ? notesFor(chart, difficulty) : [];
+    const events = chart && drill ? notesFor(chart, level) : [];
     const weight = Array.from({ length: 8 }, (_, index) => events.filter(event => event.timeMs >= index * size && event.timeMs < (index + 1) * size)
       .reduce((total, event) => total + (event.lanes.length > 1 ? 1 : 0) + (event.durationMs > 0 ? 1 : 0), 0));
     const section = drill ? weight.indexOf(Math.max(...weight)) : 0;
-    void app.launch(song.id, { mode: 'quickplay', difficulty, mods: mods.filter(id => id !== 'sudden' && id !== 'slow'),
+    void app.launch(song.id, { mode: 'quickplay', difficulty: level, mods: mods.filter(id => id !== 'sudden' && id !== 'slow'),
       practice: { startMs: Math.round(section * size), endMs: Math.round((section + 1) * size), rate: 0.75 } }, { name: 'songs' });
   };
 
@@ -173,6 +177,8 @@ export default function SongSelect() {
         </div>
         {!record && counts && counts.chords + counts.holds > 0 && ['medium', 'hard', 'expert'].includes(difficulty) &&
           <p className="drill-hint">New to chords and holds? <button className="link" onClick={() => practice(true)}>Drill the busiest part at 75% speed</button></p>}
+        {chart && ['beginner', 'easy'].includes(difficulty) && notesFor(chart, 'medium').some(event => event.lanes.length > 1) &&
+          <p className="drill-hint">Ready for two keys at once? <button className="link" onClick={() => practice(true, 'medium')}>Try a slow chord drill from Medium</button></p>}
         {song.model === 'starter-setlist' && <div className="mini-board-wrap">
           <h3><Trophy aria-hidden="true" size={15} /> Leaderboard</h3>
           {!isRanked(mods) ? <p className="muted">Slow-mo runs are for practice and stay off the board.</p> : board ? board.entries.length ? <ol className="mini-board">{board.entries.slice(0, 5).map(entry =>
