@@ -45,6 +45,8 @@ export type RunResult = {
   summary: RunSummary; outcome: Outcome; log: InputLog; scorings: Scoring[]; events: SongEvent[];
   /** Party: saved players other than the active one who were credited on their own profiles, and whether the active player sat out. */
   credited?: { name: string; xp: number }[]; spectator?: boolean;
+  /** Party rematch: each seat's best streak from the round before. */
+  goals?: number[];
   keyStats?: KeyStats; typing?: TypingChart; typingAccuracy?: number; hitOffsetMs: number | null;
   /** Signed timing of every hit in ms. Negative is early. */
   offsets: number[]; windowMs: number;
@@ -127,6 +129,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   const [result, setResult] = useState<RunResult>();
   const [tip, setTip] = useState(-1);
   const [pauseIndex, setPauseIndex] = useState(0);
+  /** Each seat's best streak from the round before a party rematch. The result says whether the player beat it. */
+  const partyGoals = useRef<number[] | null>(null);
   const [passes, setPasses] = useState<{ last: PracticePass; best: PracticePass; count: number }>();
   const names = useMemo(() => sectionNames(chart.events.normal, chart.durationMs), [chart]);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -446,7 +450,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     }) : { save, xp: { total: 0, parts: [] }, levelBefore: 0, levelAfter: 0, unlocked: [], achievements: [], newBest: false, firstClear: false,
       previousBest: 0, streak: { days: save.streak.days, extended: false } } as Outcome;
     setResult({ summary, outcome, log: game.logs[0], scorings: [...game.scorings], events, keyStats, typing, typingAccuracy,
-      hitOffsetMs: offsets.length >= 20 ? median(offsets) : null, offsets, windowMs: players[0].windowMs, paused: game.paused, waited: game.wait, troubles: [...troubles.current], credited, spectator: !!seats && activeSeat < 0 });
+      hitOffsetMs: offsets.length >= 20 ? median(offsets) : null, offsets, windowMs: players[0].windowMs, paused: game.paused, waited: game.wait, troubles: [...troubles.current], credited, spectator: !!seats && activeSeat < 0, goals: partyGoals.current ?? undefined });
   }, [players, typing, setup, song, chart.durationMs, bot, save]);
 
   // Session events: sound, callouts and state.
@@ -560,6 +564,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       if (typing) { setAttempt(value => value + 1); return; }
       // A party rematch gives each player their own last streak to beat.
       const previous = setup.party && bot === undefined ? session.current?.scorings.map(scoring => scoring.bestCombo) : undefined;
+      partyGoals.current = previous ?? null;
       if (previous) setTimeout(() => previous.forEach((streak, index) => {
         if (index === 1 && setup.party!.cpu !== undefined) return;
         callout(streak >= players[index].events.length && streak > 0 ? 'Match your full combo' : streak > 0 ? `Beat your ${streak} streak` : 'Land your first streak', 'streak', index);
@@ -665,7 +670,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   useEffect(() => {
     if (state !== 'ready' || !setup.party) return;
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
-    const seat = (code: string) => players.findIndex(player => player.keys.includes(code));
+    // Only a key this seat's chart uses counts, so the try-out teaches the keys that matter.
+    const seat = (code: string) => players.findIndex(player => { const lane = player.keys.indexOf(code); return lane >= 0 && player.events.some(event => event.lanes.includes(lane)); });
     const mark = (index: number, what: 'tap' | 'hold') => setTried(previous => previous[index]?.[what] ? previous : previous.map((item, at) => at === index ? { ...item, [what]: true } : item));
     const down = (event: KeyboardEvent) => {
       const index = seat(event.code);
@@ -810,6 +816,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
             {players.map((player, index) => <div key={index}><strong>{setup.party!.names[index]}</strong>
               <div className="ready-keys">{player.keys.map((key, lane) => <kbd key={key} className={`${lit.has(key) ? 'lit' : ''}${player.events.some(event => event.lanes.includes(lane)) ? '' : ' unused'}`}
                 style={{ '--lane': layouts[index].color(lane) } as CSSProperties}>{guitarSeats.includes(index) ? layouts[index].targets[lane].label : keyLabel(key)}</kbd>)}</div>
+              {index === 1 && setup.party!.cpu !== undefined && <div className="try-row"><span>The computer plays this side</span></div>}
               {!(index === 1 && setup.party!.cpu !== undefined) && !guitarSeats.includes(index) && <div className="try-row" aria-live="polite">
                 <span data-done={tried[index].tap ? 'true' : undefined}>{tried[index].tap ? 'Tap ✓' : 'Try a tap'}</span>
                 <span data-done={tried[index].hold ? 'true' : undefined}>{tried[index].hold ? 'Hold ✓' : 'Try holding a key'}</span></div>}
@@ -836,7 +843,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         {error && <p role="alert" className="error">{error}</p>}
         <button className="primary big" ref={node => { if (node && !setup.party && document.activeElement?.tagName !== 'SELECT' && document.activeElement?.tagName !== 'INPUT' && !node.dataset.focused) { node.dataset.focused = 'true'; node.focus({ preventScroll: true }); } }}
           disabled={state === 'starting' || waitingForMatch} onClick={() => start()}>{startLabel}</button>
-        {!match && <p className="hint keyboard-only">{setup.party ? 'Click Start when you are both ready' : <><kbd>Enter</kbd> start</>} · <kbd>Esc</kbd> back</p>}
+        {!match && <p className="hint keyboard-only">{setup.party ? (setup.party.cpu !== undefined ? 'Click Start when you are ready' : 'Click Start when you are both ready') : <><kbd>Enter</kbd> start</>} · <kbd>Esc</kbd> back</p>}
         {!match && <button className="ghost" onClick={onExit}>{exitLabel}</button>}
       </div>
     </div>}

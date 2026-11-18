@@ -41,6 +41,10 @@ export type Duel = {
   players: DuelPlayer[]; host: number; startAt: number | null; winner: number | null; reason?: string;
   /** The slot of the player who asked for another round, while the lobby waits for both to ready up. */
   rematchBy?: number;
+  /** The slot of the player who picked a different song for this round. */
+  pickedBy?: number;
+  /** A song the guest suggested after a duel, for the host to accept. */
+  suggestion?: { by: number; songId: string; title: string };
 };
 export type LaneInput = { lane: number; down: boolean; timeMs: number };
 export type Reply = { error?: string; id?: string; slot?: number; progress?: TourProgress };

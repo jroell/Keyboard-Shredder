@@ -19,6 +19,10 @@ const charts = new Map<string, Chart>();
 /** The song last highlighted, so coming back from a run lands on it. */
 const last = { songId: '', genre: 'All' };
 
+/** A two-letter tab on each thumbnail, in a colour of its own per genre, so rows differ at a glance even when the art is similar. */
+const genreCode = (genre: string) => { const words = genre.split(/[\s-]+/).filter(Boolean); return (words.length > 1 ? words[0][0] + words[1][0] : genre.slice(0, 2)).toUpperCase(); };
+const genreHue = (genre: string) => Array.from(genre).reduce((total, char) => (total * 31 + char.charCodeAt(0)) % 360, 7);
+
 export default function SongSelect() {
   const app = useApp();
   const save = useCell(saveStore);
@@ -134,7 +138,8 @@ export default function SongSelect() {
           return <li key={item.id} role="option" aria-selected={itemIndex === index} className={itemIndex === index ? 'active' : ''}
             onClick={() => { if (itemIndex === index) play(); else { sfx.play('ui-move'); setIndex(itemIndex); } }}
             onDoubleClick={play}>
-            <span className="song-thumb" style={{ backgroundImage: `url("${stageArt(item.id) ?? fallbackArt}")` }} aria-hidden="true" />
+            <span className="song-thumb" style={{ backgroundImage: `url("${stageArt(item.id) ?? fallbackArt}")` }} aria-hidden="true">
+              <i style={{ '--hue': genreHue(item.genre || 'My tracks') } as CSSProperties}>{genreCode(item.genre || 'My tracks')}</i></span>
             <span className="song-text"><strong>{item.title}</strong><small>{item.credit ? `${item.credit.artist} · ` : ''}{item.genre || 'My tracks'} · {formatLength(item.durationMs)}
               {item.intensity ? <span className="intensity" title={`Intensity ${item.intensity} of 5`} aria-label={`Intensity ${item.intensity} of 5`}>{Array.from({ length: 5 }, (_, i) => <i key={i} className={i < item.intensity! ? 'on' : ''} />)}</span> : null}</small></span>
             {best ? <span className="song-best"><Stars count={best.stars} size={12} /><b data-grade={best.grade[0]}>{best.grade}</b></span>

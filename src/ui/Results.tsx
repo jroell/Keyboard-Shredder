@@ -260,6 +260,8 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
             <strong>{fairParty ? `${scoring.rating.toFixed(1)}%` : finalScore(scoring.score, setup.mods).toLocaleString()}</strong>
             <p>{fairParty ? `timing rating · ${finalScore(scoring.score, setup.mods).toLocaleString()} points` : `${Math.round(scoring.rating)}%`}{party.difficulties ? ` · ${difficultyNames[party.difficulties[index]]}` : ''} · best streak {scoring.bestCombo}</p>
             <p>{scoring.perfects} perfect · {scoring.misses} missed</p>
+            {!bot && result.goals && !(index === 1 && party.cpu !== undefined) && <p className="goal">{scoring.bestCombo > result.goals[index] || (scoring.misses === 0 && scoring.bestCombo >= result.goals[index])
+              ? `Goal met: best streak ${result.goals[index]} to ${scoring.bestCombo}` : `Goal missed: best streak ${scoring.bestCombo}, the target was over ${result.goals[index]}`}</p>}
             {!bot && !(index === 1 && party.cpu !== undefined) && <p className="goal">Next round: {scoring.bestCombo > 0 && scoring.misses === 0 && scoring.bestCombo >= scoring.hits ? 'match your full combo' : scoring.bestCombo > 0 ? `beat your ${scoring.bestCombo} streak` : 'land your first streak'}</p>}
           </div>;
         })}

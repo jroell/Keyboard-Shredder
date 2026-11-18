@@ -13,7 +13,7 @@ type Assets = NonNullable<ReturnType<ReturnType<typeof createJobStore>['assets']
 type Player = { level: Difficulty; uid: string; profile: Profile; socket: string | null; ready: boolean; game: Scoring; lastTime: number; sent: number; window: number };
 type Room = {
   id: string; round: string; mode: DuelMode; assets: Assets; chart: Chart; difficulty: Difficulty; players: Player[];
-  phase: Duel['phase']; startAt: number | null; winner: number | null; reason?: string; touched: number; published?: string; rematchBy?: number;
+  phase: Duel['phase']; startAt: number | null; winner: number | null; reason?: string; touched: number; published?: string; rematchBy?: number; pickedBy?: number; suggestion?: { by: number; songId: string };
   coop?: { progress: TourProgress; targetScore: number; teamPassed: boolean | null };
 };
 
@@ -34,7 +34,8 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
         ? { lanes: player.game.feedback.lanes, missed: player.game.feedback.offsetMs === undefined } : null,
       hits: player.game.hits, bestCombo: player.game.bestCombo,
     })),
-    host: 0, startAt: room.startAt, winner: room.winner, reason: room.reason, rematchBy: room.phase === 'lobby' ? room.rematchBy : undefined,
+    host: 0, startAt: room.startAt, winner: room.winner, reason: room.reason, rematchBy: room.phase === 'lobby' ? room.rematchBy : undefined, pickedBy: room.phase === 'lobby' ? room.pickedBy : undefined,
+    suggestion: room.phase === 'finished' && room.suggestion ? { by: room.suggestion.by, songId: room.suggestion.songId, title: songs.assets(room.players[0].uid, room.suggestion.songId)?.song.title ?? '' } : undefined,
   });
   function coopStage(room: Room): CoopStage | undefined {
     if (!room.coop) return undefined;
@@ -213,12 +214,23 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
         room.assets = assets;
         room.chart = chart;
         resetRound(room);
-        room.rematchBy = room.players.findIndex(player => player.uid === uid);
+        room.rematchBy = undefined;
+        room.pickedBy = room.players.findIndex(player => player.uid === uid);
         ack({});
         publish(room);
       } catch {
         reject(ack, 'Could not read that track.');
       }
+    });
+    // The guest cannot change the song, but can suggest one for the host to accept.
+    socket.on('suggest-song', (songId, ack) => {
+      if (typeof ack !== 'function') return;
+      const room = current();
+      if (!room || room.coop || room.phase !== 'finished') return reject(ack, 'Suggest a song after a duel ends.');
+      if (typeof songId !== 'string' || !songs.assets(room.players[0].uid, songId)) return reject(ack, 'That track is unavailable.');
+      room.suggestion = { by: room.players.findIndex(player => player.uid === uid), songId };
+      ack({});
+      publish(room);
     });
     socket.on('join-duel', (id, ack) => {
       if (typeof ack !== 'function') return;
@@ -255,6 +267,8 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       if (room.players.length === 2 && room.players.every(player => player.ready && player.socket)) {
         room.phase = 'playing';
         room.rematchBy = undefined;
+        room.pickedBy = undefined;
+        room.suggestion = undefined;
         room.startAt = Date.now() + 3200;
       }
       ack({});

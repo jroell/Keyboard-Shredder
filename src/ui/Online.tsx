@@ -19,6 +19,9 @@ import { Screen } from './common';
 export default function Online({ invite, initialCoop }: { invite: string; initialCoop: boolean }) {
   const app = useApp();
   const [nextPick, setNextPick] = useState('');
+  // Each player's best combo from the round before, so the next lobby and result can show their goal.
+  const goal = useRef<{ round: string; combo: number; full: boolean } | null>(null);
+  const lastGoal = useRef<{ combo: number; full: boolean } | null>(null);
   const settings = useCell(settingsStore);
   const [duel, setDuel] = useState<Duel>();
   const [slot, setSlot] = useState<number>();
@@ -129,6 +132,11 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
   const venue = TOUR_VENUES.find(item => item.tracks.some(song => song.id === duel?.song.id));
   const partner = cooperative ? 'Teammate' : 'Opponent';
   const me = duel?.players.find(player => player.slot === slot);
+  if (duel && me && duel.phase === 'finished') {
+    if (goal.current?.round !== duel.round) lastGoal.current = goal.current ? { combo: goal.current.combo, full: goal.current.full } : null;
+    // Final scores can arrive a moment after the phase changes, so the goal follows them.
+    goal.current = { round: duel.round, combo: me.bestCombo, full: me.hits > 0 && me.accuracy === 100 && me.bestCombo >= me.hits };
+  }
   const other = duel?.players.find(player => player.slot !== slot);
   const scheduled = useRef<{ epoch: number; perf: number }>(null);
   if (duel?.startAt && scheduled.current?.epoch !== duel.startAt) {
@@ -217,8 +225,19 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
             <option value="">Choose a track</option>{app.songs.filter(song => song.id !== duel.song.id && song.model === 'starter-setlist').map(song => <option key={song.id} value={song.id}>{song.title}</option>)}</select></label>
           <button disabled={!nextPick || !duel.players.every(player => player.connected) || !connected} onClick={() => { action('change-song', nextPick); setNextPick(''); }}>Play this next</button>
         </div>}
-        {duel.phase === 'finished' && !cooperative && slot !== duel.host && <p className="muted">The host can pick a different song for the next round.</p>}
-        {duel.phase === 'finished' && !cooperative && me && <p className="muted">Rematch goal: {me.hits > 0 && me.bestCombo >= me.hits && me.accuracy === 100 ? 'match your full combo' : `beat your ${me.bestCombo} combo`}.</p>}
+        {duel.phase === 'finished' && !cooperative && slot === duel.host && duel.suggestion && duel.players[duel.suggestion.by] && <p role="status">
+          {duel.players[duel.suggestion.by].profile.name} suggests {duel.suggestion.title}.{' '}
+          <button onClick={() => action('change-song', duel.suggestion!.songId)} disabled={!duel.players.every(player => player.connected) || !connected}>Play {duel.suggestion.title}</button></p>}
+        {duel.phase === 'finished' && !cooperative && slot !== duel.host && <div className="form-row next-song">
+          <label className="field">Suggest a different song<select value={nextPick} onChange={event => setNextPick(event.target.value)}>
+            <option value="">Choose a track</option>{app.songs.filter(song => song.id !== duel.song.id && song.model === 'starter-setlist').map(song => <option key={song.id} value={song.id}>{song.title}</option>)}</select></label>
+          <button disabled={!nextPick || !connected} onClick={() => { action('suggest-song', nextPick); setNextPick(''); }}>Suggest it</button>
+          {duel.suggestion?.by === slot && <p className="muted" role="status">You suggested {duel.suggestion.title}. The host decides.</p>}
+        </div>}
+        {duel.phase === 'finished' && me && lastGoal.current && <p className="goal" role="status">
+          {(lastGoal.current.full ? me.bestCombo >= lastGoal.current.combo : me.bestCombo > lastGoal.current.combo)
+            ? `Goal met: your best combo went from ${lastGoal.current.combo} to ${me.bestCombo}.` : `Goal missed: best combo ${me.bestCombo}, the target was ${lastGoal.current.full ? 'a full combo' : `over ${lastGoal.current.combo}`}.`}</p>}
+        {duel.phase === 'finished' && me && <p className="muted">Next goal: {me.hits > 0 && me.bestCombo >= me.hits && me.accuracy === 100 ? 'match your full combo' : `beat your ${me.bestCombo} combo`}.</p>}
       </section>
     </Screen>;
   }
@@ -229,6 +248,7 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
         onExit={() => void leave()} opponentBoostUntil={cooperative ? null : other?.boostEndMs ?? null}
         readyExtra={<div className="duel-invite">
           {venue && <p className="muted">Tour venue: {venue.name}</p>}
+          {duel.phase === 'lobby' && goal.current && <p className="ready-goal">Your goal: {goal.current.full ? 'match your full combo' : `beat your ${goal.current.combo} combo`}.</p>}
           {team && duel.phase === 'lobby' && <p className="ready-goal">Team target: {team.targetScore.toLocaleString()} points between you.</p>}
           {slot === duel.host && duel.players.length < 2 && <>
             <label className="field">Invite link<input readOnly value={inviteLink} onFocus={event => event.target.select()} /></label>
@@ -238,7 +258,8 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
             onChange={event => action('duel-level', event.target.value)}>
             {DIFFICULTIES.map(item => <option key={item} value={item}>{difficultyNames[item]}</option>)}</select>
             <small>{cooperative ? 'Each player picks their own.' : 'Each player picks their own. With different difficulties, the better timing rating wins.'}</small></label>}
-          <p>{duel.players.length < 2 ? `Waiting for ${cooperative ? 'a teammate' : 'an opponent'}…` : duel.rematchBy !== undefined && duel.rematchBy !== slot && duel.players[duel.rematchBy]
+          <p>{duel.players.length < 2 ? `Waiting for ${cooperative ? 'a teammate' : 'an opponent'}…` : duel.pickedBy !== undefined && duel.pickedBy !== slot && duel.players[duel.pickedBy]
+            ? `${duel.players[duel.pickedBy].profile.name} picked a new song: ${duel.song.title}. Ready up to start.` : duel.rematchBy !== undefined && duel.rematchBy !== slot && duel.players[duel.rematchBy]
             ? `${duel.players[duel.rematchBy].profile.name} asked for ${cooperative ? 'another go' : 'a rematch'}. Ready up to start.` : 'Both players are here. Ready up to start.'}</p>
           {error && <p role="alert" className="error">{error}</p>}
         </div>}
