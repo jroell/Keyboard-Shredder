@@ -1,5 +1,7 @@
 import 'dotenv/config';
-import { access, mkdir, readdir, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { access, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { catalogTracks } from '../backend/catalog-data';
 import { analyze, atomicWrite, compose, preparePlaybackStems, separate } from '../backend/music';
@@ -12,6 +14,7 @@ if (!process.env.ELEVENLABS_API_KEY || process.env.FIXTURE_MUSIC === '1') {
   throw new Error('A live ElevenLabs key is required to create the starter setlist.');
 }
 
+const exec = promisify(execFile);
 const exists = (path: string) => access(path).then(() => true, () => false);
 const selected = new Set(process.argv.slice(2));
 const jobs = catalogTracks.filter(([id]) => selected.size === 0 || selected.has(id));
@@ -34,7 +37,20 @@ async function work() {
           if (!response.ok) throw new Error(`Artist download returned HTTP ${response.status}.`);
           const file = new Uint8Array(await response.arrayBuffer());
           if (file.length > 16 * 1024 * 1024) throw new Error('Artist download exceeded 16 MB.');
-          await atomicWrite(audio, file);
+          if (long.excerpt) {
+            const source = join(dir, 'source.audio');
+            const rendered = join(dir, 'excerpt.mp3.partial');
+            await atomicWrite(source, file);
+            try {
+              await exec('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', source, '-t', String(seconds),
+                '-af', `afade=t=out:st=${seconds - 3}:d=3`, '-codec:a', 'libmp3lame', '-q:a', '2', '-f', 'mp3', rendered],
+              { timeout: 60_000 });
+              await rename(rendered, audio);
+            } finally {
+              await rm(source, { force: true });
+              await rm(rendered, { force: true });
+            }
+          } else await atomicWrite(audio, file);
         } else await compose(dir, prompt, seconds);
       }
       if (!await exists(stem)) await separate(dir, seconds);

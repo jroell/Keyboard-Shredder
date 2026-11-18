@@ -13,6 +13,10 @@ def decode(path, rate, channels=1):
     return samples if channels == 1 else samples.reshape(-1, channels)
 
 
+class AlignmentUncertain(ValueError):
+    pass
+
+
 def alignment_error_ms(master, guitar, rate):
     if abs(len(master) - len(guitar)) > rate // 4:
         raise ValueError("The guitar stem and master differ in length.")
@@ -34,5 +38,22 @@ def alignment_error_ms(master, guitar, rate):
         if scores[peak] >= 0.12:
             offsets.append(float(lags[keep][peak] * 1000 / rate))
     if len(offsets) < 2 or max(offsets) - min(offsets) > 12 or max(map(abs, offsets)) > 120:
-        raise ValueError("The guitar stem could not be aligned with the recording.")
+        raise AlignmentUncertain("The guitar stem could not be aligned with the recording.")
     return float(np.median(offsets))
+
+
+def stem_alignment_ms(folder, master, guitar, rate):
+    try:
+        return alignment_error_ms(master, guitar, rate)
+    except AlignmentUncertain:
+        backing_parts = sorted(folder.glob("backing-*.audio"))
+        if not backing_parts:
+            raise
+        reconstructed = guitar.copy()
+        for part in backing_parts:
+            samples = decode(part, rate)
+            if abs(len(samples) - len(guitar)) > rate // 4:
+                raise ValueError("A backing stem and guitar stem differ in length.")
+            count = min(len(samples), len(guitar))
+            reconstructed[:count] += samples[:count]
+        return alignment_error_ms(master, reconstructed, rate)

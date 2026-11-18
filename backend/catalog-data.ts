@@ -2,6 +2,7 @@ import type { SongCredit } from '../shared/song';
 
 type CatalogTrack = readonly [id: string, title: string, genre: string, prompt: string, long?: {
   seconds: number;
+  excerpt?: boolean;
   credit?: SongCredit & { download: string };
 }];
 
@@ -38,4 +39,9 @@ export const catalogTracks: readonly CatalogTrack[] = [
     source: 'https://www.jonobacon.com/creative/#liberate',
     download: 'https://audio.lugradio.org/severedfifth/liberate/severedfifth-endofdays.mp3',
   } }],
+  ['house-of-the-rising-sun', 'House of the Rising Sun', 'Folk blues', '', { seconds: 210, credit: {
+    artist: 'HoliznaCC0', license: 'CC0 1.0', licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/',
+    source: 'https://freemusicarchive.org/music/holiznacc0/house-of-the-rising-sun/house-of-the-rising-sun/',
+    download: 'https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/UuS2LvIJRrA6rYTTrGuFI0XzTtESTF0e8XI0reUj.mp3',
+  }, excerpt: true }],
 ];

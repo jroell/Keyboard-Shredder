@@ -6,14 +6,14 @@ from tempfile import TemporaryDirectory
 
 from scipy.io.wavfile import write
 
-from audio import alignment_error_ms, decode
+from audio import decode, stem_alignment_ms
 
 
 def analyze(folder):
     rate = 22050
     master = decode(folder / "master.mp3", rate)
     guitar = decode(folder / "guitar.audio", rate)
-    offset = alignment_error_ms(master, guitar, rate)
+    offset = stem_alignment_ms(folder, master, guitar, rate)
 
     from basic_pitch import FilenameSuffix, build_icassp_2022_model_path
     from basic_pitch.inference import Model, predict

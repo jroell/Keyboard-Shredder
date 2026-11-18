@@ -5,7 +5,7 @@ import sys
 
 import numpy as np
 
-from audio import alignment_error_ms, decode
+from audio import decode, stem_alignment_ms
 
 
 def shifted(samples, shift, length):
@@ -30,7 +30,7 @@ def prepare(folder):
     rate = 44100
     master = decode(folder / "master.mp3", rate, channels=2)
     guitar = decode(folder / "guitar.audio", rate, channels=2)
-    lag = alignment_error_ms(master.mean(axis=1), guitar.mean(axis=1), rate)
+    lag = stem_alignment_ms(folder, master.mean(axis=1), guitar.mean(axis=1), rate)
     shift = round(lag * rate / 1000)
     lead = shifted(guitar, shift, len(master))
     other_stems = sorted(folder.glob("backing-*.audio"))
