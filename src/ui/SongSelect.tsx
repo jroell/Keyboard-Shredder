@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ChevronLeft, ChevronRight, Play, Trophy } from 'lucide-react';
 import { DIFFICULTIES, difficultyBlurbs, difficultyNames } from '../../shared/difficulty';
-import { MOD_IDS, MODS, modMultiplier, type ModId } from '../../shared/modifiers';
+import { isRanked, MOD_IDS, MODS, modMultiplier, type ModId } from '../../shared/modifiers';
 import { recordKey } from '../../shared/progression';
 import { useApp } from '../App';
 import { fetchBoard, type Board } from '../lib/api';
@@ -55,7 +55,7 @@ export default function SongSelect() {
 
   useEffect(() => {
     setBoard(undefined);
-    if (!song || song.model !== 'starter-setlist') return;
+    if (!song || song.model !== 'starter-setlist' || !isRanked(mods)) return;
     let active = true;
     const timer = setTimeout(() => {
       fetchBoard(song.id, difficulty, mods).then(next => { if (active) setBoard(next); }).catch(() => {});
@@ -68,7 +68,7 @@ export default function SongSelect() {
     <div className="songs-backdrop" key={art} style={{ backgroundImage: `url("${art}")` }} aria-hidden="true" />
     <div className="chips" role="tablist" aria-label="Genre">
       {genres.map(name => <button key={name} role="tab" aria-selected={genre === name} className={genre === name ? 'on' : ''}
-        onClick={() => { sfx.play('ui-toggle'); setGenre(name); }}>{name}</button>)}
+        onClick={event => { event.currentTarget.blur(); sfx.play('ui-toggle'); setGenre(name); }}>{name}</button>)}
     </div>
     <div className="songs-layout">
       <ul className="song-list" ref={list} role="listbox" aria-label="Songs">
@@ -93,18 +93,18 @@ export default function SongSelect() {
               : song.model === 'starter-setlist' ? 'Keyboard Shredder original' : 'Your track'}</p></div>
         </div>
         <div className="difficulty-pick" role="group" aria-label="Difficulty">
-          <button className="icon-button" aria-label="Easier" disabled={difficulty === DIFFICULTIES[0]} onClick={() => setDifficulty(-1)}><ChevronLeft aria-hidden="true" /></button>
+          <button className="icon-button" aria-label="Easier" disabled={difficulty === DIFFICULTIES[0]} onClick={event => { event.currentTarget.blur(); setDifficulty(-1); }}><ChevronLeft aria-hidden="true" /></button>
           <div className="difficulty-name" data-level={difficulty}>
             <strong>{difficultyNames[difficulty]}</strong>
             <span className="difficulty-pips" aria-hidden="true">{DIFFICULTIES.map((level, i) => <i key={level} className={i <= DIFFICULTIES.indexOf(difficulty) ? 'on' : ''} />)}</span>
             <small>{difficultyBlurbs[difficulty]}</small>
           </div>
-          <button className="icon-button" aria-label="Harder" disabled={difficulty === DIFFICULTIES.at(-1)} onClick={() => setDifficulty(1)}><ChevronRight aria-hidden="true" /></button>
+          <button className="icon-button" aria-label="Harder" disabled={difficulty === DIFFICULTIES.at(-1)} onClick={event => { event.currentTarget.blur(); setDifficulty(1); }}><ChevronRight aria-hidden="true" /></button>
         </div>
         <div className="mods" role="group" aria-label="Modifiers">
           {MOD_IDS.map(id => <button key={id} className={mods.includes(id) ? 'on' : ''} aria-pressed={mods.includes(id)} title={MODS[id].blurb}
-            onClick={() => { sfx.play('ui-toggle'); setMods(previous => previous.includes(id) ? previous.filter(mod => mod !== id) : MOD_IDS.filter(mod => mod === id || previous.includes(mod))); }}>
-            {MODS[id].name}{MODS[id].bonus ? <em>+{Math.round(MODS[id].bonus * 100)}%</em> : null}</button>)}
+            onClick={event => { event.currentTarget.blur(); sfx.play('ui-toggle'); setMods(previous => previous.includes(id) ? previous.filter(mod => mod !== id) : MOD_IDS.filter(mod => mod === id || previous.includes(mod))); }}>
+            {MODS[id].name}{MODS[id].bonus ? <em>{MODS[id].bonus > 0 ? '+' : ''}{Math.round(MODS[id].bonus * 100)}%</em> : null}</button>)}
           {mods.length > 0 && <p className="mods-note">{mods.map(id => MODS[id].blurb).join(' ')} Score ×{modMultiplier(mods).toFixed(2)}.</p>}
         </div>
         <div className="song-record">
@@ -115,7 +115,7 @@ export default function SongSelect() {
         <button className="primary big play-song" onClick={play} style={{ '--pulse': '1' } as CSSProperties}><Play aria-hidden="true" />Play</button>
         {song.model === 'starter-setlist' && <div className="mini-board-wrap">
           <h3><Trophy aria-hidden="true" size={15} /> Leaderboard</h3>
-          {board ? board.entries.length ? <ol className="mini-board">{board.entries.slice(0, 5).map(entry =>
+          {!isRanked(mods) ? <p className="muted">Slow-mo runs are for practice and stay off the board.</p> : board ? board.entries.length ? <ol className="mini-board">{board.entries.slice(0, 5).map(entry =>
             <li key={entry.rank + entry.name} className={entry.you ? 'you' : ''}><span>{entry.rank}</span><strong>{entry.name}</strong><em>{entry.score.toLocaleString()}</em></li>)}
             {board.you && board.you.rank > 5 && <li className="you"><span>{board.you.rank}</span><strong>You</strong><em>{board.you.score.toLocaleString()}</em></li>}</ol>
             : <p className="muted">Nobody has posted a score here. Be the first.</p> : <p className="muted">Loading scores…</p>}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { Pause, Play, RotateCcw, Star, LogOut } from 'lucide-react';
 import type { Difficulty, SongEvent } from '../../shared/song';
 import { canFail, difficultyNames, notesFor } from '../../shared/difficulty';
-import { applyMods, finalScore, MODS, windowFor, type ModId } from '../../shared/modifiers';
+import { applyMods, finalScore, MODS, playbackRate, windowFor, type ModId } from '../../shared/modifiers';
 import { gradeFor, isFullCombo, starProgress, starsFor } from '../../shared/rating';
 import type { RunMode, RunSummary } from '../../shared/progression';
 import { buildTypingChart, charFor, wpm, type KeyStats, type TypingChart, type TypingLesson, type TypingOptions } from '../../shared/typing';
@@ -14,6 +14,7 @@ import { GameSession, type InputLog, type Match, type PlayerSetup, type SessionE
 import { beatPulse, Highway, StageRenderer, type LaneLayout } from '../game/renderer';
 import { laneLayout, typingLayout } from '../game/layouts';
 import { sfx } from '../game/sfx';
+import { padFocus, padName, PadReader, pads } from '../game/gamepad';
 import { laneColors, saveStore, settingsStore, useCell } from '../state/store';
 import { completeRun, type Outcome } from '../state/progress';
 import PlayerHud, { type HudHandle } from './PlayerHud';
@@ -142,7 +143,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       chart, audio: recording.audio, leadAudio: recording.leadAudio, players,
       calibration: settings.calibration, canFail: canFail[setup.difficulty] && !setup.typing && !setup.tutorial,
       sudden: setup.mods.includes('sudden'), musicVolume: settings.musicVolume,
-      openLead: !!typing || !!setup.party, match: () => matchRef.current,
+      openLead: !!typing || !!setup.party, rate: playbackRate(setup.mods), match: () => matchRef.current,
       onEvent: event => handler.current(event),
     });
     session.current = current;
@@ -185,9 +186,56 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     observer.observe(canvas.current);
     let frame = 0;
     let lastStars = -1;
+    // Controllers: one plays the only neck; in party mode one controller takes player 2 and a second takes player 1.
+    const readers = new Map<number, PadReader>();
+    const sounding = new Map<number, Set<number>>();
+    const readPads = (current: GameSession) => {
+      const connected = typing ? [] : pads();
+      padFocus.playing = current.state === 'playing' && connected.length > 0;
+      if (!connected.length) return;
+      const map = settingsStore.get().pad;
+      connected.slice(0, players.length).forEach((pad, order) => {
+        const player = players.length === 1 ? 0 : connected.length === 1 ? 1 : order;
+        if (players[player].bot !== undefined) return;
+        let reader = readers.get(pad.index);
+        if (!reader) readers.set(pad.index, reader = new PadReader(pad.index));
+        const input = reader.poll(map);
+        if (!input) return;
+        if (input.pause && !matchRef.current) {
+          if (current.state === 'playing') current.pause();
+          else if (current.state === 'paused' || current.state === 'ready') void current.start();
+          return;
+        }
+        if (current.state !== 'playing') return;
+        let lanes = sounding.get(pad.index);
+        if (!lanes) sounding.set(pad.index, lanes = new Set());
+        if (map.mode === 'tap') {
+          for (const lane of input.pressed) current.laneInput(player, lane, true, input.at);
+          for (const lane of input.released) current.laneInput(player, lane, false, input.at);
+        } else {
+          for (const lane of input.released) {
+            if (lanes.delete(lane)) current.laneInput(player, lane, false, input.at);
+          }
+          if (input.strum) {
+            for (const lane of lanes) current.laneInput(player, lane, false, input.at);
+            lanes.clear();
+            const held = input.frets.flatMap((down, lane) => down ? [lane] : []);
+            for (const lane of current.strumLanes(player, held, input.at)) {
+              current.laneInput(player, lane, true, input.at);
+              lanes.add(lane);
+            }
+          }
+        }
+        if (input.overdrive) current.boost(player, input.at);
+        if (player === 0) current.whammy(input.whammy);
+        const highway = stageRenderer.highways[player];
+        if (highway) highway.whammy = input.whammy;
+      });
+    };
     const loop = () => {
       const current = session.current;
       if (!current) return;
+      readPads(current);
       current.frame();
       const time = current.time();
       stageRenderer.highways.forEach((highway, index) => {
@@ -257,7 +305,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     };
     frame = requestAnimationFrame(loop);
     (window as unknown as Record<string, unknown>).__shredder = { session: game, chart, players, typing };
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); renderer.current = null; };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); renderer.current = null; padFocus.playing = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [players, layouts, chart, save.equipped.highway, save.equipped.gem, save.equipped.fx, settings.speed, settings.calm, setup, typing]);
 
@@ -465,6 +513,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     };
   }, [result, start, onExit, pauseItems, pauseIndex]);
 
+  const guitar = useGuitarName();
   const modeLine = [typing ? setup.typing?.lesson?.title ?? 'Free typing' : difficultyNames[setup.difficulty],
     ...setup.mods.map(id => MODS[id].name)].join(' · ');
   const single = players.length === 1;
@@ -523,6 +572,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
           {canFail[setup.difficulty] && !setup.tutorial && <p className="ready-goal">Keep the crowd happy. An empty crowd meter ends the set.</p>}
           {setup.mods.includes('sudden') && <p className="ready-goal">Sudden death: one missed note ends the set.</p>}
         </>}
+        {guitar && !typing && <p className="ready-goal">{guitar} connected. {settings.pad.mode === 'strum' ? 'Hold the frets and strum on each note.' : 'Press a fret on each note.'} Tilt or press Select for overdrive.</p>}
         {readyExtra}
         {error && <p role="alert" className="error">{error}</p>}
         <button className="primary big" autoFocus disabled={state === 'starting' || waitingForMatch} onClick={() => start()}>{startLabel}</button>
@@ -570,6 +620,19 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     {result && !match && <Results recording={recording} setup={setup} result={result} bot={bot !== undefined}
       onReplay={() => start(true)} onExit={onExit} exitLabel={exitLabel} next={next?.(result)} />}
   </section>;
+}
+
+/** Name of the first connected controller, updated when one is plugged in or removed. */
+export function useGuitarName() {
+  const [name, setName] = useState(() => { const pad = pads()[0]; return pad ? padName(pad) : ''; });
+  useEffect(() => {
+    const update = () => { const pad = pads()[0]; setName(pad ? padName(pad) : ''); };
+    window.addEventListener('gamepadconnected', update);
+    window.addEventListener('gamepaddisconnected', update);
+    const timer = setInterval(update, 1500);
+    return () => { window.removeEventListener('gamepadconnected', update); window.removeEventListener('gamepaddisconnected', update); clearInterval(timer); };
+  }, []);
+  return name;
 }
 
 function renderRibbon(host: HTMLElement, typing: TypingChart, scoring: Scoring, index: number, word: number) {

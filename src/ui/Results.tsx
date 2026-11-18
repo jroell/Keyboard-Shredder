@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Award, ChevronRight, Crown, RotateCcw, Share2, Star, Trophy, Unlock } from 'lucide-react';
 import { difficultyNames } from '../../shared/difficulty';
-import { MODS, finalScore } from '../../shared/modifiers';
+import { MODS, finalScore, isRanked } from '../../shared/modifiers';
 import { levelFor } from '../../shared/progression';
 import { starsFor } from '../../shared/rating';
 import { keyLabel } from '../../shared/practice';
@@ -91,7 +91,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   const after = useMemo(() => levelFor(outcome.save.xp), [outcome]);
   const leveled = after.level > before.level;
   const [xpShown, setXpShown] = useState(before.progress);
-  const ranked = !bot && !failed && !typing && !party && song.model === 'starter-setlist' && scorings[0].hits > 0 &&
+  const ranked = !bot && !failed && !typing && !party && isRanked(setup.mods) && song.model === 'starter-setlist' && scorings[0].hits > 0 &&
     ['quickplay', 'tour', 'daily', 'challenge'].includes(setup.mode);
 
   useEffect(() => {
@@ -140,6 +140,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       if (event.code === 'KeyR') { event.preventDefault(); onReplay(); }
       else if (event.code === 'Escape') { event.preventDefault(); onExit(); }
       else if (event.code === 'KeyN' && next) { event.preventDefault(); next.run(); }
+      else if (event.code === 'Enter' && !(event.target instanceof HTMLElement)) { event.preventDefault(); primary.current?.click(); }
     };
     window.addEventListener('keydown', keys);
     return () => window.removeEventListener('keydown', keys);

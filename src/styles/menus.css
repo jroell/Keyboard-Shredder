@@ -250,6 +250,18 @@
 .account-panel label { display: grid; gap: .3rem; font-size: .85rem; color: var(--muted); font-weight: 600; }
 .account-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; }
 .account-actions button { margin-top: 0 !important; font-size: .85rem; min-height: 38px; }
+.pad-status { font-weight: 700; color: var(--muted); }
+.pad-status.on { color: var(--green); }
+.pad-test { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .7rem; }
+.pad-test i { width: 38px; height: 38px; border-radius: 50%; border: 3px solid var(--lane); background: color-mix(in srgb, var(--lane) 15%, #0d0818); transition: transform .05s; }
+.pad-test i.on { background: var(--lane); box-shadow: 0 0 16px var(--lane); transform: scale(1.12); }
+.pad-test span { padding: .25rem .7rem; border-radius: 99px; border: 1px solid var(--edge); font-size: .8rem; font-weight: 700; color: var(--muted); }
+.pad-test span.on { background: var(--cyan); color: #06222a; border-color: transparent; }
+.pad-wizard { display: grid; gap: .4rem; padding: .9rem; margin-top: .7rem; border-radius: 12px; border: 2px solid var(--cyan); background: #35e7ff1a; }
+.pad-wizard p { font: 800 1.5rem var(--display); text-transform: uppercase; }
+.pad-map { font-size: .8rem; }
+.guitar-setup details { margin-top: .8rem; }
+.guitar-setup summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; }
 .confirm { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .confirm p { flex-basis: 100%; }
 .composer { display: grid; gap: .9rem; max-width: 720px; }

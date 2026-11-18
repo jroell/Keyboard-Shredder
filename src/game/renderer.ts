@@ -183,6 +183,8 @@ export function beatPulse(chart: Chart, timeMs: number) {
 export class Highway {
   x = 0; y = 0; w = 100; h = 100;
   wobble = 0;
+  /** 0 to 1 from a whammy bar. Makes held tails shake. */
+  whammy = 0;
   dim = 0;
   energy = 0;
   private particles: Particle[] = [];
@@ -662,7 +664,7 @@ export class Highway {
         for (const lane of event.lanes) {
           const column = layout.column(lane);
           const color = missed ? '#666672' : boosting ? BOOST_COLOR : layout.color(lane);
-          const jitter = sustaining ? Math.sin(now / 28 + lane) * unit * 0.03 : 0;
+          const jitter = sustaining ? Math.sin(now / 28 + lane) * unit * (0.03 + 0.16 * this.whammy) : 0;
           const x0 = this.px(column, depth, timeMs) + jitter;
           const x1 = this.px(column, tailDepth, timeMs);
           const w0 = unit * (sustaining ? 0.2 : 0.14);

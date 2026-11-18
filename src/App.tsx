@@ -11,6 +11,7 @@ import { call, fetchSongs, guestToken, setTokenSource } from './lib/api';
 import { loadRecording, type Recording } from './lib/recording';
 import { previewSong, stopPreview } from './lib/preview';
 import { sfx } from './game/sfx';
+import { startMenuPad } from './game/gamepad';
 import { saveStore, settingsStore, tourStore, useCell } from './state/store';
 import GameScreen, { type RunResult, type RunSetup } from './ui/GameScreen';
 import Title from './ui/Title';
@@ -91,6 +92,7 @@ export default function App() {
   const save = useCell(saveStore);
 
   useEffect(() => { sfx.volume = settings.sfxVolume; }, [settings.sfxVolume]);
+  useEffect(() => startMenuPad(() => settingsStore.get().pad), []);
   useEffect(() => { document.documentElement.dataset.calm = settings.calm ? 'true' : 'false'; }, [settings.calm]);
 
   useEffect(() => {

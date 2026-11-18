@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS, saveStore, settingsStore, useCell, type Settings } fr
 import { emptySave } from '../../shared/progression';
 import AccountAccess from '../components/AccountAccess';
 import { Screen } from './common';
+import GuitarSetup from './GuitarSetup';
 
 const CODE = /^(Key[A-Z]|Digit[0-9]|Semicolon|Comma|Period|Slash|Quote|BracketLeft|BracketRight|Minus|Equal)$/;
 type Target = { group: 'keys' | 'p1' | 'p2'; lane: number };
@@ -117,6 +118,7 @@ export default function SettingsScreen() {
         <p role="status">{status}</p>
         <button type="button" onClick={() => { update({ keys: DEFAULT_SETTINGS.keys, partyKeys: DEFAULT_SETTINGS.partyKeys }); setStatus('Default keys restored.'); }}>Reset keys</button>
       </section>
+      <GuitarSetup />
       <section className="panel">
         <h2>Timing and speed</h2>
         <label className="field">Note speed<input type="range" min={800} max={2800} step={50} value={3600 - settings.speed}

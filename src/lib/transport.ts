@@ -17,6 +17,8 @@ export class Transport {
   private contextStart = 0;
   private offset = 0;
   private lastInputTime = -Infinity;
+  /** Playback speed. 0.75 plays the recording slower and lower, for practice. */
+  rate = 1;
 
   constructor(readonly context: AudioContext, readonly buffer: AudioBuffer, readonly leadBuffer?: AudioBuffer,
     private readonly output: AudioNode = context.destination) {}
@@ -38,12 +40,14 @@ export class Transport {
     const target = current + delay / 1000 - latency;
     this.contextStart = Math.max(current, target);
     this.offset = offset + Math.max(0, current - target) * 1000;
+    if (this.rate !== 1) source.playbackRate.value = this.rate;
     source.start(this.contextStart, Math.min(this.buffer.duration, this.offset / 1000));
     if (this.leadBuffer) {
       const lead = this.context.createBufferSource();
       const gain = this.context.createGain();
       gain.gain.value = 0;
       lead.buffer = this.leadBuffer;
+      if (this.rate !== 1) lead.playbackRate.value = this.rate;
       lead.connect(gain);
       gain.connect(this.output);
       this.leadSource = lead;
@@ -54,7 +58,7 @@ export class Transport {
 
   soundLead(startMs: number, endMs: number) {
     if (!this.leadGain) return;
-    const toContext = (ms: number) => this.contextStart + (ms - this.offset) / 1000;
+    const toContext = (ms: number) => this.contextStart + (ms - this.offset) / 1000 / this.rate;
     const start = Math.max(this.context.currentTime, toContext(startMs));
     const end = toContext(endMs);
     if (end <= start) return;
@@ -90,6 +94,12 @@ export class Transport {
     }
   }
 
+  /** Bends the lead guitar down by up to `cents`, for a whammy bar. */
+  bendLead(cents: number) {
+    const detune = this.leadSource?.detune;
+    if (detune) detune.setTargetAtTime(-Math.abs(cents), this.context.currentTime, 0.02);
+  }
+
   /** Lets the lead guitar ring without waiting for hits. */
   openLead(level = 1) {
     this.leadGain?.gain.setValueAtTime(level, this.context.currentTime);
@@ -103,7 +113,7 @@ export class Transport {
     const outputNow = output && output.contextTime > 0 && output.performanceTime > 0
       ? output.contextTime + (clockNow - output.performanceTime) / 1000 : NaN;
     const time = Math.abs(outputNow - fallback) < 0.25 ? outputNow : fallback;
-    return this.offset + (time - this.contextStart) * 1000 + now - clockNow;
+    return this.offset + ((time - this.contextStart) * 1000 + now - clockNow) * this.rate;
   }
 
   inputTimeMs(timestamp: number) {

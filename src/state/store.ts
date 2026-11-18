@@ -6,6 +6,7 @@ import type { KeyStats, LessonProgress } from '../../shared/typing';
 import type { Difficulty } from '../../shared/song';
 import { isDifficulty } from '../../shared/difficulty';
 import { LANE_PALETTES } from '../game/themes';
+import { DEFAULT_PAD, normalizePadMap, type PadMap } from '../game/gamepad';
 
 export type Settings = {
   keys: string[];
@@ -20,6 +21,8 @@ export type Settings = {
   calm: boolean;
   showKeyboard: boolean;
   difficulty: Difficulty;
+  /** Guitar controller or gamepad mapping. */
+  pad: PadMap;
 };
 export type WpmEntry = { at: number; wpm: number; accuracy: number; lesson: string };
 
@@ -27,7 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   keys: DEFAULT_KEYS,
   partyKeys: [['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG'], ['KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon']],
   calibration: 0, speed: 1700, palette: 'Classic', musicVolume: 0.9, sfxVolume: 0.7,
-  hitSounds: 'auto', calm: false, showKeyboard: true, difficulty: 'easy',
+  hitSounds: 'auto', calm: false, showKeyboard: true, difficulty: 'easy', pad: DEFAULT_PAD,
 };
 
 const KEY_CODE = /^(Key[A-Z]|Digit[0-9]|Semicolon|Comma|Period|Slash|Quote|BracketLeft|BracketRight|Minus|Equal)$/;
@@ -54,6 +57,7 @@ export function normalizeSettings(value: unknown): Settings {
     calm: input.calm === true,
     showKeyboard: input.showKeyboard !== false,
     difficulty: isDifficulty(input.difficulty) ? input.difficulty : DEFAULT_SETTINGS.difficulty,
+    pad: normalizePadMap(input.pad),
   };
 }
 

@@ -86,7 +86,7 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--pink); }
 .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: var(--radius); padding: 1.25rem; backdrop-filter: blur(10px); }
 .panel h2 { font-size: 1.5rem; display: flex; gap: .5rem; align-items: center; margin-bottom: .6rem; }
 .panel h3 { font-size: 1.05rem; margin: .9rem 0 .4rem; color: var(--muted); }
-.panel p + p, .panel p + button, .panel button + button, .panel p + .field, .panel .field + .field, .panel .field + button, .panel .field + .check { margin-top: .7rem; }
+.panel p + p, .panel p + button, .panel > button + button, .panel p + .field, .panel .field + .field, .panel .field + button, .panel .field + .check { margin-top: .7rem; }
 
 .chips { display: flex; flex-wrap: wrap; gap: .5rem; }
 .chips button { min-height: 38px; padding: .3rem .9rem; font-size: .9rem; }

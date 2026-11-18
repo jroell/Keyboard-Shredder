@@ -12,3 +12,4 @@ catalog/*/*.audio
 .tmp-shots
 .remember
 tests
+dist-review

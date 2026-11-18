@@ -10,7 +10,7 @@ import { resolve } from 'node:path';
 import { createJobStore } from './backend/jobs';
 import { dailyChallenge, dailyKey } from './shared/daily';
 import { isDifficulty } from './shared/difficulty';
-import { normalizeMods, type ModId } from './shared/modifiers';
+import { isRanked, normalizeMods, type ModId } from './shared/modifiers';
 import type { Chart, Difficulty } from './shared/song';
 
 const localTest = process.env.LOCAL_TEST_AUTH === '1';
@@ -98,6 +98,7 @@ app.post('/api/scores', (request, response, next) => {
     const result = replayRun(chart, input);
     if (result.ok === false) return response.status(400).json({ error: result.error });
     const mods = normalizeMods(input.mods);
+    if (!isRanked(mods)) return response.status(400).json({ error: 'Slow-mo runs are not ranked.' });
     if (typeof daily === 'string') {
       const now = Date.now();
       const dayMs = 24 * 60 * 60 * 1000;

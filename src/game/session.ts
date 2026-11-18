@@ -89,6 +89,8 @@ export class GameSession {
     calibration: number; canFail: boolean; sudden: boolean; musicVolume: number;
     /** Keep the lead guitar audible without hits (typing and party modes). */
     openLead?: boolean;
+    /** Playback speed, 1 by default. */
+    rate?: number;
     match?: () => Match | undefined;
     onEvent: (event: SessionEvent) => void;
     sharedContext?: () => AudioContext;
@@ -168,6 +170,7 @@ export class GameSession {
         this.musicGain.gain.value = this.options.musicVolume;
         this.musicGain.connect(ctx.destination);
         this.transport = new Transport(ctx, decoded, lead, this.musicGain);
+        this.transport.rate = this.options.rate ?? 1;
       }
       if (this.disposed) return;
       if (replay) {
@@ -180,7 +183,7 @@ export class GameSession {
         this.setState(previous === 'starting' ? 'ready' : previous);
         return;
       }
-      await this.transport.start(this.offset, this.beatMs * 4, match?.startAt ?? undefined);
+      await this.transport.start(this.offset, this.beatMs * 4 / (this.options.rate ?? 1), match?.startAt ?? undefined);
       if (this.options.openLead) this.transport.openLead();
       if (match && this.transport.timeMs() >= 150) {
         this.scorings[0].rejoin(this.transport.timeMs() - this.options.calibration, match.combo, match.ampCharge, match.boostEndMs);
@@ -284,6 +287,34 @@ export class GameSession {
       this.logs[player].boosts.push(Math.round(timeMs * 10) / 10);
       this.match()?.onBoost(timeMs);
     }
+  }
+
+  /**
+   * Picks what a strum plays. Lower frets may stay held under the note, as on a real guitar:
+   * a single note needs its fret to be the highest one held, a chord needs all of its frets.
+   */
+  strumLanes(player: number, held: number[], timestamp: number): number[] {
+    if (!held.length || !this.transport) return [];
+    const scoring = this.scorings[player];
+    const { events, windowMs } = this.options.players[player];
+    const timeMs = this.transport.inputTimeMs(timestamp) - this.options.calibration;
+    const top = Math.max(...held);
+    let best: SongEvent | undefined;
+    let distance = windowMs + 1;
+    for (const event of events) {
+      if (event.timeMs < timeMs - windowMs) continue;
+      if (event.timeMs > timeMs + windowMs) break;
+      if (scoring.consumed.has(event.id)) continue;
+      const fits = event.lanes.every(lane => held.includes(lane)) && Math.max(...event.lanes) === top;
+      const delta = Math.abs(event.timeMs - timeMs);
+      if (fits && delta < distance) { best = event; distance = delta; }
+    }
+    return best ? [...best.lanes] : [top];
+  }
+
+  /** 0 to 1 from a whammy bar. Bends the lead guitar while a sustain rings. */
+  whammy(amount: number) {
+    this.transport?.bendLead(this.scorings[0].sustaining.size ? amount * 180 : 0);
   }
 
   /** Returns true when the key belonged to the game. */
