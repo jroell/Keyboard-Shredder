@@ -101,12 +101,18 @@ export default function SongSelect() {
     const events = notesFor(chart, difficulty);
     return { notes: events.length, chords: events.filter(event => event.lanes.length > 1).length, holds: events.filter(event => event.durationMs > 0).length };
   }, [chart, difficulty]);
-  const practice = () => {
+  const practice = (drill = false) => {
     if (!song) return;
     sfx.play('ui-select');
     stopPreview();
+    // The drill opens on the section with the most chords and holds.
+    const size = song.durationMs / 8;
+    const events = chart && drill ? notesFor(chart, difficulty) : [];
+    const weight = Array.from({ length: 8 }, (_, index) => events.filter(event => event.timeMs >= index * size && event.timeMs < (index + 1) * size)
+      .reduce((total, event) => total + (event.lanes.length > 1 ? 1 : 0) + (event.durationMs > 0 ? 1 : 0), 0));
+    const section = drill ? weight.indexOf(Math.max(...weight)) : 0;
     void app.launch(song.id, { mode: 'quickplay', difficulty, mods: mods.filter(id => id !== 'sudden' && id !== 'slow'),
-      practice: { startMs: 0, endMs: Math.round(song.durationMs / 8), rate: 0.75 } }, { name: 'songs' });
+      practice: { startMs: Math.round(section * size), endMs: Math.round((section + 1) * size), rate: 0.75 } }, { name: 'songs' });
   };
 
   const art = song ? stageArt(song.id) ?? fallbackArt : fallbackArt;
@@ -163,8 +169,10 @@ export default function SongSelect() {
         </div>
         <div className="song-actions">
           <button className="primary big play-song" onClick={play} style={{ '--pulse': '1' } as CSSProperties}><Play aria-hidden="true" />Play</button>
-          <button onClick={practice} title="Loop one section at a slower speed. Nothing is scored.">Practice</button>
+          <button onClick={() => practice()} title="Loop one section at a slower speed. Nothing is saved or ranked.">Practice</button>
         </div>
+        {!record && counts && counts.chords + counts.holds > 0 && ['medium', 'hard', 'expert'].includes(difficulty) &&
+          <p className="drill-hint">New to chords and holds? <button className="link" onClick={() => practice(true)}>Drill the busiest part at 75% speed</button></p>}
         {song.model === 'starter-setlist' && <div className="mini-board-wrap">
           <h3><Trophy aria-hidden="true" size={15} /> Leaderboard</h3>
           {!isRanked(mods) ? <p className="muted">Slow-mo runs are for practice and stay off the board.</p> : board ? board.entries.length ? <ol className="mini-board">{board.entries.slice(0, 5).map(entry =>

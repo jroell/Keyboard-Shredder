@@ -305,7 +305,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       const stars = starProgress(players.length > 1 && setup.party?.coop
         ? (current.scorings[0].rating + current.scorings[1].rating) / 2 : lead.rating);
       if (Math.abs(stars - lastStars) > 0.004) {
-        if (Math.floor(stars) > Math.floor(lastStars) && lastStars >= 0 && current.state === 'playing') {
+        if (Math.floor(stars) > Math.floor(lastStars) && lastStars >= 0 && current.state === 'playing' && !setup.practice) {
           sfx.play('star', { pitch: Math.floor(stars) * 2 });
           callout(`${Math.floor(stars)} ${Math.floor(stars) === 1 ? 'star' : 'stars'}`, 'star');
         }
@@ -470,6 +470,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       sfx.play(event.judgement === 'Perfect' ? 'hit-perfect' : event.judgement === 'Great' ? 'hit-great' : 'hit-good',
         { lane: layouts[player].column(event.lanes[0]) < 0 ? 0 : layouts[player].column(event.lanes[0]), pan });
       const combo = event.combo;
+      // Practice names what just worked, so a chord and a paid-out hold each get their own word.
+      if (setup.practice && event.lanes.length > 1) callout('Chord landed', 'star', player);
       if (combo === 10 || combo === 20 || combo === 30) sfx.play('mult-up', { pitch: combo / 10 * 3, pan });
       if (combo === 25 || combo === 50 || (combo >= 100 && combo % 50 === 0)) {
         sfx.play('combo-milestone', { intensity: Math.min(1, combo / 200), pan });
@@ -500,6 +502,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         if (upcoming && typing.keys[upcoming.lanes[0]].startsWith('Shift+')) callout('Hold Shift for capitals', 'lost', player);
       }
     } else if (event.type === 'sustain') {
+      if (setup.practice) callout(`Hold paid +${event.points}`, 'star', player);
       sfx.play('sustain-end', { pan });
     } else if (event.type === 'charged') {
       sfx.play('boost-ready', { pan });
