@@ -1044,6 +1044,35 @@ test('The first headline set adds the scores from four songs and saves a gold re
   await expect(venueCard.getByText(`Gold record · ${total.toLocaleString()} on Beginner`, { exact: true })).toBeVisible();
 });
 
+test('A party battle with two saved players saves each player\'s XP and notes hit on their own profile.', async ({ page, game }) => {
+  await seedPlayer(page, 'Mia');
+  await page.addInitScript(() => {
+    if (localStorage.getItem('ks:profiles')) return;
+    localStorage.setItem('ks:profiles', JSON.stringify(['sam']));
+    localStorage.setItem('ks:sam:save', JSON.stringify({ name: 'Sam', seenTutorial: true }));
+  });
+  await page.goto(game.url);
+  await enterMenu(page);
+  await button(page, 'Party mode').click();
+  // Mia is the active player. Sam takes seat 1, which moves nobody into seat 2 until Mia is chosen there.
+  await page.getByRole('combobox', { name: 'Player 1 profile' }).selectOption('sam');
+  await expect(page.getByRole('combobox', { name: 'Player 2 profile' })).toHaveValue('guest');
+  await page.getByRole('combobox', { name: 'Player 2 profile' }).selectOption('');
+  await page.getByRole('combobox', { name: 'Song', exact: true }).selectOption('river-amp');
+  await button(page, 'Start').click();
+  await start(page);
+  await Promise.all([playSong(page), playSong(page, { player: 1, accuracy: 0.5 })]);
+  await waitForResults(page, 'Sam wins!');
+  const saves = await page.evaluate(() => ({
+    mia: JSON.parse(localStorage.getItem('ks:save')!), sam: JSON.parse(localStorage.getItem('ks:sam:save')!),
+  }));
+  expect(saves.sam.xp).toBeGreaterThan(saves.mia.xp);
+  expect(saves.mia.xp).toBeGreaterThan(0);
+  expect(saves.sam.totals.notesHit).toBeGreaterThan(saves.mia.totals.notesHit);
+  await expect(results(page).getByText(`Sam earned ${saves.sam.xp} XP on their own profile.`)).toBeVisible();
+  await expect(results(page).getByText(`+${saves.mia.xp} XP`, { exact: true })).toBeVisible();
+});
+
 type GuitarSample = { buttons: number[]; timestamp: number };
 type GuitarWindow = typeof window & ShredderWindow & {
   setGuitarButtons(buttons: number[]): void;
