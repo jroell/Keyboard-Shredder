@@ -6,7 +6,7 @@ Keyboard Shredder is a browser rhythm game. Gems slide down a 3D guitar neck, an
 
 - **Quick play:** Pick a song, a difficulty and optional modifiers. The list plays a preview of the highlighted song and shows your best stars and grade.
 - **World tour:** Play six venues and a sunrise encore across 25 songs. Hit 60% of the notes to clear a song and unlock the next. Tour with a friend is an online co-op tour with one team target.
-- **Typing academy:** Study 27 lessons in six units, including coder keys and a Vim keys lesson. Finger columns are colour coded, and an on-screen keyboard lights the next key and names the finger. Pass key drills at 80% accuracy and words and sentences at 85%. Results show words per minute, accuracy and a heat map of missed keys.
+- **Typing academy:** Study 30 lessons in seven units, including capitals, coder keys and a Vim lesson. Finger columns are colour coded, and an on-screen keyboard lights the next key and names the finger. Pass key drills at 80% accuracy and words and sentences at 85%. Results show words per minute, accuracy and a heat map of missed keys.
 - **Party mode:** Two players share one keyboard. Player 1 uses A S D F G and Space. Player 2 uses H J K L ; and Enter. Battle is highest score wins, and overdrive shakes the other player's neck. Co-op uses one team score, and solo play can battle the computer at three skill levels.
 - **Play online:** Create an invite link, send it to a friend, and both press Ready. Choose head-to-head play or a co-op tour. The server keeps both players in sync and scores both, and duels award badges.
 - **Daily challenge:** One song, difficulty and modifier set is fixed for everyone each UTC day, with its own leaderboard.
@@ -22,6 +22,18 @@ Press A S D F G. Press chord keys together and hold long notes until the tail en
 Streaks of 10, 20 and 30 notes give 2x, 3x and 4x. A miss or stray press resets the streak. Accurate hits charge the amp, and Space gives double points for 8 seconds in overdrive. Runs earn 0 to 5 stars and a grade from D to S, with a gold star and S+ for a full combo at 96% or better. Modifiers: Hyperspeed (+10%), Fade out (+15%), Precision (+20%), Sudden death (+25%). Mirror flips the chart with no bonus.
 
 Escape pauses. On a phone or tablet, five touch pads sit under the lanes and a lightning button starts overdrive. Typing lessons need a physical keyboard.
+
+## Guitar controllers
+
+The game works with Guitar Hero and Rock Band guitars and ordinary gamepads through the browser Gamepad API. Plug in by USB or dongle and press any button. Default mapping follows Xbox 360 style guitars for the frets, strum bar, overdrive, pause and whammy. Two play styles in Settings: "Strum" (hold frets and strum each note) and "Tap" (press a fret to play). If buttons differ, Settings > Guitar controller > "Map the buttons" walks through nine presses and saves the mapping. Guitar Hero Live guitars (six buttons) connect through their USB dongle (PlayStation 3, Wii U or PlayStation 4 version) in Chrome or Edge; press "Wake the dongle" in Settings first, and map five of the six buttons for five lanes. Support was tested with a simulated standard-layout guitar and has not yet been tested with physical guitars.
+
+## Practice tools
+
+Start section practice from song select ("Practice") or the results song map at 50%, 75% or 100% speed, for one of eight sections or the whole song. The section loops until you stop, with nothing scored or ranked. "Slow-mo" modifier plays a song at three-quarter speed; not ranked. Also new: each venue has a headline set once every song there is cleared: its songs back to back with one running score, and an average timing rating of 80% earns a gold record. Also new: each player picks their own difficulty, and the battle is decided by timing rating when difficulties differ, so a beginner can beat an expert.
+
+## Typing academy
+
+There are 30 lessons in seven units: home row, top row, bottom row, fluency, capitals and punctuation, numbers, and coder keys (including Vim motions such as hjkl, gg and wb). By default the song waits at each letter until you type it; only wrong keys count against accuracy. "Keep the beat" turns that off for a rhythm challenge.
 
 ## Progress and leaderboards
 
