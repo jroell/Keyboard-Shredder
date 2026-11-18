@@ -109,3 +109,31 @@ test('The leaderboard retains personal bests and ranks ties by when players reac
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('A venue board ranks players by the sum of their best scores and leaves out a player missing one song.', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ks-venue-'));
+  const previousDir = process.env.SONG_DATA_DIR;
+  process.env.SONG_DATA_DIR = root;
+  const result = { score: 0, rating: 90, stars: 5, combo: 4, fullCombo: false };
+  try {
+    const leaderboard = createLeaderboard();
+    const boards = ['a:easy', 'b:easy'];
+    leaderboard.submit('a:easy', 'ann', 'Ann', { ...result, score: 300 });
+    leaderboard.submit('b:easy', 'ann', 'Ann', { ...result, score: 100 });
+    leaderboard.submit('a:easy', 'bo', 'Bo', { ...result, score: 150 });
+    leaderboard.submit('b:easy', 'bo', 'Bo', { ...result, score: 350 });
+    leaderboard.submit('a:easy', 'cy', 'Cy', { ...result, score: 900 });
+    leaderboard.submit('a:hard', 'ann', 'Ann', { ...result, score: 5000 });
+    assert.deepEqual(leaderboard.combined(boards, 'ann'), {
+      total: 2,
+      you: { rank: 2, score: 400 },
+      entries: [{ rank: 1, name: 'Bo', score: 500, you: false }, { rank: 2, name: 'Ann', score: 400, you: true }],
+    });
+    assert.deepEqual(leaderboard.combined(boards, 'cy').you, null);
+    assert.deepEqual(leaderboard.combined([], 'ann'), { entries: [], you: null, total: 0 });
+  } finally {
+    if (previousDir === undefined) delete process.env.SONG_DATA_DIR;
+    else process.env.SONG_DATA_DIR = previousDir;
+    rmSync(root, { recursive: true, force: true });
+  }
+});

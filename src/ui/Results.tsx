@@ -5,11 +5,11 @@ import { MODS, finalScore, isRanked } from '../../shared/modifiers';
 import { levelFor } from '../../shared/progression';
 import { STAR_RATINGS, starsFor } from '../../shared/rating';
 import { sectionNames } from '../../shared/sections';
-import { TOUR_TRACKS } from '../../shared/tour';
+import { TOUR_TRACKS, TOUR_VENUES } from '../../shared/tour';
 import { keyLabel } from '../../shared/practice';
 import { weakestKeys } from '../../shared/typing';
 import type { Recording } from '../lib/recording';
-import { fetchBoard, submitScore, type Board, type Submitted } from '../lib/api';
+import { fetchBoard, fetchVenueBoard, submitScore, type Board, type Submitted, type VenueBoard } from '../lib/api';
 import { sfx } from '../game/sfx';
 import { saveStore, settingsStore, useCell } from '../state/store';
 import { songCleared, useApp } from '../App';
@@ -130,6 +130,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   const settings = useCell(settingsStore);
   const [board, setBoard] = useState<Board>();
   const [submitted, setSubmitted] = useState<Submitted>();
+  const [venueBoard, setVenueBoard] = useState<VenueBoard>();
   const [shareStatus, setShareStatus] = useState('');
   const [postError, setPostError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -199,6 +200,16 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       .catch(() => { if (active) setPostError(previous => previous || 'Could not load the leaderboard.'); });
     return () => { active = false; };
   }, [ranked, result, song.id, setup, attempt]);
+
+  // After the last set song has posted, the venue board ranks the sum of each player's best scores on its songs.
+  const venueId = setup.set ? TOUR_VENUES.find(venue => venue.name === setup.set!.name)?.id : undefined;
+  const lastOfSet = !!setup.set && setup.set.index + 1 === setup.set.ids.length;
+  useEffect(() => {
+    if (!venueId || !lastOfSet || !board) return;
+    let active = true;
+    fetchVenueBoard(venueId, setup.difficulty).then(next => { if (active) setVenueBoard(next); }).catch(() => {});
+    return () => { active = false; };
+  }, [venueId, lastOfSet, board, setup.difficulty]);
 
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
@@ -401,6 +412,12 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
           : postError ? <p className="muted" role="alert">{postError} <button className="link" onClick={() => setAttempt(value => value + 1)}>Try again</button></p>
           : <p className="muted">Posting your score…</p>}
         {board && postError && <p className="muted" role="alert">{postError} <button className="link" onClick={() => setAttempt(value => value + 1)}>Try again</button></p>}
+      </div>}
+      {setDone && venueBoard && venueBoard.entries.length > 0 && <div className="results-board">
+        <h2>Venue leaderboard: {setup.set!.name} {venueBoard.you && <span>You are #{venueBoard.you.rank}</span>}</h2>
+        <ol>{venueBoard.entries.slice(0, 5).map(entry => <li key={entry.rank + entry.name} className={entry.you ? 'you' : ''}>
+          <span>{entry.rank}</span><strong>{entry.name}</strong><em>{entry.score.toLocaleString()}</em></li>)}</ol>
+        <p className="muted">Each player's best score on every song here, added up, on {difficultyNames[setup.difficulty]} with no modifiers.{venueBoard.you ? '' : ' Post a score on every song to join.'}</p>
       </div>}
       {rankable && result.paused && <p className="offset-hint">Paused runs stay off the leaderboard. Play it through without pausing to post a score.</p>}
 

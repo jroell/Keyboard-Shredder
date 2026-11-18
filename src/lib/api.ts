@@ -54,6 +54,11 @@ export function fetchBoard(songId: string, difficulty: Difficulty, mods: ModId[]
   return call(`/scores/${songId}/${difficulty}${query}`).then(response => response.json() as Promise<Board>);
 }
 
+export type VenueBoard = { entries: { rank: number; name: string; score: number; you: boolean }[]; you: { rank: number; score: number } | null; total: number };
+export function fetchVenueBoard(venueId: string, difficulty: Difficulty) {
+  return call(`/venues/${venueId}/${difficulty}`).then(response => response.json() as Promise<VenueBoard>);
+}
+
 export function fetchDaily() {
   return call('/daily').then(response => response.json() as Promise<Daily>);
 }

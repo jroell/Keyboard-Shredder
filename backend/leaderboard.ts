@@ -128,5 +128,20 @@ export function createLeaderboard() {
         total: Number(count.get(board)!.total),
       };
     },
+
+    /** Ranks players by the sum of their best scores across several boards. Only players with a score on every board count. */
+    combined(boards: string[], uid: string, limit = 20) {
+      if (!boards.length) return { entries: [], you: null, total: 0 };
+      const marks = boards.map(() => '?').join(', ');
+      const rows = db.prepare(`SELECT uid, max(name) AS name, sum(score) AS score, max(created) AS created FROM scores
+        WHERE board IN (${marks}) GROUP BY uid HAVING count(*) = ? ORDER BY score DESC, created ASC`).all(...boards, boards.length) as
+        { uid: string; name: string; score: number; created: number }[];
+      const mine = rows.findIndex(row => row.uid === uid);
+      return {
+        entries: rows.slice(0, limit).map((row, index) => ({ rank: index + 1, name: row.name, score: row.score, you: row.uid === uid })),
+        you: mine >= 0 ? { rank: mine + 1, score: rows[mine].score } : null,
+        total: rows.length,
+      };
+    },
   };
 }

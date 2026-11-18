@@ -9,6 +9,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { resolve } from 'node:path';
 import { createJobStore } from './backend/jobs';
 import { dailyChallenge, dailyKey } from './shared/daily';
+import { TOUR_VENUES } from './shared/tour';
 import { isDifficulty } from './shared/difficulty';
 import { isRanked, normalizeMods, type ModId } from './shared/modifiers';
 import type { Chart, Difficulty } from './shared/song';
@@ -133,6 +134,14 @@ app.get('/api/scores/:songId/:difficulty', (request, response) => {
     return response.status(400).json({ error: 'Choose valid modifiers.' });
   }
   return response.json(leaderboard.top(scoreBoard(songId, difficulty, mods), response.locals.uid));
+});
+// A venue board adds up each player's verified best score on every song in the venue, with no modifiers.
+app.get('/api/venues/:venueId/:difficulty', (request, response) => {
+  const { venueId, difficulty } = request.params;
+  const venue = TOUR_VENUES.find(item => item.id === venueId);
+  if (!venue) return response.status(404).json({ error: 'Venue not found.' });
+  if (!isDifficulty(difficulty)) return response.status(400).json({ error: 'Choose a valid difficulty.' });
+  return response.json(leaderboard.combined(venue.tracks.map(track => scoreBoard(track.id, difficulty, [])), response.locals.uid));
 });
 app.get('/api/daily', (_request, response) => {
   const uid = response.locals.uid;
