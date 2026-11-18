@@ -345,3 +345,15 @@
 .set-summary[data-platinum] { border-color: #dfe9ff; box-shadow: 0 0 34px #cfe0ff55; }
 .set-summary[data-platinum] .record { background: repeating-radial-gradient(circle, #f4f8ff 0 2px, #9fb2d6 2px 4px); box-shadow: 0 0 26px #dfe9ffaa; }
 .segments button.on small { color: inherit; opacity: .8; }
+
+/* Phone portrait typing: a small finger guide under the lane, so a learner can still check which finger to use. */
+@media (max-width: 720px) and (min-height: 560px) and (orientation: portrait) {
+  .stage[data-typing] > .kb { display: grid; gap: 3px; bottom: .3rem; padding: .35rem .4rem .2rem; width: calc(100vw - .6rem); }
+  .stage[data-typing] > .kb .kb-row { gap: 3px; margin-left: calc(var(--indent, 0) * 1.6vw); justify-content: flex-start; }
+  .stage[data-typing] > .kb span { width: calc((100vw - 4.6rem) / 12); height: 26px; font-size: .62rem; border-radius: 5px; }
+  .stage[data-typing] > .kb .kb-space span { width: 38vw; }
+  .stage[data-typing] > .kb .kb-space { justify-content: center; margin-left: 0; }
+  .stage[data-typing] > .kb .kb-hint { font-size: .78rem; min-height: 1.2em; }
+  .stage[data-typing] .stage-canvas { top: 0; height: calc(100% - 158px); }
+  .stage[data-typing] .hud { top: 0; bottom: 158px; }
+}

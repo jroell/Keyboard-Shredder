@@ -17,8 +17,8 @@ import { laneLayout, typingLayout } from '../game/layouts';
 import { FINGER_COLORS } from '../game/themes';
 import { sfx } from '../game/sfx';
 import { looksLikeGuitar, padFocus, padName, PadReader, pads } from '../game/gamepad';
-import { laneColors, saveStore, settingsStore, useCell } from '../state/store';
-import { completeRun, type Outcome } from '../state/progress';
+import { currentPlayer, laneColors, saveStore, settingsStore, useCell } from '../state/store';
+import { completeRun, creditPlayer, type Outcome } from '../state/progress';
 import PlayerHud, { type HudHandle } from './PlayerHud';
 import KeyboardGuide, { type KeyboardHandle } from './KeyboardGuide';
 import Results from './Results';
@@ -28,7 +28,8 @@ export type RunSetup = {
   difficulty: Difficulty;
   mods: ModId[];
   typing?: { options: TypingOptions; lesson?: TypingLesson };
-  party?: { coop: boolean; cpu?: number; names: [string, string]; difficulties?: [Difficulty, Difficulty] };
+  /** `seats` holds the saved player id in each seat, or null for a guest or the computer. Each saved player earns their own XP. */
+  party?: { coop: boolean; cpu?: number; names: [string, string]; difficulties?: [Difficulty, Difficulty]; seats?: [string | null, string | null] };
   /** Several songs played back to back as one set, with a running total. */
   set?: { name: string; ids: string[]; index: number; score: number; ratings: number[]; scores?: number[] };
   /** Loop one part of the song at a chosen speed. Nothing is saved or ranked. */
@@ -41,6 +42,8 @@ export type RunSetup = {
 
 export type RunResult = {
   summary: RunSummary; outcome: Outcome; log: InputLog; scorings: Scoring[]; events: SongEvent[];
+  /** Party: saved players other than the active one who were credited on their own profiles, and whether the active player sat out. */
+  credited?: { name: string; xp: number }[]; spectator?: boolean;
   keyStats?: KeyStats; typing?: TypingChart; typingAccuracy?: number; hitOffsetMs: number | null;
   /** Signed timing of every hit in ms. Negative is early. */
   offsets: number[]; windowMs: number;
@@ -391,7 +394,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       boostsUsed: scoring.boostsUsed, durationMs: Math.max(0, Math.min(chart.durationMs, game.rawTime())),
       // In wait mode speed is the learner's own: letters after the first, over the time from first key to last.
       // Party rewards belong to the profile that is signed in on this device, so a win only counts when that player sat in seat 1.
-      won: partyWin && setup.party && setup.party.names[0] !== (save.name || 'Player 1') ? false : partyWin,
+      won: partyWin && setup.party && !setup.party.seats && setup.party.names[0] !== (save.name || 'Player 1') ? false : partyWin,
       wpm: typing ? (game.wait ? wpm(Math.max(0, scoring.hits - 1), Math.max(1000, game.lastKeyAt - game.firstKeyAt)) : wpm(scoring.hits, Math.max(1000, span))) : undefined, lessonId: setup.typing?.lesson?.id, genre: song.genre,
     };
     // One decimal, rounded down, so 100% is only ever shown for a clean passage.
@@ -399,13 +402,32 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     const typingAccuracy = typing ? (attempts ? Math.floor(1000 * scoring.hits / attempts) / 10 : 0) : undefined;
     // Slow-mo is practice: it earns nothing and leaves records alone.
     const counted = bot === undefined && !matchRef.current && !setup.practice && playbackRate(setup.mods) === 1;
-    const outcome = counted ? completeRun(summary, {
+    // In party mode each saved player is credited on their own profile. The active profile's result fills the XP panel.
+    const seats = setup.party?.seats;
+    const seatSummary = (index: number): RunSummary => {
+      if (index === 0 || !other) return { ...summary, won: partyWin };
+      const theirs = other.tally;
+      return { ...summary, difficulty: setup.party?.difficulties?.[1] ?? setup.difficulty, score: finalScore(other.score, setup.mods), rating: other.rating,
+        stars: starsFor(theirs), grade: gradeFor(theirs, false), perfects: other.perfects, greats: other.greats, goods: other.goods, misses: other.misses,
+        wrongKeys: other.wrongKeys, totalNotes: players[1].events.length, bestCombo: other.bestCombo, fullCombo: isFullCombo(theirs), boostsUsed: other.boostsUsed,
+        won: partyWin === undefined ? undefined : fair ? other.rating > scoring.rating : other.score > scoring.score };
+    };
+    const credited: { name: string; xp: number }[] = [];
+    const activeSeat = seats ? seats.indexOf(currentPlayer) : 0;
+    if (seats && counted) {
+      seats.forEach((id, index) => {
+        if (id === null || id === currentPlayer) return;
+        const xp = creditPlayer(id, seatSummary(index));
+        if (xp !== null) credited.push({ name: setup.party!.names[index], xp });
+      });
+    }
+    const outcome = counted && activeSeat >= 0 ? completeRun(seats ? seatSummary(activeSeat) : summary, {
       tourAccuracy: setup.tour ? Math.floor(100 * scoring.hits / Math.max(1, events.length + scoring.wrongKeys)) : undefined,
       lesson: setup.typing?.lesson, typingAccuracy, keyStats, daily: setup.daily,
     }) : { save, xp: { total: 0, parts: [] }, levelBefore: 0, levelAfter: 0, unlocked: [], achievements: [], newBest: false, firstClear: false,
       previousBest: 0, streak: { days: save.streak.days, extended: false } } as Outcome;
     setResult({ summary, outcome, log: game.logs[0], scorings: [...game.scorings], events, keyStats, typing, typingAccuracy,
-      hitOffsetMs: offsets.length >= 20 ? median(offsets) : null, offsets, windowMs: players[0].windowMs, paused: game.paused, waited: game.wait, troubles: [...troubles.current] });
+      hitOffsetMs: offsets.length >= 20 ? median(offsets) : null, offsets, windowMs: players[0].windowMs, paused: game.paused, waited: game.wait, troubles: [...troubles.current], credited, spectator: !!seats && activeSeat < 0 });
   }, [players, typing, setup, song, chart.durationMs, bot, save]);
 
   // Session events: sound, callouts and state.
@@ -518,10 +540,16 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     sfx.play('ui-select');
     if (replay) {
       if (typing) { setAttempt(value => value + 1); return; }
+      // A party rematch gives each player their own last streak to beat.
+      const previous = setup.party && bot === undefined ? session.current?.scorings.map(scoring => scoring.bestCombo) : undefined;
+      if (previous) setTimeout(() => previous.forEach((streak, index) => {
+        if (index === 1 && setup.party!.cpu !== undefined) return;
+        callout(streak > 0 ? `Beat your ${streak} streak` : 'Land your first streak', 'streak', index);
+      }), 3600);
       setResult(undefined);
     }
     void session.current?.start(replay);
-  }, [typing]);
+  }, [typing, setup.party, bot, callout]);
 
   // A fresh typing chart after "Play again" starts on its own.
   const autostart = useRef(false);
@@ -624,7 +652,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   const waitingForMatch = !!match && match.ready && match.startAt === null;
   const startLabel = state === 'starting' ? 'Loading audio…' : match ? match.startAt ? 'Join playback' : match.ready ? 'Ready' : 'Ready up' : 'Start';
 
-  return <section className="stage" ref={stage} data-state={state} data-boost="off" data-heat="cool" data-players={players.length}
+  // The stage never scrolls. Focus moving to an off-screen control can still scroll a hidden-overflow box, which would push the results heading out of view.
+  return <section className="stage" ref={stage} onScroll={event => { if (event.target === event.currentTarget) event.currentTarget.scrollTo(0, 0); }} data-state={state} data-boost="off" data-heat="cool" data-players={players.length}
     data-typing={typing ? 'true' : undefined} data-calm={settings.calm ? 'true' : undefined} data-duel={match ? 'true' : undefined}
     style={artwork ? { '--art': `url("${artwork}")` } as CSSProperties : undefined}>
     <div className="stage-art" aria-hidden="true" />
@@ -719,7 +748,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         </> : setup.party ? <>
           <div className="ready-party">
             {players.map((player, index) => <div key={index}><strong>{setup.party!.names[index]}</strong>
-              <div className="ready-keys">{player.keys.map((key, lane) => <kbd key={key} className={lit.has(key) ? 'lit' : ''}
+              <div className="ready-keys">{player.keys.map((key, lane) => <kbd key={key} className={`${lit.has(key) ? 'lit' : ''}${player.events.some(event => event.lanes.includes(lane)) ? '' : ' unused'}`}
                 style={{ '--lane': layouts[index].color(lane) } as CSSProperties}>{guitarSeats.includes(index) ? layouts[index].targets[lane].label : keyLabel(key)}</kbd>)}</div>
               <small>{setup.party!.difficulties ? `${difficultyNames[setup.party!.difficulties[index]]} · ` : ''}{guitarSeats.includes(index) ? 'Guitar: hold a fret and strum · Overdrive: Select or tilt' : `Overdrive: ${player.boostKey === 'Enter' ? 'Enter' : 'Space'}`}</small></div>)}
           </div>

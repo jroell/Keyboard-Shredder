@@ -13,7 +13,7 @@ type Assets = NonNullable<ReturnType<ReturnType<typeof createJobStore>['assets']
 type Player = { level: Difficulty; uid: string; profile: Profile; socket: string | null; ready: boolean; game: Scoring; lastTime: number; sent: number; window: number };
 type Room = {
   id: string; round: string; mode: DuelMode; assets: Assets; chart: Chart; difficulty: Difficulty; players: Player[];
-  phase: Duel['phase']; startAt: number | null; winner: number | null; reason?: string; touched: number; published?: string;
+  phase: Duel['phase']; startAt: number | null; winner: number | null; reason?: string; touched: number; published?: string; rematchBy?: number;
   coop?: { progress: TourProgress; targetScore: number; teamPassed: boolean | null };
 };
 
@@ -25,14 +25,16 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
   const view = (room: Room): Duel => ({
     id: room.id, round: room.round, mode: room.mode, coop: coopStage(room), song: publicSong(room.assets.song), difficulty: room.difficulty, phase: room.phase,
     players: room.players.map((player, slot) => ({
-      slot, profile: player.profile, connected: !!player.socket, ready: player.ready, difficulty: player.level, rating: player.game.rating,
+      slot, profile: player.profile, connected: !!player.socket, ready: player.ready, difficulty: player.level,
+      // During play the rating covers the notes judged so far, so both players can follow a mixed-difficulty duel.
+      rating: room.phase === 'playing' ? player.game.liveRating : player.game.rating,
       score: player.game.score, combo: player.game.combo, ampCharge: player.game.ampCharge, boostEndMs: player.game.boostEndMs, accuracy: player.game.accuracy,
       frets: [...player.game.held],
       strike: player.game.feedback && Date.now() - (room.startAt ?? 0) - player.game.feedback.timeMs < 500
         ? { lanes: player.game.feedback.lanes, missed: player.game.feedback.offsetMs === undefined } : null,
       hits: player.game.hits, bestCombo: player.game.bestCombo,
     })),
-    host: 0, startAt: room.startAt, winner: room.winner, reason: room.reason,
+    host: 0, startAt: room.startAt, winner: room.winner, reason: room.reason, rematchBy: room.phase === 'lobby' ? room.rematchBy : undefined,
   });
   function coopStage(room: Room): CoopStage | undefined {
     if (!room.coop) return undefined;
@@ -226,6 +228,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       room.players.find(player => player.uid === uid)!.ready = ready;
       if (room.players.length === 2 && room.players.every(player => player.ready && player.socket)) {
         room.phase = 'playing';
+        room.rematchBy = undefined;
         room.startAt = Date.now() + 3200;
       }
       ack({});
@@ -266,6 +269,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
         return reject(ack, 'Both players must be connected to play again.');
       }
       resetRound(room);
+      room.rematchBy = room.players.findIndex(player => player.uid === uid);
       ack({});
       publish(room);
     });

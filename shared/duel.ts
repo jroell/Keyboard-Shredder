@@ -39,6 +39,8 @@ export type Duel = {
   mode: DuelMode; round: string; coop?: CoopStage;
   id: string; song: Song; difficulty: Difficulty; phase: 'lobby' | 'playing' | 'finished' | 'canceled';
   players: DuelPlayer[]; host: number; startAt: number | null; winner: number | null; reason?: string;
+  /** The slot of the player who asked for another round, while the lobby waits for both to ready up. */
+  rematchBy?: number;
 };
 export type LaneInput = { lane: number; down: boolean; timeMs: number };
 export type Reply = { error?: string; id?: string; slot?: number; progress?: TourProgress };

@@ -1,4 +1,4 @@
-import { applyRun, type RunOutcome, type RunSummary } from '../../shared/progression';
+import { applyRun, normalizeSave, type RunOutcome, type RunSummary } from '../../shared/progression';
 import { isTourSongCleared, recordTourResult, TOUR_TRACKS } from '../../shared/tour';
 import { lessonStatus, mergeKeyStats, typingStars, TYPING_LESSONS, type KeyStats, type TypingLesson } from '../../shared/typing';
 import { keyStatsStore, lessonStore, saveStore, tourStore, wpmStore } from './store';
@@ -72,4 +72,20 @@ export function completeRun(summary: RunSummary, extras: RunExtras = {}): Outcom
   });
   saveStore.set(outcome.save);
   return { ...outcome, lesson, tour };
+}
+
+/**
+ * Adds a party result to a saved player who is not the active one on this device.
+ * Returns the XP earned, or null when that player's save cannot be read.
+ */
+export function creditPlayer(id: string, summary: RunSummary): number | null {
+  const key = id ? `ks:${id}:save` : 'ks:save';
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) ?? 'null');
+    if (!raw) return null;
+    const now = new Date();
+    const outcome = applyRun(normalizeSave(raw), summary, now.getTime(), { dateKey: localDateKey(now), hour: now.getHours(), tourCleared: 0, lessonsPassed: 0 });
+    localStorage.setItem(key, JSON.stringify(outcome.save));
+    return outcome.xp.total;
+  } catch { return null; }
 }

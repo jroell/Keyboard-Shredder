@@ -356,3 +356,4 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
 .party-players .panel { align-content: start; }
 .party-players input { min-height: 44px; height: 44px; }
 .drill-hint { font-size: .85rem; color: var(--muted); }
+.seat-note { color: var(--muted); font-size: .8rem; }

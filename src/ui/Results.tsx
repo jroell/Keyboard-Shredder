@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { Award, ChevronRight, Crown, RotateCcw, Share2, Star, Trophy, Unlock } from 'lucide-react';
+import { Award, ChevronRight, Crown, RotateCcw, Share2, Star, Trophy, Unlock, Users } from 'lucide-react';
 import { difficultyNames } from '../../shared/difficulty';
 import { MODS, finalScore, isRanked } from '../../shared/modifiers';
 import { levelFor } from '../../shared/progression';
@@ -12,7 +12,7 @@ import type { Recording } from '../lib/recording';
 import { fetchBoard, submitScore, type Board, type Submitted } from '../lib/api';
 import { sfx } from '../game/sfx';
 import { saveStore, settingsStore, useCell } from '../state/store';
-import { songCleared } from '../App';
+import { songCleared, useApp } from '../App';
 import { clock, SECTIONS, type RunResult, type RunSetup } from './GameScreen';
 import KeyboardGuide, { fingerName } from './KeyboardGuide';
 import confetti from 'canvas-confetti';
@@ -121,6 +121,7 @@ function Timeline({ result, durationMs, names, onPractice }: { result: RunResult
 export default function Results({ recording, setup, result, bot, onReplay, onExit, exitLabel, next, onPractice }: Props) {
   const { song } = recording;
   const { summary, outcome, scorings } = result;
+  const app = useApp();
   const save = useCell(saveStore);
   const settings = useCell(settingsStore);
   const [board, setBoard] = useState<Board>();
@@ -154,6 +155,8 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   useEffect(() => {
     primary.current?.focus({ preventScroll: true });
     document.querySelector('.results-layer')?.scrollTo(0, 0);
+    document.querySelector('.stage')?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
     const timers: ReturnType<typeof setTimeout>[] = [];
     const later = (ms: number, run: () => void) => timers.push(setTimeout(run, ms));
     if (!failed) {
@@ -289,6 +292,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       <div className="results-actions">
         {next && <button ref={primary} className="primary big" onClick={next.run}>{next.label}<ChevronRight aria-hidden="true" /></button>}
         {!(setup.set && (failed || !songCleared(summary))) && <button ref={next ? undefined : primary} className={next ? '' : 'primary big'} onClick={onReplay}><RotateCcw aria-hidden="true" size={18} />Play again</button>}
+        {setup.tutorial && <button onClick={() => { try { sessionStorage.setItem('ks:partyLevel', 'beginner'); } catch { /* optional */ } app.go({ name: 'party' }); }}><Users aria-hidden="true" size={18} />Play with a friend</button>}
         {ranked && <button onClick={share}><Share2 aria-hidden="true" size={18} />Challenge a friend</button>}
         <button className="ghost" onClick={onExit}>{exitLabel}</button>
         <p className="hint">{setup.set && (failed || !songCleared(summary)) ? <><kbd>R</kbd> restart the set</> : <><kbd>R</kbd> play again{next ? <> · <kbd>N</kbd> next</> : null}</>} · <kbd>Esc</kbd> back</p>
@@ -355,7 +359,10 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
             setOffsetApplied(true);
           }}>Adjust timing to match</button></>}</p>}
 
-      {!bot && <div className="xp-panel">
+      {result.credited && result.credited.length > 0 && <p className="offset-hint" role="status">
+        {result.credited.map(item => `${item.name} earned ${item.xp} XP`).join(' and ')} on {result.credited.length > 1 ? 'their own profiles' : 'their own profile'}.</p>}
+      {result.spectator && party && <p className="offset-hint">{save.name || 'The active player'} sat this one out, so nothing below changed. Guests keep no progress.</p>}
+      {!bot && !result.spectator && <div className="xp-panel">
         <div className="xp-head"><strong>Level {after.level}</strong><span>{after.title}</span><em>+{outcome.xp.total} XP</em></div>
         <div className="xp-bar" role="progressbar" aria-label="Experience" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(after.progress * 100)}>
           <i style={{ width: `${xpShown * 100}%` }} /></div>

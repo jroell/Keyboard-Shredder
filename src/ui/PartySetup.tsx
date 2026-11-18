@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Bot, Handshake, Play, Swords } from 'lucide-react';
-import { DIFFICULTIES, difficultyNames } from '../../shared/difficulty';
+import { DIFFICULTIES, difficultyNames, isDifficulty } from '../../shared/difficulty';
 import { keyLabel } from '../../shared/practice';
 import type { Difficulty } from '../../shared/song';
 import { useApp } from '../App';
 import { sfx } from '../game/sfx';
-import { laneColors, listPlayers, saveStore, settingsStore, useCell } from '../state/store';
+import { currentPlayer, laneColors, listPlayers, saveStore, settingsStore, useCell } from '../state/store';
 import { formatLength, Screen } from './common';
 
 const CPU = [
@@ -16,7 +16,7 @@ const CPU = [
 ];
 
 /** The last setup, so a rematch with one change is two clicks away. */
-const last: { coop?: boolean; songId?: string; levels?: [Difficulty, Difficulty]; rival?: string; names?: [string, string] } = {};
+const last: { coop?: boolean; songId?: string; levels?: [Difficulty, Difficulty]; rival?: string; names?: [string, string]; seats?: [string | null, string | null] } = {};
 
 export default function PartySetup() {
   const app = useApp();
@@ -24,20 +24,46 @@ export default function PartySetup() {
   const save = useCell(saveStore);
   const [coop, setCoop] = useState(last.coop ?? false);
   const [songId, setSongId] = useState(last.songId ?? '');
-  const [levels, setLevels] = useState<[Difficulty, Difficulty]>(last.levels ?? [settings.difficulty, settings.difficulty]);
+  const [levels, setLevels] = useState<[Difficulty, Difficulty]>(() => {
+    // The warm-up sends a first-time pair here on Beginner.
+    try {
+      const preset = sessionStorage.getItem('ks:partyLevel');
+      sessionStorage.removeItem('ks:partyLevel');
+      if (preset && isDifficulty(preset)) return [preset, preset];
+    } catch { /* optional */ }
+    return last.levels ?? [settings.difficulty, settings.difficulty];
+  });
   const [rival, setRival] = useState(last.rival ?? 'off');
   const [names, setNames] = useState<[string, string]>(last.names ?? [save.name || 'Player 1', 'Player 2']);
+  // Each seat holds a saved player, who earns their own XP and stats, or a guest, who keeps nothing.
+  const [seats, setSeats] = useState<[string | null, string | null]>(last.seats ?? [currentPlayer, null]);
+  const saved = listPlayers();
+  const seatName = (index: number) => seats[index] === null ? names[index] : saved.find(player => player.id === seats[index])?.name ?? names[index];
+  const sit = (index: number, value: string) => {
+    const id = value === 'guest' ? null : value;
+    setSeats(previous => {
+      const next: [string | null, string | null] = [previous[0], previous[1]];
+      next[index] = id;
+      // One saved player cannot sit in both seats.
+      if (id !== null && next[1 - index] === id) next[1 - index] = null;
+      return next;
+    });
+    if (id === null && (saved.some(player => player.name === names[index]) || !names[index].trim())) {
+      setNames(previous => index === 0 ? ['Guest 1', previous[1]] : [previous[0], 'Guest 2']);
+    }
+  };
   const colors = laneColors(settings);
   const songs = app.songs;
   const chosen = songId || songs[0]?.id || '';
   const cpu = CPU.find(option => option.id === rival)!;
-  const second = cpu.skill === undefined ? names[1] : cpu.label.replace('Computer: ', 'CPU ');
+  const second = cpu.skill === undefined ? seatName(1) : cpu.label.replace('Computer: ', 'CPU ');
   const start = () => {
     if (!chosen) return;
     sfx.play('ui-select');
-    Object.assign(last, { coop, songId: chosen, levels, rival, names });
+    Object.assign(last, { coop, songId: chosen, levels, rival, names, seats });
     void app.launch(chosen, { mode: 'party', difficulty: levels[0], mods: [],
-      party: { coop, cpu: cpu.skill, names: [names[0].trim() || 'Player 1', second.trim() || 'Player 2'], difficulties: levels } }, { name: 'party' });
+      party: { coop, cpu: cpu.skill, names: [seatName(0).trim() || 'Player 1', second.trim() || 'Player 2'], difficulties: levels,
+        seats: [seats[0], cpu.skill === undefined ? seats[1] : null] } }, { name: 'party' });
   };
   return <Screen title="Party mode" eyebrow="Two players, one keyboard" onBack={() => app.go({ name: 'menu' })} className="party-screen">
     <div className="party-modes" role="radiogroup" aria-label="Game type">
@@ -46,17 +72,24 @@ export default function PartySetup() {
       <button role="radio" aria-checked={coop} className={coop ? 'on' : ''} onClick={() => { sfx.play('ui-toggle'); setCoop(true); }}>
         <Handshake aria-hidden="true" /><strong>Co-op</strong><span>Share the stage. Your scores add up to one team total.</span></button>
     </div>
-    <datalist id="saved-players">{listPlayers().map(player => <option key={player.id} value={player.name} />)}</datalist>
     <div className="party-players">
       {[0, 1].map(index => <section key={index} className="panel">
-        <label className="field">{index === 0 ? 'Player 1' : 'Player 2'}
-          {index === 1 && cpu.skill !== undefined ? <input value={second} readOnly /> :
-            <input maxLength={16} list="saved-players" value={names[index]} onChange={event => setNames(previous => index === 0 ? [event.target.value, previous[1]] : [previous[0], event.target.value])} />}</label>
+        {index === 1 && cpu.skill !== undefined ? <label className="field">Player 2<input value={second} readOnly /></label> : <>
+          <label className="field">{index === 0 ? 'Player 1' : 'Player 2'}
+            <select aria-label={`Player ${index + 1} profile`} value={seats[index] ?? 'guest'} onChange={event => sit(index, event.target.value)}>
+              {saved.map(player => <option key={player.id} value={player.id}>{player.name} · level {player.level}</option>)}
+              <option value="guest">Guest</option>
+            </select></label>
+          {seats[index] === null
+            ? <label className="field">Guest name<input maxLength={16} value={names[index]} onChange={event => setNames(previous => index === 0 ? [event.target.value, previous[1]] : [previous[0], event.target.value])} /></label>
+            : <small className="seat-note">XP and stats go to {seatName(index)}'s profile.</small>}
+          {seats[index] === null && <small className="seat-note">Guests keep no progress. Add players in the Locker.</small>}
+        </>}
         <label className="field">Difficulty<select value={levels[index]}
           onChange={event => setLevels(previous => index === 0 ? [event.target.value as Difficulty, previous[1]] : [previous[0], event.target.value as Difficulty])}>
           {DIFFICULTIES.map(level => <option key={level} value={level}>{difficultyNames[level]}</option>)}</select></label>
-        <div className="ready-keys">{settings.partyKeys[index].map((code, lane) => <kbd key={code} style={{ '--lane': colors[lane] } as React.CSSProperties}>{keyLabel(code)}</kbd>)}</div>
-        <small>Overdrive: {index === 0 ? 'Space' : 'Enter'}</small>
+        <div className="ready-keys">{settings.partyKeys[index].map((code, lane) => <kbd key={code} className={levels[index] === 'beginner' && (lane === 0 || lane === 4) && !(index === 1 && cpu.skill !== undefined) ? 'unused' : ''} style={{ '--lane': colors[lane] } as React.CSSProperties}>{keyLabel(code)}</kbd>)}</div>
+        <small>Overdrive: {index === 0 ? 'Space' : 'Enter'}{levels[index] === 'beginner' ? ' · Beginner uses the three middle keys' : ''}</small>
         {index === 1 && <label className="field"><span><Bot aria-hidden="true" size={14} /> Who plays this side</span>
           <select value={rival} onChange={event => setRival(event.target.value)}>
             {CPU.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}

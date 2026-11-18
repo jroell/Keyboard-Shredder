@@ -121,6 +121,7 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
   }
 
   const cooperative = duel ? duel.mode === 'coop' : coop;
+  const mixedDuel = !!duel && !cooperative && duel.players.length === 2 && duel.players[0].difficulty !== duel.players[1].difficulty;
   const mixedLevels = !!duel && duel.mode !== 'coop' && duel.players.length === 2 && duel.players[0].difficulty !== duel.players[1].difficulty;
   const team = duel?.coop;
   const nextSong = TOUR_TRACKS.find(item => item.id === team?.nextSongId);
@@ -228,7 +229,8 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
             onChange={event => action('duel-level', event.target.value)}>
             {DIFFICULTIES.map(item => <option key={item} value={item}>{difficultyNames[item]}</option>)}</select>
             <small>{cooperative ? 'Each player picks their own.' : 'Each player picks their own. With different difficulties, the better timing rating wins.'}</small></label>}
-          <p>{duel.players.length < 2 ? `Waiting for ${cooperative ? 'a teammate' : 'an opponent'}…` : 'Both players are here. Ready up to start.'}</p>
+          <p>{duel.players.length < 2 ? `Waiting for ${cooperative ? 'a teammate' : 'an opponent'}…` : duel.rematchBy !== undefined && duel.rematchBy !== slot && duel.players[duel.rematchBy]
+            ? `${duel.players[duel.rematchBy].profile.name} asked for ${cooperative ? 'another go' : 'a rematch'}. Ready up to start.` : 'Both players are here. Ready up to start.'}</p>
           {error && <p role="alert" className="error">{error}</p>}
         </div>}
         match={{
@@ -245,7 +247,9 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
       {duel.players.map(player => <section key={player.slot} className="duel-player" data-you={player.slot === slot ? 'true' : undefined}>
         <PlayerCard profile={player.profile} />
         <p>{player.slot === slot ? 'You' : partner} · {!player.connected ? 'Disconnected' : duel.phase === 'lobby' ? player.ready ? 'Ready' : 'Getting ready' : `${player.combo} combo`}</p>
-        <strong>{player.score.toLocaleString()} pts</strong><p>{difficultyNames[player.difficulty]}</p>{duel.phase !== 'lobby' && <p>{player.hits > 0 && player.accuracy === 0 ? '<1' : player.accuracy}% accuracy</p>}
+        {mixedDuel && duel.phase !== 'lobby'
+          ? <><strong>{player.rating.toFixed(1)}% timing</strong><p>{difficultyNames[player.difficulty]} · {player.score.toLocaleString()} pts</p></>
+          : <><strong>{player.score.toLocaleString()} pts</strong><p>{difficultyNames[player.difficulty]}</p>{duel.phase !== 'lobby' && <p>{player.hits > 0 && player.accuracy === 0 ? '<1' : player.accuracy}% accuracy</p>}</>}
         {duel.phase === 'playing' && <div className="duel-frets" aria-hidden="true">
           {(palettes[player.profile.palette] ?? palettes.Classic).map((color, lane) => <i key={lane} style={{ color }}
             className={player.strike?.lanes.includes(lane) ? player.strike.missed ? 'missed' : 'active' : player.frets.includes(lane) ? 'active' : ''} />)}
