@@ -1,0 +1,11 @@
+.git
+.env*
+node_modules
+dist
+test-results
+playwright-report
+.song-data
+analysis/.venv
+analysis/weights
+**/__pycache__
+catalog/*/*.audio
