@@ -12,3 +12,5 @@ analysis/weights/
 __pycache__/
 test-results/
 playwright-report/
+
+catalog/*/guitar.audio
