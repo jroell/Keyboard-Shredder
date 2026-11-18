@@ -52,8 +52,9 @@ export default function TourScreen() {
         return <li key={venue.id} className={`venue${available ? '' : ' locked'}${done ? ' done' : ''}`}>
           <div className="venue-art" style={art ? { backgroundImage: `url("${art}")` } : undefined}>
             <span className="venue-stop">{index + 1}</span>
-            <h3>{venue.name}{best && (best.platinum || best.rating >= 80) && <span className={`record-badge${best.platinum ? ' platinum' : ''}`}
-              title={`${best.platinum ? 'Platinum' : 'Gold'} record on ${difficultyNames[settings.difficulty]}`}>{best.platinum ? 'Platinum' : 'Gold'}</span>}</h3>
+            <h3>{venue.name}</h3>
+            {best && (best.platinum || best.rating >= 80) && <span className={`record-badge${best.platinum ? ' platinum' : ''}`}
+              title={`${best.platinum ? 'Platinum' : 'Gold'} record on ${difficultyNames[settings.difficulty]}`}>{best.platinum ? 'Platinum' : 'Gold'}</span>}
             <span className="venue-state">{!available ? <><LockKeyhole size={13} aria-hidden="true" /> Locked</> : done ? <><Check size={13} aria-hidden="true" /> Cleared</> : 'Open'}</span>
           </div>
           <p className="venue-scene">{available ? done ? venue.sendoff : venue.scene : `Clear every song at ${TOUR_VENUES[index - 1]?.name} to play here.`}</p>
