@@ -287,3 +287,30 @@
   .locker-preview { position: static; height: 300px; }
   .chip-text { min-width: 0; }
 }
+
+.genre-select { display: none; max-width: 260px; }
+.notice-screen { place-content: center; min-height: 100vh; }
+.lesson-keys span { align-self: center; color: var(--muted); font-weight: 600; }
+.pad-test { flex-wrap: nowrap; overflow-x: auto; }
+.guitar-setup .field { margin-top: .8rem; }
+.guitar-setup .confirm { margin-top: .8rem; }
+.guitar-setup details p { margin-top: .5rem; }
+button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none; opacity: 1; }
+@media (max-width: 860px), (max-height: 640px) {
+  .genre-select { display: grid; }
+  .genre-chips { display: none; }
+}
+@media (max-height: 640px) {
+  .songs-screen { gap: .6rem; padding-top: .6rem; }
+  .songs-screen .screen-title h1 { font-size: 1.8rem; }
+  .songs-screen .menu-foot { display: none; }
+  .song-list { max-height: calc(100vh - 150px); }
+  .song-panel { max-height: calc(100vh - 150px); }
+  .song-cover { min-height: 70px; }
+}
+@media (max-width: 860px) and (orientation: landscape) {
+  .songs-layout { grid-template-columns: 1fr 1.2fr; }
+  .song-list { order: 0; }
+  .song-panel { position: sticky; }
+}
+@media (hover: none) and (pointer: coarse) { .mods button { min-height: 44px; } .check input { width: 30px; height: 30px; flex: none; } }

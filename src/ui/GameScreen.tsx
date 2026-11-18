@@ -577,7 +577,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     return () => { window.removeEventListener('keydown', press); window.removeEventListener('keyup', release); };
   }, [state]);
   const modeLine = [typing ? setup.typing?.lesson?.title ?? 'Free typing' : difficultyNames[setup.difficulty],
-    ...setup.mods.map(id => MODS[id].name), ...(setup.practice ? [`${setup.practice.rate * 100}% speed`] : [])].join(' · ');
+    ...setup.mods.map(id => MODS[id].name), ...(setup.practice ? [setup.practice.endMs - setup.practice.startMs >= chart.durationMs - 1 ? 'Whole song' : `Section ${Math.round(setup.practice.startMs / (chart.durationMs / SECTIONS)) + 1}`, `${setup.practice.rate * 100}% speed`, 'looping'] : [])].join(' · ');
   const single = players.length === 1;
   const waitingForMatch = !!match && match.ready && match.startAt === null;
   const startLabel = state === 'starting' ? 'Loading audio…' : match ? match.startAt ? 'Join playback' : match.ready ? 'Ready' : 'Ready up' : 'Start';

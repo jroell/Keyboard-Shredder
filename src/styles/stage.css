@@ -274,3 +274,15 @@
   .results-hero { grid-template-columns: 1fr; grid-template-areas: "stars" "score" "grade"; justify-items: center; text-align: center; }
   .ready-party { grid-template-columns: 1fr; }
 }
+
+@media (max-height: 700px), (max-width: 720px) {
+  .results-actions { position: static; margin: 0; padding: .2rem 0 1rem; background: none; backdrop-filter: none; }
+  .results-actions button.big { min-height: 46px; font-size: 1.2rem; padding: .4rem 1.2rem; }
+  .results h1 { font-size: clamp(1.8rem, 6vw, 3rem); }
+  .results .grade { font-size: clamp(3rem, 10vw, 5rem); }
+  .results-score strong { font-size: clamp(2.2rem, 8vw, 3.6rem); }
+  .results { gap: .7rem; }
+}
+.results-layer { background-attachment: fixed; }
+.results { margin-bottom: 2rem; }
+.stage[data-typing] .hud-right { padding-left: 2.2rem; }

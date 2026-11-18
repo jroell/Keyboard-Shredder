@@ -37,11 +37,11 @@ class ScreenBoundary extends Component<{ onMenu: () => void; children: ReactNode
   static getDerivedStateFromError() { return { failed: true }; }
   render() {
     if (!this.state.failed) return this.props.children;
-    return <main className="screen"><section className="panel notice" role="alert">
+    return <main className="screen notice-screen"><section className="panel notice" role="alert">
       <h2>This screen did not load</h2>
       <p>Check your connection, then try again.</p>
       <div className="modal-actions">
-        <button className="primary" onClick={() => location.reload()}>Reload the game</button>
+        <button className="primary" onClick={() => this.setState({ failed: false })}>Try again</button>
         <button onClick={() => { this.setState({ failed: false }); this.props.onMenu(); }}>Back to menu</button>
       </div>
     </section></main>;
@@ -200,7 +200,7 @@ export default function App() {
       const recording = await loadRecording(call, `/songs/${songId}`);
       setRoute({ name: 'play', recording, setup, back });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load the track.');
+      setError(reason instanceof Error && !/fetch|network|load failed/i.test(reason.message) ? reason.message : 'Could not load this song. Check your connection and try again.');
     } finally {
       setLoading('');
       busy.current = false;

@@ -111,7 +111,9 @@ export default function SongSelect() {
   const art = song ? stageArt(song.id) ?? fallbackArt : fallbackArt;
   return <Screen title="Quick play" eyebrow="Choose your song" onBack={() => { stopPreview(); app.go({ name: 'menu' }); }} className="songs-screen">
     <div className="songs-backdrop" key={art} style={{ backgroundImage: `url("${art}")` }} aria-hidden="true" />
-    <div className="chips" role="tablist" aria-label="Genre">
+    <label className="field genre-select">Genre<select value={genre} onChange={event => setGenre(event.target.value)}>
+      {genres.map(name => <option key={name}>{name}</option>)}</select></label>
+    <div className="chips genre-chips" role="tablist" aria-label="Genre">
       {genres.map(name => <button key={name} role="tab" aria-selected={genre === name} className={genre === name ? 'on' : ''}
         onClick={event => { event.currentTarget.blur(); sfx.play('ui-toggle'); setGenre(name); }}>{name}</button>)}
     </div>

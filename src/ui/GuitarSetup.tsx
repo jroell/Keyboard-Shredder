@@ -82,7 +82,7 @@ export default function GuitarSetup() {
       <button type="button" disabled={!name} onClick={begin}>Map the buttons</button>
       <button type="button" onClick={() => { setMap(DEFAULT_PAD); setStatus('Default mapping restored.'); }}>Reset mapping</button>
     </div>}
-    <p className="muted pad-map">Frets: {map.frets.map(describe).join(', ')}. Strum: {describe(map.strumDown)} and {describe(map.strumUp)}.</p>
+    <p className="muted pad-map">Mapped to: {map.frets.map(describe).join(', ')} for the frets; {describe(map.strumDown)} and {describe(map.strumUp)} for the strum bar. On this screen the red fret goes back, like in every menu.</p>
     <details>
       <summary>Guitar Hero Live guitar</summary>
       <p>The six-button Guitar Hero Live guitar works through its USB dongle (PlayStation 3, Wii U or PlayStation 4 version) in Chrome or Edge. The dongle only sends button presses after the game wakes it up.</p>

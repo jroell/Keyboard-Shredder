@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Check, Dumbbell, Keyboard, LockKeyhole, Play, Star } from 'lucide-react';
 import { keyLabel } from '../../shared/practice';
-import { ALL_TYPING_KEYS, lessonStatus, TYPING_LESSONS, weakestKeys, type LessonKind } from '../../shared/typing';
+import { ALL_TYPING_KEYS, keyInfo, needsShift, lessonStatus, TYPING_LESSONS, weakestKeys, type LessonKind } from '../../shared/typing';
 import type { Difficulty } from '../../shared/song';
 import { DIFFICULTIES, difficultyNames } from '../../shared/difficulty';
 import { useApp } from '../App';
@@ -61,7 +61,8 @@ export default function Academy() {
         {nextLesson ? <>
           <h2>{nextLesson.title}</h2>
           <p>{nextLesson.blurb}</p>
-          <div className="lesson-keys">{nextLesson.newKeys.map(code => <kbd key={code}>{code === 'Space' ? 'space' : keyLabel(code)}</kbd>)}</div>
+          <div className="lesson-keys">{nextLesson.newKeys.length > 8 ? <><kbd>Shift</kbd><span>+ any letter</span></>
+            : nextLesson.newKeys.map(code => <kbd key={code}>{code === 'Space' ? 'space' : needsShift(code) ? `Shift + ${keyInfo(code)?.label}` : keyLabel(code)}</kbd>)}</div>
           <button className="primary big" autoFocus onClick={() => { sfx.play('ui-select'); void app.startLesson(nextLesson); }}><Play aria-hidden="true" />Start lesson</button>
         </> : <><h2>You graduated</h2><p>Every lesson is passed. Keep your speed up with free typing on any song.</p></>}
       </section>
