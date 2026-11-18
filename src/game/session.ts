@@ -81,6 +81,7 @@ export class GameSession {
   private lastAudioUpdate = 0;
   private bots: BotState[] = [];
   private countBeat = -1;
+  private introDone = false;
   private touchKeys = new Map<string, { player: number; lane: number }>();
   private boostKeys = new Map<string, number>();
   private endedAt: number | null = null;
@@ -226,6 +227,7 @@ export class GameSession {
       this.lastAudioTime = ctx.currentTime;
       this.lastAudioUpdate = performance.now();
       this.countBeat = -1;
+      this.introDone = false;
       if (!this.disposed) this.setState('playing');
     } catch (reason) {
       this.transport?.stop();
@@ -502,7 +504,9 @@ export class GameSession {
       this.setState('paused');
       return;
     }
-    if (now < this.offset) {
+    // The count-in plays once per start or resume, never again when a typing lesson picks up after waiting.
+    if (this.introDone) { /* already counted in */ }
+    else if (now < this.offset) {
       const beat = Math.ceil((this.offset - now) / this.beatMs);
       if (beat !== this.countBeat) {
         this.countBeat = beat;
@@ -510,6 +514,7 @@ export class GameSession {
       }
     } else if (this.countBeat !== 0) {
       this.countBeat = 0;
+      this.introDone = true;
       this.options.onEvent({ type: 'countin', beat: 0 });
     }
     // Online, the song must stay on the shared clock. If audio fell behind (a stalled tab or a busy machine), jump back in step.

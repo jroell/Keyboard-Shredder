@@ -52,14 +52,14 @@ export default function PartySetup() {
         <label className="field">{index === 0 ? 'Player 1' : 'Player 2'}
           {index === 1 && cpu.skill !== undefined ? <input value={second} readOnly /> :
             <input maxLength={16} list="saved-players" value={names[index]} onChange={event => setNames(previous => index === 0 ? [event.target.value, previous[1]] : [previous[0], event.target.value])} />}</label>
-        <label className="field" style={index === 0 ? { visibility: 'hidden' } : undefined} aria-hidden={index === 0 || undefined}><span><Bot aria-hidden="true" size={14} /> Opponent</span>
-          <select value={rival} disabled={index === 0} tabIndex={index === 0 ? -1 : undefined} onChange={event => setRival(event.target.value)}>
-            {CPU.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
         <label className="field">Difficulty<select value={levels[index]}
           onChange={event => setLevels(previous => index === 0 ? [event.target.value as Difficulty, previous[1]] : [previous[0], event.target.value as Difficulty])}>
           {DIFFICULTIES.map(level => <option key={level} value={level}>{difficultyNames[level]}</option>)}</select></label>
         <div className="ready-keys">{settings.partyKeys[index].map((code, lane) => <kbd key={code} style={{ '--lane': colors[lane] } as React.CSSProperties}>{keyLabel(code)}</kbd>)}</div>
         <small>Overdrive: {index === 0 ? 'Space' : 'Enter'}</small>
+        {index === 1 && <label className="field"><span><Bot aria-hidden="true" size={14} /> Who plays this side</span>
+          <select value={rival} onChange={event => setRival(event.target.value)}>
+            {CPU.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
       </section>)}
     </div>
     <div className="form-row party-song">

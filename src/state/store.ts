@@ -85,7 +85,7 @@ export function listPlayers(): { id: string; name: string; level: number }[] {
 export const currentPlayer = profile;
 /** Switches the active player and reloads, so every screen reads that player's progress. */
 export function switchPlayer(id: string) {
-  try { localStorage.setItem('ks:profile', id); } catch { return; }
+  try { localStorage.setItem('ks:profile', id); sessionStorage.setItem('ks:switched', '1'); } catch { return; }
   location.reload();
 }
 export function addPlayer(name: string) {

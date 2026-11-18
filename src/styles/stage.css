@@ -297,3 +297,14 @@
 .trouble-spots { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; font-size: .82rem; color: var(--muted); }
 .trouble-spots button { min-height: 36px; padding: .2rem .7rem; font-size: .82rem; border-color: #ff5a5a66; }
 .timeline-key { font-size: .74rem; color: var(--muted); }
+
+.results { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.results > * { min-width: 0; max-width: 100%; }
+@media (max-width: 720px) {
+  .results-actions button { max-width: 100%; white-space: normal; }
+  .results-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .results-stats dt { font-size: .56rem; letter-spacing: .04em; }
+  .trouble-spots button { white-space: normal; text-align: left; }
+  .xp-parts { min-width: 0; }
+}
+@media (max-height: 520px) { .results .grade { font-size: 2.6rem; } .results-hero { grid-template-columns: 1fr auto; grid-template-areas: "stars grade" "score grade"; justify-items: start; text-align: left; } }

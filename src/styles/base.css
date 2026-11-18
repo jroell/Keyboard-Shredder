@@ -120,7 +120,7 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--pink); }
 
 .toast {
   position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); z-index: 50; padding: .8rem 1.2rem; border-radius: 12px;
-  background: #2a0d14; border: 1px solid var(--red); display: flex; gap: 1rem; align-items: center; max-width: min(92vw, 560px);
+  background: #132417; border: 1px solid var(--green); display: flex; gap: 1rem; align-items: center; max-width: min(92vw, 560px);
 }
 .loading-veil { position: fixed; inset: 0; z-index: 60; background: #07040ecc; display: grid; place-content: center; gap: 1rem; text-align: center; backdrop-filter: blur(6px); }
 .loading-veil p { font: 800 1.6rem var(--display); text-transform: uppercase; letter-spacing: .08em; }
@@ -183,3 +183,5 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--pink); }
   input[type="checkbox"] { width: 26px; height: 26px; }
 }
 .notice { display: grid; gap: .8rem; justify-items: start; max-width: 560px; }
+
+.toast.error { background: #2a0d14; border-color: var(--red); }

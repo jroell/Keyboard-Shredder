@@ -82,9 +82,9 @@ export default function GuitarSetup() {
       <button type="button" disabled={!name} onClick={begin}>Map the buttons</button>
       <button type="button" onClick={() => { setMap(DEFAULT_PAD); setStatus('Default mapping restored.'); }}>Reset mapping</button>
     </div>}
-    <p className="muted pad-map">Mapped to: {map.frets.map(describe).join(', ')} for the frets; {describe(map.strumDown)} and {describe(map.strumUp)} for the strum bar. On this screen the red fret only lights its test lamp. Use the Back button or Escape to leave.</p>
+    <p className="muted pad-map">Current mapping: {['Green', 'Red', 'Yellow', 'Blue', 'Orange'].map((name, lane) => `${name} fret is ${describe(map.frets[lane]).toLowerCase()}`).join(', ')}. Strum down is {describe(map.strumDown).toLowerCase()}, strum up is {describe(map.strumUp).toLowerCase()}. On this screen the red fret only lights its test lamp. Use the Back button or Escape to leave.</p>
     <details>
-      <summary>Guitar Hero Live guitar</summary>
+      <summary>Using a Guitar Hero Live guitar? Open this.</summary>
       <p>The six-button Guitar Hero Live guitar works through its USB dongle (PlayStation 3, Wii U or PlayStation 4 version) in Chrome or Edge. The dongle only sends button presses after the game wakes it up.</p>
       <p>Songs here use five lanes, so map five of the six buttons: the three black buttons and the first two white ones work well.</p>
       <button type="button" disabled={!canWakeGhl()} onClick={wake}>Wake the dongle</button>

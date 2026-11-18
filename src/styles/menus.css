@@ -335,3 +335,14 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
   .academy-top { grid-template-columns: 1fr; }
 }
 .profile-form .badge-list { margin-bottom: .9rem; }
+
+.venue-set button { white-space: nowrap; flex: none; }
+.song-cover .eyebrow { text-shadow: 0 1px 3px #000, 0 0 12px #000; }
+@media (max-height: 520px) {
+  .songs-screen .genre-select { position: absolute; top: .6rem; right: 1rem; width: 180px; z-index: 3; }
+  .songs-screen .genre-select select { min-height: 38px; }
+  .song-actions { padding: .3rem 1rem; }
+  .song-actions button.big { min-height: 42px; font-size: 1.2rem; }
+  .songs-screen { padding-bottom: 60px; }
+  .song-list { max-height: calc(100vh - 130px); }
+}

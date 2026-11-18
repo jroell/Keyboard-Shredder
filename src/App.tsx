@@ -115,7 +115,11 @@ export default function App() {
   const challenge = useMemo(readChallenge, []);
   const [notice, setNotice] = useState(() => !readChallenge() && new URLSearchParams(location.search).has('c')
     ? 'That challenge link is not valid. It may have been cut short when it was copied.' : '');
-  const [route, setRoute] = useState<Route>(invite !== null ? { name: 'online', invite, coop: false } : { name: 'title' });
+  // After switching player the game reloads. Land on the menu and say who is playing.
+  const switched = useMemo(() => { try { const flag = sessionStorage.getItem('ks:switched'); sessionStorage.removeItem('ks:switched'); return !!flag; } catch { return false; } }, []);
+  const [welcome, setWelcome] = useState(switched);
+  useEffect(() => { if (!welcome) return; const timer = setTimeout(() => setWelcome(false), 4000); return () => clearTimeout(timer); }, [welcome]);
+  const [route, setRoute] = useState<Route>(invite !== null ? { name: 'online', invite, coop: false } : switched ? { name: 'menu' } : { name: 'title' });
   const busy = useRef(false);
   const settings = useCell(settingsStore);
   const save = useCell(saveStore);
@@ -321,6 +325,7 @@ export default function App() {
           <button onClick={() => { setNotice(''); history.replaceState(null, '', location.pathname); go({ name: 'menu' }); }}>Main menu</button>
         </div>
       </section></div>}
+      {welcome && <div className="toast" role="status">Now playing as {save.name || 'a new player'}.</div>}
       {error && route.name !== 'play' && <div className="toast error" role="alert">{error}<button className="link" onClick={() => setError('')}>Dismiss</button></div>}
     </div>
   </AppContext.Provider>;
