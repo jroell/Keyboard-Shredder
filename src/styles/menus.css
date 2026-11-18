@@ -367,7 +367,7 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
   .duel-player > strong { font-size: 1rem; text-align: right; }
   .duel-player p { grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .duel-player .duel-frets { display: none; }
-  .stage[data-duel] .stage-cover { padding-top: 136px; place-items: start center; }
+  .stage[data-duel] .stage-cover { padding-top: 100px; place-items: start center; }
   .stage[data-duel] .stage-top { top: 92px; }
   .stage[data-duel] .hud-left, .stage[data-duel] .hud-right { top: 150px !important; }
 }

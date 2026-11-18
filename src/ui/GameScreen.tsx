@@ -827,7 +827,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
         {guitar && !typing && <p className="ready-goal">{guitar} connected{setup.party ? ` and plays for ${setup.party.names[pads().length > 1 ? 0 : 1]}${pads().length > 1 ? ' and ' + setup.party.names[1] : ''}, in place of the keys shown` : ''}. {settings.pad.mode === 'strum' ? 'Hold the frets and strum on each note.' : 'Press a fret on each note.'} Tilt or press Select for overdrive.</p>}
         {readyExtra}
         {error && <p role="alert" className="error">{error}</p>}
-        <button className="primary big" autoFocus={!setup.party} disabled={state === 'starting' || waitingForMatch} onClick={() => start()}>{startLabel}</button>
+        <button className="primary big" ref={node => { if (node && !setup.party && document.activeElement?.tagName !== 'SELECT' && document.activeElement?.tagName !== 'INPUT' && !node.dataset.focused) { node.dataset.focused = 'true'; node.focus({ preventScroll: true }); } }}
+          disabled={state === 'starting' || waitingForMatch} onClick={() => start()}>{startLabel}</button>
         {!match && <p className="hint keyboard-only">{setup.party ? 'Click Start when you are both ready' : <><kbd>Enter</kbd> start</>} · <kbd>Esc</kbd> back</p>}
         {!match && <button className="ghost" onClick={onExit}>{exitLabel}</button>}
       </div>
