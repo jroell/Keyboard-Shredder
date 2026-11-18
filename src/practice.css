@@ -44,3 +44,19 @@
   border-radius: .35rem;
 }
 .practice-breakdown li span { font-size: .8rem; font-variant-numeric: tabular-nums; }
+
+.practice-history { margin-top: .85rem; padding-top: .75rem; border-top: 1px solid var(--edge); }
+.practice-progress { min-width: 0; }
+.practice-progress-controls { display: flex; flex-wrap: wrap; gap: .6rem; }
+.practice-progress-controls label { flex: 1 1 8rem; min-width: 0; }
+.practice-stat-list { list-style: none; padding: 0; }
+.practice-stat-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .2rem .55rem;
+  padding-block: .4rem;
+  border-bottom: 1px solid var(--edge);
+}
+.practice-stat-list strong { overflow-wrap: anywhere; }
+.practice-stat-list span, .practice-stat-list time { font-size: .82rem; font-variant-numeric: tabular-nums; }
+.practice-stat-list li > :nth-child(3) { grid-column: 1 / -1; }

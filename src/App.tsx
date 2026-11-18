@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { FirebaseOptions } from 'firebase/app';
 import type { Auth, User } from 'firebase/auth';
 import { Guitar, Library, Music2, Play, SlidersHorizontal, Swords } from 'lucide-react';
@@ -6,12 +6,18 @@ import AccountAccess from './components/AccountAccess';
 import PlayerProfile from './components/PlayerProfile';
 import type { Profile } from '../shared/duel';
 import SoloGame from './components/Game/SoloGame';
+import { isTourSongUnlocked, normalizeTourProgress, recordTourResult } from '../shared/tour';
+import { stageArt } from './lib/stage-art';
+import { readPracticeHistory, writePracticeHistory } from './lib/practice-history';
+import type { PracticeRun } from '../shared/practice-progress';
 import PracticeSettings from './components/Game/PracticeSettings';
 import { DEFAULT_PRACTICE, normalizePracticeConfig, practiceKeys, PRACTICE_PRESETS } from '../shared/practice';
 import { DEFAULT_KEYS } from '../shared/scoring';
 import { loadRecording, type Recording } from './lib/recording';
 import type { Difficulty, Job, Song } from '../shared/song';
 
+const Tour = lazy(() => import('./components/Game/Tour'));
+const PracticeProgress = lazy(() => import('./components/Game/PracticeProgress'));
 const DuelRoom = lazy(() => import('./components/Game/DuelRoom'));
 
 type Config = { authEmulator?: string; firebase: FirebaseOptions | null; localTest: boolean; musicEnabled: boolean; legacyDatabaseId: string | null };
@@ -66,7 +72,10 @@ export default function App() {
   const [seconds, setSeconds] = useState<30 | 90>(90);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [job, setJob] = useState<Job>();
-  const [recording, setRecording] = useState<Recording>();
+  const [recording, setRecording] = useState<Recording & { tour?: boolean }>();
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourDifficulty, setTourDifficulty] = useState<Difficulty>('normal');
+  const [coop, setCoop] = useState(false);
   const [loading, setLoading] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState('');
@@ -97,12 +106,24 @@ export default function App() {
     return () => { active = false; unsubscribe?.(); };
   }, []);
 
-  const token = async () => {
-    if (!config?.localTest) return user?.getIdToken();
+  const localPlayer = () => {
     const key = new URLSearchParams(location.search).get('player');
-    if (key && /^test-[a-z0-9]{1,40}$/.test(key)) sessionStorage.setItem('shredder-local-player', key);
-    return sessionStorage.getItem('shredder-local-player') || 'test-player';
+    const requested = key && /^test-[a-z0-9]{1,40}$/.test(key) ? key : null;
+    try {
+      if (requested) sessionStorage.setItem('shredder-local-player', requested);
+      return sessionStorage.getItem('shredder-local-player') || 'test-player';
+    } catch {
+      return requested ?? 'test-player';
+    }
   };
+  const token = async () => config?.localTest ? localPlayer() : user?.getIdToken();
+  const historyScope = user?.uid ?? (config?.localTest ? localPlayer() : 'guest');
+  const tourStorageKey = `shredder-story:${historyScope}`;
+  function readTour() {
+    try { return normalizeTourProgress(JSON.parse(localStorage.getItem(tourStorageKey) || '{}')); }
+    catch { return {}; }
+  }
+  const tourProgress = readTour();
   const call = async (path: string, options: RequestInit = {}) => {
     const bearer = await token();
     const response = await fetch('/api' + path, { ...options, headers: {
@@ -171,15 +192,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', remap);
   }, [remapping, settings.keys]);
 
-  const openTrack = async (id: string) => {
-    if (busy.current) return;
+  const openTrack = async (id: string, tour = false) => {
+    if (busy.current || (tour && !isTourSongUnlocked(id, readTour()))) return;
     busy.current = true;
     setLoading(true);
     setError('');
     try {
       const track = await loadRecording(call, `/songs/${id}`);
       setSongs(previous => previous.some(item => item.id === id) ? previous : [track.song, ...previous]);
-      setRecording(track);
+      setRecording({ ...track, tour });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load the track.');
     } finally {
@@ -264,17 +285,45 @@ export default function App() {
     return saved;
   }
 
-  if (canUseLibrary && duelInvite !== null) return <Suspense fallback={<main className="studio"><p role="status">Opening duel…</p></main>}><DuelRoom key={user?.uid ?? 'local'} invite={duelInvite}
-    token={token} call={call} songs={songs} difficulty={difficulty} profile={profile} {...settings}
+  const savePracticeRun = useCallback((run: PracticeRun) =>
+    writePracticeHistory(historyScope, [run, ...readPracticeHistory(historyScope)].slice(0, 30)), [historyScope]);
+
+  const saveTourRun = useCallback((id: string, accuracy: number) => {
+    try {
+      const saved = normalizeTourProgress(JSON.parse(localStorage.getItem(tourStorageKey) || '{}'));
+      localStorage.setItem(tourStorageKey, JSON.stringify(recordTourResult(saved, id, accuracy)));
+      return true;
+    } catch {
+      return false;
+    }
+  }, [tourStorageKey]);
+
+  if (canUseLibrary && duelInvite !== null) return <Suspense fallback={<main className="studio"><p role="status">Opening duel…</p></main>}><DuelRoom key={user?.uid ?? 'local'} invite={duelInvite} initialCoop={coop}
+    token={token} call={call} songs={songs} difficulty={coop ? tourDifficulty : difficulty} profile={profile} {...settings}
     refresh={() => { void call('/profile').then(response => response.json()).then(setProfile).catch(() => {}); }}
-    exit={() => { history.replaceState(null, '', location.pathname); setDuelInvite(null); }} /></Suspense>;
+    exit={() => { history.replaceState(null, '', location.pathname); setDuelInvite(null); setCoop(false); }} /></Suspense>;
 
   const generating = !!job && job.stage !== 'ready' && job.stage !== 'failed';
   if (recording) return <main className="studio arcade-stage">
-    <SoloGame key={recording.song.id} {...recording} difficulty={difficulty} profile={profile} {...settings}
-      keys={practiceEnabled ? practiceLanes : settings.keys}
-      practice={practiceEnabled ? PRACTICE_PRESETS[practice.preset].label : undefined}
+    <SoloGame key={recording.song.id} {...recording} difficulty={recording.tour ? tourDifficulty : difficulty} profile={profile} {...settings}
+      keys={practiceEnabled && !recording.tour ? practiceLanes : settings.keys}
+      practice={practiceEnabled && !recording.tour ? PRACTICE_PRESETS[practice.preset].label : undefined}
+      onPracticeRun={savePracticeRun}
+      onTourResult={recording.tour ? saveTourRun : undefined}
       leave={() => setRecording(undefined)} />
+  </main>;
+
+  if (canUseLibrary && tourOpen) return <main className="studio arcade-studio">
+    <header className="masthead">
+      <button onClick={() => setTourOpen(false)} disabled={loading}>Back to studio</button>
+      <button onClick={() => { setCoop(true); setDuelInvite(''); }} disabled={loading}>Tour with a friend</button>
+    </header>
+    {error && <p className="error" role="alert">{error}</p>}
+    {loading && <p role="status">Loading tour track…</p>}
+    <Suspense fallback={<p role="status">Opening tour…</p>}>
+      <Tour progress={tourProgress} difficulty={tourDifficulty} onDifficultyChange={setTourDifficulty}
+        busy={loading || generating} onOpen={id => void openTrack(id, true)} artForTrack={stageArt} />
+    </Suspense>
   </main>;
 
   const featured = songs[0];
@@ -302,6 +351,7 @@ export default function App() {
         <button className="primary" disabled={loading || generating} onClick={() => void openTrack(featured.id)}>
           <Play size={16} aria-hidden="true" />Play {featured.title}
         </button>
+        <button onClick={() => setTourOpen(true)} disabled={loading || generating}>Story mode</button>
         <a href="#setlist">Browse setlist</a>
         <a href="#keyboard-practice">Keyboard practice</a>
         {config?.musicEnabled && <a href="#create-track">Create a track</a>}
@@ -346,6 +396,12 @@ export default function App() {
           <label className="practice-toggle"><input type="checkbox" checked={practiceEnabled}
             onChange={event => setPracticeEnabled(event.target.checked)} /> Use practice keys in solo tracks</label>
           {practiceEnabled && <PracticeSettings value={practice} onChange={setPractice} />}
+          <details className="practice-history">
+            <summary>Practice progress</summary>
+            <Suspense fallback={<p role="status">Loading practice history…</p>}>
+              <PracticeProgress history={readPracticeHistory(historyScope)} />
+            </Suspense>
+          </details>
         </section>
         {config?.musicEnabled && <form id="create-track" className="panel composer" onSubmit={event => void generate(event)}>
           <h2><Music2 aria-hidden="true" /> Create a track</h2>

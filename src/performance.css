@@ -14,7 +14,7 @@
 }
 .performance::before {
   background: linear-gradient(0deg, #120b18a6, #160a164d 36%, #1a0d1a28 70%, #160e21b5),
-    url('./assets/warehouse-band.webp') 50% 48% / cover no-repeat;
+    var(--venue-stage, url('./assets/warehouse-band.webp')) 50% 48% / cover no-repeat;
 }
 .performance::after {
   z-index: 0;
@@ -183,3 +183,22 @@
   line-height: 1;
   color: #110c1a;
 }
+
+.team-target {
+  position: relative;
+  z-index: 2;
+
+  display: grid;
+  grid-template-columns: auto minmax(2rem, 1fr);
+  align-items: center;
+  gap: .65rem;
+  padding: .25rem .55rem;
+  margin-bottom: .35rem;
+  border: 1px solid #b3876d;
+  border-radius: .42rem;
+  background: #1d1424;
+  color: #fff3df;
+  font-size: .8rem;
+  font-variant-numeric: tabular-nums;
+}
+.team-target progress { width: 100%; height: .5rem; accent-color: #ffc376; margin: 0; }

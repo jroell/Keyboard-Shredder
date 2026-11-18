@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
 import type { Chart, Job, Song } from '../shared/song';
+import { DEFAULT_PRACTICE, keyLabel, mapPracticeChart, practiceKeys } from '../shared/practice';
 
 const live = Number(process.env.LIVE_MUSIC_SECONDS) || 0;
 const headers = { Authorization: 'Bearer test-player' };
@@ -317,7 +318,7 @@ test('Two players share an invite, land the same chord within 90 ms of each othe
   }
 });
 
-test('A fresh player gets 24 tracks with three difficulties and can play a two-finger chord', async ({ page, browser, browserName }) => {
+test('A fresh player gets 25 tracks with three difficulties and can play a two-finger chord', async ({ page, browser, browserName }) => {
   test.skip(!!live, 'The starter setlist is bundled with the game.');
   test.skip(browserName !== 'chromium', 'This test uses Chromium’s native multi-touch input protocol.');
   const data = await mkdtemp(join(tmpdir(), 'keyboard-setlist-'));
@@ -327,11 +328,11 @@ test('A fresh player gets 24 tracks with three difficulties and can play a two-f
     server = await launch(data);
     const { url } = server;
     const songs = await (await page.request.get(url + '/api/songs', { headers })).json() as Song[];
-    expect(songs).toHaveLength(24);
+    expect(songs).toHaveLength(25);
     const fullSongs = songs.filter(song => song.durationMs >= 60_000);
-    expect(fullSongs.map(song => song.id)).toEqual(['voltage-parade', 'copper-moon', 'big-rock', 'end-of-days']);
-    expect(fullSongs.filter(song => song.credit).map(song => song.credit?.artist)).toEqual(['Kevin MacLeod', 'Severed Fifth']);
-    expect(new Set(songs.map(song => song.genre)).size).toBe(10);
+    expect(fullSongs.map(song => song.id)).toEqual(['voltage-parade', 'copper-moon', 'big-rock', 'end-of-days', 'house-of-the-rising-sun']);
+    expect(fullSongs.filter(song => song.credit).map(song => song.credit?.artist)).toEqual(['Kevin MacLeod', 'Severed Fifth', 'HoliznaCC0']);
+    expect(new Set(songs.map(song => song.genre)).size).toBe(11);
     for (const song of songs) {
       const response = await page.request.get(`${url}/api/songs/${song.id}`, { headers });
       const { chart } = await response.json() as { chart: Chart };
@@ -544,5 +545,100 @@ test('Number row scores a digit on the same song timing and stays outside duels'
   } finally {
     if (server) await stop(server.child);
     await rm(data, { recursive: true, force: true });
+  }
+});
+
+test('Practice reports a completed chord, improvement over two runs and history after reload', async ({ page }) => {
+  test.skip(!!live, 'The test uses the bundled practice chart.');
+  const data = await mkdtemp(join(tmpdir(), 'shredder-practice-history-'));
+  let server: Awaited<ReturnType<typeof launch>> | undefined;
+  try {
+    server = await launch(data);
+    const { url } = server;
+    const { chart } = await (await page.request.get(url + '/api/songs/blacktop-sparks', { headers })).json() as { chart: Chart };
+    const keys = practiceKeys(DEFAULT_PRACTICE);
+    const practiceChart = mapPracticeChart(chart, keys);
+    const chord = practiceChart.events.normal.find(event => event.lanes.length === 2 && event.timeMs > 800)!;
+    const codes = chord.lanes.map(lane => keys[lane]);
+    const chordLabel = [...codes].sort().map(keyLabel).join(' + ');
+
+    await page.goto(url);
+    await page.getByRole('checkbox', { name: 'Use practice keys in solo tracks' }).check();
+    await page.getByRole('button', { name: 'Play Blacktop Sparks' }).click();
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    const results = page.getByRole('heading', { name: 'Track complete' });
+    await expect(results).toBeVisible({ timeout: 42_000 });
+    await page.getByRole('button', { name: 'Replay' }).click();
+    await page.waitForFunction(time => Number(document.querySelector('progress')?.value) >= time, chord.timeMs - 25);
+    for (const code of codes) await page.keyboard.down(keyLabel(code));
+    for (const code of codes) await page.keyboard.up(keyLabel(code));
+    await expect(page.getByText(/^Score [1-9]/)).toBeVisible();
+    await expect(results).toBeVisible({ timeout: 42_000 });
+    await page.getByRole('button', { name: 'Back to studio' }).click();
+    await page.reload();
+    await page.getByText('Practice progress', { exact: true }).click();
+    await expect(page.getByText(/\+[1-9]\d* pp versus earlier runs/)).toBeVisible();
+    await page.getByRole('combobox', { name: 'Show', exact: true }).selectOption('chords');
+    const row = page.getByRole('list', { name: 'Chord accuracy' }).getByRole('listitem').filter({ hasText: chordLabel });
+    await expect(row).toContainText(/1\/\d/);
+    await expect(row).toContainText(/\d+ ms/);
+    await page.getByText('Recent runs (2)', { exact: true }).click();
+    await expect(page.getByRole('list', { name: 'Recent practice runs' }).getByRole('listitem')).toHaveCount(2);
+  } finally {
+    if (server) await stop(server.child);
+    await rm(data, { recursive: true, force: true });
+  }
+});
+
+test('Two friends reach the combined target and advance to the next song without a new invite', async ({ page, browser }) => {
+  test.skip(!!live, 'The co-op tour uses the bundled setlist.');
+  const data = await mkdtemp(join(tmpdir(), 'shredder-coop-tour-'));
+  const guestContext = await browser.newContext();
+  let server: Awaited<ReturnType<typeof launch>> | undefined;
+  try {
+    server = await launch(data);
+    const { url } = server;
+    const guest = await guestContext.newPage();
+    const { chart } = await (await page.request.get(url + '/api/songs/river-amp', { headers })).json() as { chart: Chart };
+    await page.goto(url);
+    await page.getByRole('button', { name: 'Story mode' }).click();
+    await page.getByRole('button', { name: 'Tour with a friend' }).click();
+    await page.getByRole('combobox', { name: 'Co-op difficulty' }).selectOption('easy');
+    await page.getByRole('button', { name: 'Create invite' }).click();
+    const invite = await page.getByLabel('Invite link').inputValue();
+    await guest.goto(invite + '&player=test-coopguest');
+    await expect(guest.getByRole('heading', { name: 'Co-op tour' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'River Amp' })).toBeVisible();
+    await page.getByRole('button', { name: 'Ready up' }).click();
+    await guest.getByRole('button', { name: 'Ready up' }).click();
+
+    const target = chart.events.easy!.length * 120;
+    await expect(page.getByLabel('Team target')).toHaveAttribute('max', String(target));
+    const taps = chart.events.easy!.filter(event => event.timeMs > 350 && !event.durationMs);
+    for (const note of taps) {
+      await page.waitForFunction(time => Number(document.querySelector('progress[aria-label="Track progress"]')?.getAttribute('value')) >= time, note.timeMs - 22);
+      await Promise.all([page, guest].map(player => player.keyboard.press(keys[note.lanes[0]])));
+      if (await page.getByLabel('Team target').getAttribute('value') === String(target)) break;
+    }
+    await expect(page.getByLabel('Team scoreboard').locator('.duel-player')).toHaveCount(2);
+    await expect(page.getByRole('heading', { name: 'Song cleared' })).toBeVisible({ timeout: 42_000 });
+    await expect(guest.getByRole('heading', { name: 'Song cleared' })).toBeVisible();
+    const finalScores = await page.locator('.duel-final-scores > div > strong').allTextContents();
+    const total = finalScores.reduce((sum, score) => sum + Number(score.replace(/\D/g, '')), 0);
+    expect(finalScores).toHaveLength(2);
+    expect(finalScores.every(score => Number(score.replace(/\D/g, '')) > 0)).toBe(true);
+    expect(total).toBeGreaterThanOrEqual(target);
+    await expect(page.getByText(`${total.toLocaleString()} of ${target.toLocaleString()} team points · Next up Midnight Toll`)).toBeVisible();
+    await page.getByRole('button', { name: 'Continue tour' }).click();
+    await expect(page.getByRole('heading', { name: 'Midnight Toll', exact: true })).toBeVisible();
+    await expect(guest.getByRole('heading', { name: 'Midnight Toll', exact: true })).toBeVisible();
+    expect(page.url()).toBe(invite);
+    await expect(guest.getByRole('button', { name: 'Ready up' })).toBeEnabled();
+  } finally {
+    try { await guestContext.close(); }
+    finally {
+      if (server) await stop(server.child);
+      await rm(data, { recursive: true, force: true });
+    }
   }
 });

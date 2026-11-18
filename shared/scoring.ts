@@ -9,7 +9,7 @@ export class Scoring {
   readonly held = new Set<number>();
   readonly consumed = new Set<string>();
   readonly sustaining = new Map<string, SongEvent>();
-  readonly hitsByLane = new Map<number, number>();
+  readonly hitOffsets = new Map<string, number>();
   score = 0;
   hits = 0;
   chordsHit = 0;
@@ -105,7 +105,7 @@ export class Scoring {
     this.consumed.add(event.id);
     this.chord = null;
     this.hits++;
-    for (const lane of event.lanes) this.hitsByLane.set(lane, (this.hitsByLane.get(lane) ?? 0) + 1);
+    this.hitOffsets.set(event.id, offsetMs);
     if (event.lanes.length > 1) this.chordsHit++;
     const boost = this.boosting(timeMs);
     const points = (perfect ? 100 : 70) * this.multiplier(timeMs);

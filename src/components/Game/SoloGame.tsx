@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Star, Zap } from 'lucide-react';
 import type { Chart, Difficulty, Song, SongEvent } from '../../../shared/song';
 import { difficultyNames, hitWindows, notesFor } from '../../../shared/difficulty';
+import { TOUR_PASS_ACCURACY } from '../../../shared/tour';
+import { stageArt } from '../../lib/stage-art';
+import { summarizePractice, type PracticeRun } from '../../../shared/practice-progress';
 import { keyLabel, mapPracticeChart } from '../../../shared/practice';
 import { Scoring } from '../../../shared/scoring';
 import { palettes, type LaneInput, type Profile } from '../../../shared/duel';
@@ -18,15 +21,20 @@ function storeBest(key: string, score: number) {
   }
 }
 
+const tourAccuracy = (game: Scoring) => Math.floor(100 * game.hits / Math.max(1, game.events.length + game.wrongKeys));
+
 type Match = {
   startAt: number | null; ready: boolean; ampCharge: number; boostEndMs: number | null; combo: number; onReady: () => Promise<void>; onInput: (input: LaneInput) => void; onBoost: (timeMs: number) => void;
 };
 
-export default function SoloGame({ song, chart, difficulty, audio, leadAudio, keys, calibration, leave, profile, match, practice }: {
+export default function SoloGame({ song, chart, difficulty, audio, leadAudio, keys, calibration, leave, profile, match, practice, onPracticeRun, onTourResult }: {
   song: Song; chart: Chart; difficulty: Difficulty; audio: ArrayBuffer; leadAudio?: ArrayBuffer; keys: string[];
-  calibration: number; leave: () => void; profile?: Profile; match?: Match; practice?: string;
+  calibration: number; leave: () => void; profile?: Profile; match?: Match; practice?: string; onPracticeRun?: (run: PracticeRun) => boolean; onTourResult?: (id: string, accuracy: number) => boolean;
 }) {
   const [state, setState] = useState<'ready' | 'playing' | 'paused' | 'results'>('ready');
+  const [tourSaved, setTourSaved] = useState(true);
+  const [practiceRun, setPracticeRun] = useState<PracticeRun>();
+  const [practiceSaved, setPracticeSaved] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
   const [time, setTime] = useState(0);
@@ -42,6 +50,7 @@ export default function SoloGame({ song, chart, difficulty, audio, leadAudio, ke
   ])), [events, tapLengthMs, chart.durationMs]);
   const palette = palettes[profile?.palette ?? 'Sunset'];
   const laneColors = keys.map((_, lane) => palette[lane % palette.length]);
+  const artwork = stageArt(song.id);
   const trackMode = `${difficultyNames[difficulty]}${practice ? ` · ${practice}` : ''}`;
   const lookahead = profile?.speed ?? 1900;
   const matchRef = useRef(match);
@@ -225,6 +234,12 @@ export default function SoloGame({ song, chart, difficulty, audio, leadAudio, ke
       if (now >= playback.buffer.duration * 1000 + Math.max(calibration, 0)) {
         scoring.current.finish();
         if (!matchRef.current) setRecord(storeBest(`shredder-best:${song.id}:${difficulty}${practice ? `:${keys.join(',')}` : ''}`, scoring.current.score));
+        if (onTourResult) setTourSaved(onTourResult(song.id, tourAccuracy(scoring.current)));
+        if (practice) {
+          const run = summarizePractice({ title: song.title, layout: practice, difficulty }, keys, events, scoring.current.hitOffsets);
+          setPracticeRun(run);
+          setPracticeSaved(onPracticeRun?.(run) ?? false);
+        }
         playback.stop();
         setState('results');
       } else frame = requestAnimationFrame(animate);
@@ -244,7 +259,7 @@ export default function SoloGame({ song, chart, difficulty, audio, leadAudio, ke
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);
     };
-  }, [state, keys, calibration, song.id, difficulty, leadEnds, practice]);
+  }, [state, keys, calibration, song.id, song.title, difficulty, leadEnds, practice, events, onPracticeRun, onTourResult]);
 
   const game = scoring.current;
   const chartTime = time - calibration;
@@ -258,9 +273,9 @@ export default function SoloGame({ song, chart, difficulty, audio, leadAudio, ke
   const missed = feedback?.judgement === 'Miss' || feedback?.judgement === 'Sustain dropped' || feedback?.judgement === 'Wrong key';
   if (state === 'results') {
     if (match) return <p role="status">Waiting for final duel scores…</p>;
-    const stars = [20, 40, 60, 80, 95].filter(threshold => game.accuracy >= threshold).length;
+    const accuracy = onTourResult ? tourAccuracy(game) : game.accuracy;
+    const stars = [20, 40, 60, 80, 95].filter(threshold => accuracy >= threshold).length;
     const availableChords = events.filter(event => event.lanes.length > 1).length;
-    const laneTotals = keys.map((_, lane) => events.filter(event => event.lanes.includes(lane)).length);
     return <section className="panel results stage-results finale">
       <header><h1>Track complete</h1><p>{song.title} · {trackMode}</p></header>
       <div className="finale-score">
@@ -272,24 +287,30 @@ export default function SoloGame({ song, chart, difficulty, audio, leadAudio, ke
         <strong>{game.score.toLocaleString()}</strong>
         <p>{record.improved ? 'New personal best' : `Personal best ${record.best.toLocaleString()}`}</p>
       </div>
-      <dl><div><dt>Accuracy</dt><dd>{game.hits > 0 && game.accuracy === 0 ? '<1' : game.accuracy}%</dd></div>
+      <dl><div><dt>Accuracy</dt><dd>{game.hits > 0 && accuracy === 0 ? '<1' : accuracy}%</dd></div>
         <div><dt>Best combo</dt><dd>{game.bestCombo}</dd></div>
         <div><dt>Notes hit</dt><dd>{game.hits}/{events.length}</dd></div>
         {availableChords > 0 && <div><dt>Chords hit</dt><dd>{game.chordsHit}/{availableChords}</dd></div>}
         {game.boostHits > 0 && <div><dt>Boosted hits</dt><dd>{game.boostHits}</dd></div>}</dl>
-      {practice && <section className="practice-breakdown" aria-label="Hits by key">
-        <h2>Hits by key</h2>
-        <ul>{keys.map((key, lane) => <li key={key}><kbd>{keyLabel(key)}</kbd>
-          <span>{game.hitsByLane.get(lane) ?? 0}/{laneTotals[lane]}</span></li>)}</ul>
+      {practiceRun && <section className="practice-breakdown" aria-label="Single-note hits by key">
+        <h2>Single-note hits by key</h2>
+        <ul>{keys.filter(key => practiceRun.keys[key]).map(key => <li key={key}><kbd>{keyLabel(key)}</kbd>
+          <span>{practiceRun.keys[key]?.hits ?? 0}/{practiceRun.keys[key]?.attempts ?? 0}</span></li>)}</ul>
       </section>}
+      {onTourResult && <p role="status">{!tourSaved ? 'This browser could not save your tour result.'
+        : accuracy >= TOUR_PASS_ACCURACY ? 'Song cleared. Continue your tour to see what unlocked.'
+        : `Earn ${TOUR_PASS_ACCURACY}% accuracy to clear this song.`}</p>}
+      {practiceRun && !practiceSaved && <p role="status">This browser could not save your practice history.</p>}
       {game.wrongKeys > 0 && <p>{game.wrongKeys} extra presses</p>}
       {error && <p role="alert">{error}</p>}
       <button ref={primaryAction} className="primary" disabled={starting} onClick={() => void play(true)}>Replay</button>
-      <button onClick={leave}>Back to studio</button>
+      <button onClick={leave}>{onTourResult ? 'Back to tour' : 'Back to studio'}</button>
     </section>;
   }
 
-  return <section className="play performance" data-practice={practice ? 'true' : undefined} data-duel={match ? 'true' : undefined} data-boost={boosted ? 'on' : undefined}>
+  return <section className="play performance"
+    style={artwork ? { '--venue-stage': `url("${artwork}")` } as CSSProperties : undefined}
+    data-practice={practice ? 'true' : undefined} data-duel={match ? 'true' : undefined} data-boost={boosted ? 'on' : undefined}>
     <header className="game-header"><div><h1>{song.title}</h1><p>{trackMode} · {chart.bpm} BPM</p></div>
       <div className="game-actions">
         {state === 'playing' && !match && <button onClick={() => pauseAction.current()}>Pause</button>}

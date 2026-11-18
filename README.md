@@ -30,9 +30,15 @@ docker run --rm --env-file .env -p 127.0.0.1:3000:3000 \
 
 ## Starter setlist
 
-Every account starts with 20 short songs across ten genres and four full songs. Open **Setlist** to filter by genre or length. Every song has Easy, Normal, and Hard charts. New tracks you generate appear under **My tracks**. The starter songs come with the game and play without a music generation key.
+Every account starts with 20 short songs and five full songs across eleven genres. Open **Setlist** to filter by genre or length. Every song has Easy, Normal, and Hard charts. New tracks you generate appear under **My tracks**. The starter songs come with the game and play without a music generation key.
 
-The full songs include the originals “Voltage Parade” and “Copper Moon” and two [Creative Commons recordings](catalog/CREDITS.md). The recordings and charts live under `catalog/`. Keep that directory alongside the app when deploying. The starter setlist is also available for duels.
+The full songs include the originals “Voltage Parade” and “Copper Moon” and three [Creative Commons recordings](catalog/CREDITS.md). The recordings and charts live under `catalog/`. Keep that directory alongside the app when deploying. Each starter song has its own stage and is available in free play, story mode, and multiplayer.
+
+## Play the tour
+
+Open **Story mode** and work through six venues and a sunrise encore. Earn at least 60% accuracy to clear a song and unlock the next one. Clear every song at a venue to earn the next booking. Solo tour progress is saved for this account in the current browser.
+
+Choose **Tour with a friend** to start a co-op tour. Share the invite and ready up together. Each player has an individual score and fret display. Your combined points have to reach the target to unlock the next song. The host can load it into the same room. Co-op progress is saved to the host's account on the server.
 
 ## Play head-to-head
 
@@ -50,7 +56,7 @@ The backing mix runs throughout the song. A hit brings in the recorded guitar, a
 
 ### Keyboard practice
 
-Open **Keyboard practice** in the studio, enable practice keys, and pick any solo track. Choose Home row, Number row, Vim navigation, Touch typing, or Custom. Custom layouts support 5–12 keys across the four keyboard rows. Practice charts reuse the song's timing and spread notes across your selected keys. Chords use at most two keys. Vim navigation rehearses the positions of movement and word keys. The results show hits by key. Practice records are stored separately from regular solo scores.
+Open **Keyboard practice** in the studio, enable practice keys, and pick any solo track. Choose Home row, Number row, Vim navigation, Touch typing, or Custom. Custom layouts support 5–12 keys across the four keyboard rows. Practice charts reuse the song's timing and spread notes across your selected keys. Chords use at most two keys. Vim navigation rehearses the positions of movement and word keys. Open **Practice progress** in the studio to see hit rates and timing for individual keys and exact chord combinations. Compare up to five recent runs with the same number of earlier runs at the selected difficulty. The browser keeps the latest 30 completed practice runs for the signed-in account.
 
 ## Verify changes
 
