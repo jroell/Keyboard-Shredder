@@ -10,7 +10,7 @@ import type { createProfileStore } from './profiles';
 import type { createJobStore } from './jobs';
 
 type Assets = NonNullable<ReturnType<ReturnType<typeof createJobStore>['assets']>>;
-type Player = { uid: string; profile: Profile; socket: string | null; ready: boolean; game: Scoring; lastTime: number; sent: number; window: number };
+type Player = { level: Difficulty; uid: string; profile: Profile; socket: string | null; ready: boolean; game: Scoring; lastTime: number; sent: number; window: number };
 type Room = {
   id: string; round: string; mode: DuelMode; assets: Assets; chart: Chart; difficulty: Difficulty; players: Player[];
   phase: Duel['phase']; startAt: number | null; winner: number | null; reason?: string; touched: number; published?: string;
@@ -25,7 +25,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
   const view = (room: Room): Duel => ({
     id: room.id, round: room.round, mode: room.mode, coop: coopStage(room), song: publicSong(room.assets.song), difficulty: room.difficulty, phase: room.phase,
     players: room.players.map((player, slot) => ({
-      slot, profile: player.profile, connected: !!player.socket, ready: player.ready,
+      slot, profile: player.profile, connected: !!player.socket, ready: player.ready, difficulty: player.level, rating: player.game.rating,
       score: player.game.score, combo: player.game.combo, ampCharge: player.game.ampCharge, boostEndMs: player.game.boostEndMs, accuracy: player.game.accuracy,
       frets: [...player.game.held],
       strike: player.game.feedback && Date.now() - (room.startAt ?? 0) - player.game.feedback.timeMs < 500
@@ -56,8 +56,14 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
   }
   const game = (chart: Chart, level: Difficulty) => new Scoring(notesFor(chart, level), hitWindows[level]);
   const targetFor = (chart: Chart, level: Difficulty) => 2 * TOUR_PASS_ACCURACY * notesFor(chart, level).length;
-  const newPlayer = (room: Room, uid: string, socket: string): Player =>
-    ({ uid, profile: profiles.get(uid), socket, ready: false, game: game(room.chart, room.difficulty), lastTime: -Infinity, sent: 0, window: 0 });
+  // The team target follows the charts the players actually chose.
+  const retarget = (room: Room) => {
+    if (!room.coop) return;
+    const levels = room.players.length === 2 ? room.players.map(player => player.level) : [room.players[0]?.level ?? room.difficulty, room.players[0]?.level ?? room.difficulty];
+    room.coop.targetScore = levels.reduce((total, level) => total + TOUR_PASS_ACCURACY * notesFor(room.chart, level).length, 0);
+  };
+  const newPlayer = (room: Room, uid: string, socket: string, level: Difficulty = room.difficulty): Player =>
+    ({ level, uid, profile: profiles.get(uid), socket, ready: false, game: game(room.chart, level), lastTime: -Infinity, sent: 0, window: 0 });
 
   function resetRound(room: Room) {
     room.round = randomUUID();
@@ -66,7 +72,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
     room.winner = null;
     room.reason = undefined;
     room.touched = Date.now();
-    room.players = room.players.map(player => newPlayer(room, player.uid, player.socket!));
+    room.players = room.players.map(player => newPlayer(room, player.uid, player.socket!, player.level));
     if (room.coop) room.coop.teamPassed = null;
   }
 
@@ -178,7 +184,7 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
         }
         room.assets = assets;
         room.chart = chart;
-        room.coop.targetScore = targetFor(chart, room.difficulty);
+        retarget(room);
         resetRound(room);
         ack({});
         publish(room);
@@ -198,8 +204,20 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       if (previous && previous !== room) removePlayer(previous, uid);
       if (!member) {
         room.players.push(newPlayer(room, uid, socket.id));
+        retarget(room);
       }
       connect(room, ack);
+    });
+    socket.on('duel-level', (level, ack) => {
+      if (typeof ack !== 'function') return;
+      const room = current();
+      if (!room || room.phase !== 'lobby' || !isDifficulty(level)) return reject(ack, 'Choose a difficulty before the song starts.');
+      const slot = room.players.findIndex(player => player.uid === uid);
+      // Each player picks their own chart. Changing it clears ready, so nobody starts on a chart they did not choose.
+      room.players[slot] = { ...newPlayer(room, uid, socket.id, level) };
+      retarget(room);
+      ack({});
+      publish(room);
     });
     socket.on('duel-ready', (ready, ack) => {
       if (typeof ack !== 'function') return;
@@ -307,7 +325,10 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
       room.coop.progress = profiles.recordCoop(room.players[0].uid, room.assets.song.id, accuracy);
       return;
     }
-    room.winner = a.score === b.score ? null : a.score > b.score ? 0 : 1;
+    // With different charts the fair measure is timing rating; on the same chart it is score.
+    const mixed = room.players[0].level !== room.players[1].level;
+    const [left, right] = mixed ? [a.rating, b.rating] : [a.score, b.score];
+    room.winner = left === right ? null : left > right ? 0 : 1;
     profiles.record(room.round, room.players.map((player, slot) => ({
       uid: player.uid, win: room.winner === slot, accuracy: player.game.accuracy,
       bestCombo: player.game.bestCombo, hits: player.game.hits,

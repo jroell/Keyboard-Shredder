@@ -5,7 +5,7 @@ import { keyLabel } from '../../shared/practice';
 import type { Difficulty } from '../../shared/song';
 import { useApp } from '../App';
 import { sfx } from '../game/sfx';
-import { laneColors, saveStore, settingsStore, useCell } from '../state/store';
+import { laneColors, listPlayers, saveStore, settingsStore, useCell } from '../state/store';
 import { formatLength, Screen } from './common';
 
 const CPU = [
@@ -46,11 +46,12 @@ export default function PartySetup() {
       <button role="radio" aria-checked={coop} className={coop ? 'on' : ''} onClick={() => { sfx.play('ui-toggle'); setCoop(true); }}>
         <Handshake aria-hidden="true" /><strong>Co-op</strong><span>Share the stage. Your scores add up to one team total.</span></button>
     </div>
+    <datalist id="saved-players">{listPlayers().map(player => <option key={player.id} value={player.name} />)}</datalist>
     <div className="party-players">
       {[0, 1].map(index => <section key={index} className="panel">
         <label className="field">{index === 0 ? 'Player 1' : 'Player 2'}
           {index === 1 && cpu.skill !== undefined ? <input value={second} readOnly /> :
-            <input maxLength={16} value={names[index]} onChange={event => setNames(previous => index === 0 ? [event.target.value, previous[1]] : [previous[0], event.target.value])} />}</label>
+            <input maxLength={16} list="saved-players" value={names[index]} onChange={event => setNames(previous => index === 0 ? [event.target.value, previous[1]] : [previous[0], event.target.value])} />}</label>
         <label className="field" style={index === 0 ? { visibility: 'hidden' } : undefined} aria-hidden={index === 0 || undefined}><span><Bot aria-hidden="true" size={14} /> Opponent</span>
           <select value={rival} disabled={index === 0} tabIndex={index === 0 ? -1 : undefined} onChange={event => setRival(event.target.value)}>
             {CPU.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>

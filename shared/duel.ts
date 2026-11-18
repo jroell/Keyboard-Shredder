@@ -23,6 +23,8 @@ export type Profile = {
 };
 export type DuelPlayer = {
   slot: number; profile: Profile; connected: boolean; ready: boolean; score: number;
+  /** The chart this player chose. Players in one room may differ. */
+  difficulty: Difficulty; rating: number;
   combo: number; ampCharge: number; boostEndMs: number | null; frets: number[]; strike: { lanes: number[]; missed: boolean } | null; accuracy: number; hits: number; bestCombo: number;
 };
 export type DuelMode = 'duel' | 'coop';

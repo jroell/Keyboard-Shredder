@@ -121,6 +121,7 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
   }
 
   const cooperative = duel ? duel.mode === 'coop' : coop;
+  const mixedLevels = !!duel && duel.mode !== 'coop' && duel.players.length === 2 && duel.players[0].difficulty !== duel.players[1].difficulty;
   const team = duel?.coop;
   const nextSong = TOUR_TRACKS.find(item => item.id === team?.nextSongId);
   const venue = TOUR_VENUES.find(item => item.tracks.some(song => song.id === duel?.song.id));
@@ -198,8 +199,8 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
             {!team && duel.winner === player.slot && <Crown aria-hidden="true" />}
             <PlayerCard profile={player.profile} />
             <span>{player.slot === slot ? 'You' : partner}</span>
-            <strong>{player.score.toLocaleString()}</strong>
-            <p>{player.hits} {player.hits === 1 ? 'note' : 'notes'} hit · Best combo {player.bestCombo}</p>
+            <strong>{mixedLevels ? `${player.rating.toFixed(1)}%` : player.score.toLocaleString()}</strong>
+            <p>{mixedLevels ? `timing rating · ${player.score.toLocaleString()} points · ` : ''}{difficultyNames[player.difficulty]} · {player.hits} {player.hits === 1 ? 'note' : 'notes'} hit · Best combo {player.bestCombo}</p>
           </div>)}
         </div>
         {duel.reason && <p role="status">{duel.reason}</p>}
@@ -215,7 +216,7 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
 
   return <div className="online-stage" data-phase={duel.phase}>
     {track?.song.id === duel.song.id
-      ? <GameScreen key={duel.round ?? duel.id} recording={track} setup={{ mode: cooperative ? 'coop' : 'versus', difficulty: duel.difficulty, mods: [] }}
+      ? <GameScreen key={`${duel.round ?? duel.id}:${me?.difficulty ?? ''}`} recording={track} setup={{ mode: cooperative ? 'coop' : 'versus', difficulty: me?.difficulty ?? duel.difficulty, mods: [] }}
         onExit={() => void leave()} opponentBoostUntil={cooperative ? null : other?.boostEndMs ?? null}
         readyExtra={<div className="duel-invite">
           {venue && <p>{venue.name}</p>}
@@ -223,6 +224,10 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
             <label className="field">Invite link<input readOnly value={inviteLink} onFocus={event => event.target.select()} /></label>
             <button type="button" onClick={copy}>Copy invite</button><p role="status">{status}</p>
           </>}
+          {duel.phase === 'lobby' && <label className="field">Your difficulty<select value={me?.difficulty ?? duel.difficulty} disabled={!!me?.ready}
+            onChange={event => action('duel-level', event.target.value)}>
+            {DIFFICULTIES.map(item => <option key={item} value={item}>{difficultyNames[item]}</option>)}</select>
+            <small>{cooperative ? 'Each player picks their own.' : 'Each player picks their own. With different difficulties, the better timing rating wins.'}</small></label>}
           <p>{duel.players.length < 2 ? `Waiting for ${cooperative ? 'a teammate' : 'an opponent'}…` : 'Both players are here. Ready up to start.'}</p>
           {error && <p role="alert" className="error">{error}</p>}
         </div>}
@@ -240,7 +245,7 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
       {duel.players.map(player => <section key={player.slot} className="duel-player" data-you={player.slot === slot ? 'true' : undefined}>
         <PlayerCard profile={player.profile} />
         <p>{player.slot === slot ? 'You' : partner} · {!player.connected ? 'Disconnected' : duel.phase === 'lobby' ? player.ready ? 'Ready' : 'Getting ready' : `${player.combo} combo`}</p>
-        <strong>{player.score.toLocaleString()} pts</strong>{duel.phase !== 'lobby' && <p>{player.hits > 0 && player.accuracy === 0 ? '<1' : player.accuracy}% accuracy</p>}
+        <strong>{player.score.toLocaleString()} pts</strong><p>{difficultyNames[player.difficulty]}</p>{duel.phase !== 'lobby' && <p>{player.hits > 0 && player.accuracy === 0 ? '<1' : player.accuracy}% accuracy</p>}
         {duel.phase === 'playing' && <div className="duel-frets" aria-hidden="true">
           {(palettes[player.profile.palette] ?? palettes.Classic).map((color, lane) => <i key={lane} style={{ color }}
             className={player.strike?.lanes.includes(lane) ? player.strike.missed ? 'missed' : 'active' : player.frets.includes(lane) ? 'active' : ''} />)}
