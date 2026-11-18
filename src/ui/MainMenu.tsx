@@ -24,6 +24,8 @@ export default function MainMenu() {
   const [welcome, setWelcome] = useState(!save.seenTutorial && !save.name);
   const [name, setName] = useState(save.name);
   const tourCleared = TOUR_TRACKS.filter(track => isTourSongCleared(track.id, tour)).length;
+  const nextTourId = TOUR_TRACKS.find(track => !isTourSongCleared(track.id, tour))?.id;
+  const nextTour = app.songs.find(song => song.id === nextTourId)?.title;
   const lessonsPassed = TYPING_LESSONS.filter(lesson => lessonStatus(lesson.id, lessons) === 'passed').length;
   const starTotal = Object.values(save.records).reduce((total, record) => total + Math.min(5, record.stars), 0);
 
@@ -44,7 +46,7 @@ export default function MainMenu() {
     const go = (route: Route) => () => app.go(route);
     return [
       { id: 'songs', label: 'Quick play', icon: Play, blurb: 'Pick a song, pick a difficulty, chase five stars.', detail: `${app.songs.length || 37} songs · ${starTotal} stars earned`, art: cover, run: go({ name: 'songs' }) },
-      { id: 'tour', label: 'World tour', icon: MapPin, blurb: 'Start in a workshop. End on the festival main stage.', detail: `${tourCleared} of ${TOUR_TRACKS.length} songs cleared`, art: stageArt('voltage-parade') ?? stage, run: go({ name: 'tour' }) },
+      { id: 'tour', label: 'World tour', icon: MapPin, blurb: 'Start in a workshop. End on the festival main stage.', detail: `${tourCleared} of ${TOUR_TRACKS.length} songs cleared${nextTour ? ` · next up: ${nextTour}` : ''}`, art: stageArt('voltage-parade') ?? stage, run: go({ name: 'tour' }) },
       { id: 'academy', label: 'Typing academy', icon: GraduationCap, blurb: 'Learn touch typing one key at a time, to real music.', detail: `${lessonsPassed} of ${TYPING_LESSONS.length} lessons passed${save.totals.bestWpm ? ` · best ${Math.round(save.totals.bestWpm)} WPM` : ''}`, art: stageArt('paper-antenna') ?? stage, run: go({ name: 'academy' }) },
       { id: 'party', label: 'Party mode', icon: Users, blurb: 'Two players, one keyboard. Battle or team up.', detail: 'Or battle the computer on your own', art: band, run: go({ name: 'party' }) },
       { id: 'online', label: 'Play online', icon: Globe, blurb: 'Send a link. Duel a friend or tour together.', detail: app.profile ? `${app.profile.wins} wins · ${app.profile.played} duels` : 'Head-to-head or co-op', art: stageArt('neon-afterhours') ?? stage, run: go({ name: 'online', invite: '', coop: false }) },
@@ -54,7 +56,7 @@ export default function MainMenu() {
       { id: 'settings', label: 'Settings', icon: Settings, blurb: 'Keys, note speed, timing, sound and your account.', detail: '', art: stageArt('arc-lights') ?? stage, run: go({ name: 'settings' }) },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [app.songs.length, app.config, app.user, app.profile, daily, dailyDone, tourCleared, lessonsPassed, starTotal, save.achievements, save.totals.bestWpm]);
+  }, [app.songs.length, app.config, app.user, app.profile, daily, dailyDone, tourCleared, nextTour, lessonsPassed, starTotal, save.achievements, save.totals.bestWpm]);
 
   useMenuKeys({ count: items.length, index, setIndex, enabled: !welcome, onPick: picked => { sfx.play('ui-select'); items[picked].run(); } });
   const current = items[Math.min(index, items.length - 1)];
