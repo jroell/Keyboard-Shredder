@@ -89,13 +89,13 @@ export default function PartySetup() {
           onChange={event => setLevels(previous => index === 0 ? [event.target.value as Difficulty, previous[1]] : [previous[0], event.target.value as Difficulty])}>
           {DIFFICULTIES.map(level => <option key={level} value={level}>{difficultyNames[level]}</option>)}</select></label>
         <div className="ready-keys">{settings.partyKeys[index].map((code, lane) => <kbd key={code} className={levels[index] === 'beginner' && (lane === 0 || lane === 4) && !(index === 1 && cpu.skill !== undefined) ? 'unused' : ''} style={{ '--lane': colors[lane] } as React.CSSProperties}>{keyLabel(code)}</kbd>)}</div>
-        <small>Overdrive: {index === 0 ? 'Space' : 'Enter'}{levels[index] === 'beginner' ? ' · Beginner uses the three middle keys' : ''}</small>
-        {index === 1 && <label className="field"><span><Bot aria-hidden="true" size={14} /> Who plays this side</span>
-          <select value={rival} onChange={event => setRival(event.target.value)}>
-            {CPU.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
+        <small>Seat: {index === 0 ? 'left' : 'right'} half of the keyboard · Overdrive: {index === 0 ? 'Space' : 'Enter'}{levels[index] === 'beginner' ? ' · Beginner uses the three middle keys' : ''}</small>
       </section>)}
     </div>
     <div className="form-row party-song">
+      <label className="field"><span><Bot aria-hidden="true" size={14} /> Who plays player 2</span>
+        <select value={rival} onChange={event => setRival(event.target.value)}>
+          {CPU.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
       <label className="field">Song<select value={chosen} onChange={event => setSongId(event.target.value)}>
         {songs.map(song => <option key={song.id} value={song.id}>{song.title} · {song.genre || 'My tracks'} · {formatLength(song.durationMs)}</option>)}</select></label>
       <button className="primary big" autoFocus disabled={!chosen} onClick={start}><Play aria-hidden="true" />Start</button>

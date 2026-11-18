@@ -385,3 +385,6 @@
   .results-stats dt { font-size: .5rem; letter-spacing: .02em; }
 }
 .xp-name { margin-right: .5rem; color: var(--gold); }
+
+.stage[data-boost="on"] .hud-streak { margin-top: .5rem; }
+.hud-left { row-gap: 1.1rem; }

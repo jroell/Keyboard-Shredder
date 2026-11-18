@@ -173,8 +173,12 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   const guitarSeats = !guitarName ? [] : !setup.party ? (pads().some(looksLikeGuitar) ? [0] : []) : pads().length > 1 ? [0, 1] : [1];
   const layouts = useMemo<LaneLayout[]>(() => players.map((player, index) => typing
     ? typingLayout(player.keys)
-    : laneLayout(player.keys, laneColors(settings), !setup.party && (setup.difficulty === 'beginner' || !!setup.tutorial),
-      guitarSeats.includes(index))),
+    : (() => {
+      const layout = laneLayout(player.keys, laneColors(settings), !setup.party && (setup.difficulty === 'beginner' || !!setup.tutorial), guitarSeats.includes(index));
+      // Lanes this chart never uses are drawn faint, as on the ready card.
+      const used = new Set(player.events.flatMap(event => event.lanes));
+      return { ...layout, targets: layout.targets.map((target, lane) => used.has(lane) ? target : { ...target, unused: true }) };
+    })()),
   [players, typing, settings, setup.party, guitarSeats.join()]);
 
   const session = useRef<GameSession>(null);

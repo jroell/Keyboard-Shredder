@@ -33,6 +33,8 @@ const PlayerHud = forwardRef<HudHandle, { label?: string; boostKey: string; show
     callout(text, kind = '') {
       const host = callouts.current;
       if (!host) return;
+      // The same word twice in a row replaces itself instead of stacking.
+      if (host.lastElementChild?.textContent === text) host.lastElementChild.remove();
       const node = document.createElement('div');
       node.className = `callout ${kind}`;
       node.textContent = text;
