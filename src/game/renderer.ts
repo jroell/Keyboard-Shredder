@@ -12,7 +12,7 @@ export type LaneLayout = {
   targets: { label: string; color: string }[];
 };
 
-export type HighwayLook = { theme: string; gem: string; fx: string; lookahead: number; hidden: boolean; calm: boolean };
+export type HighwayLook = { theme: string; gem: string; fx: string; lookahead: number; hidden: boolean; calm: boolean; /** Show a plain tick for hits, for modes that do not judge timing. */ plainHits?: boolean };
 
 type Particle = {
   kind: 'spark' | 'ember' | 'ring' | 'confetti' | 'glyph' | 'pixel' | 'text';
@@ -241,7 +241,8 @@ export class Highway {
   onScore(event: ScoreEvent, now: number) {
     if (event.type === 'hit') {
       const detail = event.judgement === 'Perfect' ? '' : event.offsetMs < 0 ? 'EARLY' : 'LATE';
-      this.judge = { text: JUDGE_TEXT[event.judgement], color: JUDGE_COLORS[event.judgement], at: now, detail };
+      this.judge = this.look.plainHits ? { text: 'NICE', color: JUDGE_COLORS.Great, at: now, detail: '' }
+        : { text: JUDGE_TEXT[event.judgement], color: JUDGE_COLORS[event.judgement], at: now, detail };
       for (const lane of event.lanes) this.burst(lane, event.judgement === 'Perfect' ? 1 : event.judgement === 'Great' ? 0.7 : 0.45, now, event.boosted);
       if (event.judgement === 'Perfect' && !this.look.calm) this.flash = Math.min(1, this.flash + 0.25);
     } else if (event.type === 'miss') {

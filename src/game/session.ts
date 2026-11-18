@@ -94,6 +94,10 @@ export class GameSession {
   /** Time spent actually playing, in real milliseconds. Words per minute use this when the song waits. */
   playedMs = 0;
   private holding: SongEvent | null = null;
+  /** Real time of the first and last correct key in wait mode, for an honest words-per-minute figure. */
+  firstKeyAt = 0;
+  lastKeyAt = 0;
+  private stamp() { const now = performance.now(); if (!this.firstKeyAt) this.firstKeyAt = now; this.lastKeyAt = now; }
   private waitCursor = 0;
   /** Lanes the learner was meant to press when they hit a wrong key, for the weak-key report. */
   readonly confused: number[] = [];
@@ -148,6 +152,8 @@ export class GameSession {
     this.waitCursor = 0;
     this.playedMs = 0;
     this.confused.length = 0;
+    this.firstKeyAt = 0;
+    this.lastKeyAt = 0;
   }
 
   private setState(state: SessionState) {
@@ -384,6 +390,7 @@ export class GameSession {
         this.options.onEvent({ type: 'press', player: 0, lane: target.lane });
         scoring.press(target.lane, waited.timeMs);
         scoring.release(target.lane, waited.timeMs + 1);
+        this.stamp();
         this.holding = null;
         void this.transport.start(this.offset, 0).then(() => { if (this.options.openLead) this.transport?.openLead(); }).catch(() => {});
         return true;
@@ -403,6 +410,7 @@ export class GameSession {
           this.options.onEvent({ type: 'press', player: 0, lane: target.lane });
           scoring.press(target.lane, upcoming.timeMs);
           scoring.release(target.lane, upcoming.timeMs + 1);
+          this.stamp();
         } else { scoring.stray(this.transport.inputTimeMs(event.timeStamp) - this.calibration); this.confused.push(upcoming.lanes[0]); }
         return true;
       }

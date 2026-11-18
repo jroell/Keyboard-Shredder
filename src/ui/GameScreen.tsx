@@ -196,12 +196,13 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     if (!canvas.current || !session.current) return;
     const stageRenderer = new StageRenderer(canvas.current);
     stageRenderer.calm = settings.calm;
+    const plainHits = !!typing && settings.typingWait;
     renderer.current = stageRenderer;
     const speed = settings.speed * (setup.mods.includes('hyperspeed') ? 0.58 : 1) * (typing ? 1.15 : 1);
     const game = session.current;
     stageRenderer.setHighways(players.map((player, index) => new Highway(game.scorings[index], player.events, layouts[index], {
       theme: save.equipped.highway, gem: save.equipped.gem, fx: save.equipped.fx, lookahead: speed,
-      hidden: setup.mods.includes('hidden'), calm: settings.calm,
+      hidden: setup.mods.includes('hidden'), calm: settings.calm, plainHits,
     })));
     const place = () => {
       stageRenderer.resize();
@@ -318,7 +319,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
           renderRibbon(ribbon.current, typing, lead, tracker.index, word);
         }
         if (liveWpm.current && typing.events.length && current.state === 'playing') {
-          const elapsed = current.wait ? current.playedMs : time - typing.events[0].timeMs;
+          const elapsed = current.wait ? current.lastKeyAt - current.firstKeyAt : time - typing.events[0].timeMs;
           liveWpm.current.textContent = String(Math.round(wpm(lead.hits, Math.max(1000, elapsed))));
         }
       }
@@ -375,7 +376,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       perfects: scoring.perfects, greats: scoring.greats, goods: scoring.goods, misses: scoring.misses, wrongKeys: scoring.wrongKeys,
       totalNotes: events.length, bestCombo: scoring.bestCombo, fullCombo: !failed && isFullCombo(tally), failed,
       boostsUsed: scoring.boostsUsed, durationMs: Math.max(0, Math.min(chart.durationMs, game.rawTime())),
-      wpm: typing ? wpm(scoring.hits, Math.max(1000, game.wait ? game.playedMs : span)) : undefined, won: partyWin, lessonId: setup.typing?.lesson?.id, genre: song.genre,
+      // In wait mode speed is the learner's own: letters after the first, over the time from first key to last.
+      wpm: typing ? (game.wait ? wpm(Math.max(0, scoring.hits - 1), Math.max(1000, game.lastKeyAt - game.firstKeyAt)) : wpm(scoring.hits, Math.max(1000, span))) : undefined, won: partyWin, lessonId: setup.typing?.lesson?.id, genre: song.genre,
     };
     const typingAccuracy = typing ? scoring.accuracy : undefined;
     // Slow-mo is practice: it earns nothing and leaves records alone.
@@ -469,6 +471,10 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       if (typing) keyboard.current?.flash(typing.keys[event.lanes[0]], false);
     } else if (event.type === 'wrong') {
       sfx.play('wrong', { pan });
+      if (typing) {
+        const upcoming = typing.events.find(item => !scoring.consumed.has(item.id));
+        if (upcoming && typing.keys[upcoming.lanes[0]].startsWith('Shift+')) callout('Hold Shift for capitals', 'lost', player);
+      }
     } else if (event.type === 'sustain') {
       sfx.play('sustain-end', { pan });
     } else if (event.type === 'charged') {

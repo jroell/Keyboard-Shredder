@@ -314,16 +314,20 @@ function typingGroups(length: number, options: TypingOptions): { groups: string[
   const groups: string[] = [];
   let remaining = length;
   let previous = '';
+  const used = new Set<string>();
 
   while (remaining > 0) {
     const fitsRemaining = (phrase: string) => phrase !== previous &&
       (phrase.length === remaining || phrase.length <= remaining - 2);
-    const fits = bank.filter(fitsRemaining);
+    // Sentences are not repeated inside one lesson while fresh ones remain.
+    const fresh = bank.filter(phrase => fitsRemaining(phrase) && !used.has(phrase));
+    const fits = fresh.length || bank.length > 40 ? fresh : bank.filter(fitsRemaining);
     if (!fits.length) break;
     const favored = preferredWords.filter(fitsRemaining);
     const phrase = pick(favored.length && random() < 0.7 ? favored : fits, random);
     groups.push(...phrase.split(' '));
     previous = phrase;
+    used.add(phrase);
     remaining -= phrase.length + separator.length;
   }
 

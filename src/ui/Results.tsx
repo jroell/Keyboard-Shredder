@@ -257,6 +257,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
             const average = ratings.reduce((total, value) => total + value, 0) / ratings.length;
             return `Set complete: ${(setup.set.score + summary.score).toLocaleString()} points, ${average.toFixed(1)}% average timing rating. ${average >= 80 ? 'Gold record earned!' : 'Average 80% for the gold record.'}`;
           })()}</p>}
+      {setup.tutorial && <p className="offset-hint">Here to learn typing? The Typing academy on the main menu starts with two keys and waits for you.</p>}
       {challenge && <p className={`challenge-result ${beat ? 'won' : 'lost'}`} role="status">
         {beat ? `You beat ${challenge.name} by ${(summary.score - challenge.score).toLocaleString()}. Send the challenge back!`
           : `${challenge.name} still leads by ${(challenge.score - summary.score).toLocaleString()}. One more try?`}</p>}
