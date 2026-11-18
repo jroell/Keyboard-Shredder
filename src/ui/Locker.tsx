@@ -5,7 +5,7 @@ import { ACHIEVEMENTS, levelFor, MAX_LEVEL, UNLOCKS, type UnlockKind } from '../
 import { useApp } from '../App';
 import { sfx } from '../game/sfx';
 import { LANE_PALETTES } from '../game/themes';
-import { laneColors, saveStore, settingsStore, useCell } from '../state/store';
+import { addPlayer, currentPlayer, laneColors, listPlayers, saveStore, settingsStore, switchPlayer, useCell } from '../state/store';
 import { Screen } from './common';
 import DemoHighway from './DemoHighway';
 
@@ -26,6 +26,7 @@ export default function Locker() {
   const [tab, setTab] = useState<typeof TABS[number]>('Style');
   const [name, setName] = useState(save.name);
   const [status, setStatus] = useState('');
+  const [newName, setNewName] = useState('');
   const level = levelFor(save.xp);
   const colors = useMemo(() => laneColors(settings), [settings]);
   const look = useMemo(() => ({ theme: save.equipped.highway, gem: save.equipped.gem, fx: save.equipped.fx, hidden: false, calm: settings.calm }),
@@ -130,6 +131,14 @@ export default function Locker() {
       </>}
       <button type="submit" className="primary">Save profile</button>
       <p role="status">{status}</p>
+      <h2>Players on this device</h2>
+      <p>Each player has their own level, stars, lessons and typing history. Handy for a family sharing one computer.</p>
+      <ul className="players">{listPlayers().map(player => <li key={player.id} className={player.id === currentPlayer ? 'on' : ''}>
+        <span className="chip-level">{player.level}</span><strong>{player.name}</strong>
+        {player.id === currentPlayer ? <em>Playing now</em> : <button type="button" onClick={() => switchPlayer(player.id)}>Switch</button>}
+      </li>)}</ul>
+      <div className="form-row"><label className="field">New player name<input maxLength={24} value={newName} onChange={event => setNewName(event.target.value)} /></label>
+        <button type="button" disabled={!newName.trim()} onClick={() => addPlayer(newName)}>Add player</button></div>
     </form>}
   </Screen>;
 }

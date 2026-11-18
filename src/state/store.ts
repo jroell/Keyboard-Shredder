@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { DEFAULT_KEYS } from '../../shared/scoring';
-import { emptySave, normalizeSave, type SaveData } from '../../shared/progression';
+import { emptySave, levelFor, normalizeSave, type SaveData } from '../../shared/progression';
 import { normalizeTourProgress, type TourProgress } from '../../shared/tour';
 import type { KeyStats, LessonProgress } from '../../shared/typing';
 import type { Difficulty } from '../../shared/song';
@@ -64,12 +64,47 @@ export function normalizeSettings(value: unknown): Settings {
   };
 }
 
+/** Several people can share one browser. Each player keeps their own progress under their own keys. */
+function activeProfile() {
+  try { return (localStorage.getItem('ks:profile') || '').replace(/[^a-z0-9]/g, '').slice(0, 12); }
+  catch { return ''; }
+}
+const profile = activeProfile();
+const scoped = (key: string) => profile ? key.replace(/^ks:/, `ks:${profile}:`) : key;
+
+export function listPlayers(): { id: string; name: string; level: number }[] {
+  try {
+    const ids: string[] = JSON.parse(localStorage.getItem('ks:profiles') || '[]');
+    return ['', ...ids.filter(id => typeof id === 'string' && /^[a-z0-9]{1,12}$/.test(id))].map(id => {
+      const raw = JSON.parse(localStorage.getItem(id ? `ks:${id}:save` : 'ks:save') || 'null');
+      const save = raw ? normalizeSave(raw) : emptySave();
+      return { id, name: save.name || (id ? 'New player' : 'Player 1'), level: levelFor(save.xp).level };
+    });
+  } catch { return [{ id: '', name: 'Player 1', level: 1 }]; }
+}
+export const currentPlayer = profile;
+/** Switches the active player and reloads, so every screen reads that player's progress. */
+export function switchPlayer(id: string) {
+  try { localStorage.setItem('ks:profile', id); } catch { return; }
+  location.reload();
+}
+export function addPlayer(name: string) {
+  const id = Math.random().toString(36).slice(2, 10);
+  try {
+    const ids: string[] = JSON.parse(localStorage.getItem('ks:profiles') || '[]');
+    localStorage.setItem('ks:profiles', JSON.stringify([...ids, id].slice(-8)));
+    localStorage.setItem(`ks:${id}:save`, JSON.stringify({ ...emptySave(), name: name.trim().slice(0, 24), seenTutorial: true }));
+  } catch { return; }
+  switchPlayer(id);
+}
+
 function read<T>(key: string, parse: (value: unknown) => T): T {
   try { return parse(JSON.parse(localStorage.getItem(key) ?? 'null')); }
   catch { return parse(null); }
 }
 
-function cell<T>(key: string, parse: (value: unknown) => T) {
+function cell<T>(plainKey: string, parse: (value: unknown) => T) {
+  const key = scoped(plainKey);
   let value = read(key, parse);
   const listeners = new Set<() => void>();
   return {

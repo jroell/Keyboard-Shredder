@@ -314,3 +314,11 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
   .song-panel { position: sticky; }
 }
 @media (hover: none) and (pointer: coarse) { .mods button { min-height: 44px; } .check input { width: 30px; height: 30px; flex: none; } }
+
+.players { display: grid; gap: .4rem; margin: .7rem 0; }
+.players li { display: flex; gap: .7rem; align-items: center; padding: .4rem .6rem; border-radius: 12px; background: #ffffff0a; }
+.players li.on { outline: 1px solid var(--green); }
+.players strong { flex: 1; }
+.players em { font-style: normal; color: var(--green); font-size: .82rem; font-weight: 700; }
+.players button { margin-top: 0 !important; min-height: 38px; }
+.profile-form h2 { margin-top: 1.2rem; }
