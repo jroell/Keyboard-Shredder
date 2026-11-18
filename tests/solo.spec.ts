@@ -52,7 +52,7 @@ test('A generated track becomes playable, scores a key press and replays after a
     await expect(page.getByRole('heading', { name: 'Create a track' })).toBeVisible();
     const prompt = 'Blues rock with a catchy gritty guitar hook and ringing power chords';
     await page.getByLabel('Describe your music').fill(prompt);
-    await page.getByLabel('Length').selectOption(String(live || 30));
+    await page.getByRole('combobox', { name: 'Length', exact: true }).selectOption(String(live || 30));
     const created = page.waitForResponse(response => response.url().endsWith('/api/generations') && response.request().method() === 'POST');
     await page.getByRole('button', { name: 'Generate track' }).click();
     const creation = await created;
@@ -77,6 +77,7 @@ test('A generated track becomes playable, scores a key press and replays after a
     await expect(play).toBeFocused();
     const { chart, song } = await (await page.request.get(`${url}/api/songs/${job.id}`, { headers })).json() as { chart: Chart; song: Song };
     expect(song.model).toBe(live ? 'music_v2_5' : 'fixture');
+    expect(song.hasStemMix).toBe(true);
     expect(Math.abs(chart.durationMs - (live || 30) * 1000)).toBeLessThanOrEqual(4000);
     expect(chart.events.hard.length).toBeGreaterThanOrEqual(8);
     if (!live) {
@@ -104,7 +105,7 @@ test('A generated track becomes playable, scores a key press and replays after a
     await expect(page.getByRole('button', { name: 'Replay', exact: true })).toBeFocused();
 
     const foreign = { Authorization: 'Bearer test-stranger' };
-    for (const endpoint of [`/api/songs/${job.id}`, `/api/songs/${job.id}/audio`, `/api/generations/${job.id}`]) {
+    for (const endpoint of [`/api/songs/${job.id}`, `/api/songs/${job.id}/audio`, `/api/songs/${job.id}/audio/lead`, `/api/songs/${job.id}/audio/backing`, `/api/generations/${job.id}`]) {
       expect((await page.request.get(url + endpoint, { headers: foreign })).status()).toBe(404);
     }
     const before = await (await page.request.get(`${url}/api/songs/${job.id}/audio`, { headers })).body();
@@ -182,7 +183,7 @@ test('A failed separation can be retried from the saved recording', async ({ pag
   try {
     server = await launch(data, true);
     await page.goto(server.url);
-    await page.getByLabel('Length').selectOption('30');
+    await page.getByRole('combobox', { name: 'Length', exact: true }).selectOption('30');
     const created = page.waitForResponse(response => response.url().endsWith('/api/generations') && response.request().method() === 'POST');
     await page.getByRole('button', { name: 'Generate track' }).click();
     const job = await (await created).json() as Job;
@@ -201,7 +202,8 @@ test('A failed separation can be retried from the saved recording', async ({ pag
 test('Two players share an invite, land the same chord within 90 ms of each other, and keep their duel badges', async ({ page, browser }, testInfo) => {
   test.skip(!!live, 'Multiplayer sync uses the deterministic fixture.');
   const data = await mkdtemp(join(tmpdir(), 'keyboard-duel-'));
-  const other = await browser.newContext({ viewport: { width: 360, height: 800 } });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const other = await browser.newContext({ viewport: { width: 360, height: 640 } });
   const guest = await other.newPage();
   let server: Awaited<ReturnType<typeof launch>> | undefined;
   try {
@@ -251,6 +253,11 @@ test('Two players share an invite, land the same chord within 90 ms of each othe
     await page.getByRole('button', { name: 'Ready up' }).click();
     await expect(page.getByRole('button', { name: 'Ready', exact: true })).toBeDisabled();
     await guest.getByRole('button', { name: 'Ready up' }).click();
+    await expect(guest.getByRole('button', { name: 'Play lane 5' })).toBeVisible();
+    const pad = (await guest.getByRole('button', { name: 'Play lane 5' }).boundingBox())!;
+    const line = (await page.locator('.strike-line').boundingBox())!;
+    expect(pad.y + pad.height).toBeLessThanOrEqual(640);
+    expect(line.y + line.height).toBeLessThan(720);
     const chord = chart.events.normal.find(event => event.lanes.length > 1 && event.timeMs > 800)!;
     const startTimes = await Promise.all([page, guest].map(async client => {
       const observed = await client.getByRole('progressbar', { name: 'Track progress' }).evaluate((element, target) =>
@@ -307,5 +314,230 @@ test('Two players share an invite, land the same chord within 90 ms of each othe
       if (server) await stop(server.child);
       await rm(data, { recursive: true, force: true });
     }
+  }
+});
+
+test('A fresh player gets 24 tracks with three difficulties and can play a two-finger chord', async ({ page, browser, browserName }) => {
+  test.skip(!!live, 'The starter setlist is bundled with the game.');
+  test.skip(browserName !== 'chromium', 'This test uses Chromium’s native multi-touch input protocol.');
+  const data = await mkdtemp(join(tmpdir(), 'keyboard-setlist-'));
+  const phone = await browser.newContext({ viewport: { width: 360, height: 800 }, isMobile: true, hasTouch: true });
+  let server: Awaited<ReturnType<typeof launch>> | undefined;
+  try {
+    server = await launch(data);
+    const { url } = server;
+    const songs = await (await page.request.get(url + '/api/songs', { headers })).json() as Song[];
+    expect(songs).toHaveLength(24);
+    const fullSongs = songs.filter(song => song.durationMs >= 60_000);
+    expect(fullSongs.map(song => song.id)).toEqual(['voltage-parade', 'copper-moon', 'big-rock', 'end-of-days']);
+    expect(fullSongs.filter(song => song.credit).map(song => song.credit?.artist)).toEqual(['Kevin MacLeod', 'Severed Fifth']);
+    expect(new Set(songs.map(song => song.genre)).size).toBe(10);
+    for (const song of songs) {
+      const response = await page.request.get(`${url}/api/songs/${song.id}`, { headers });
+      const { chart } = await response.json() as { chart: Chart };
+      expect(chart.events.easy?.length).toBeGreaterThan(0);
+      expect(chart.events.easy!.every(event => event.lanes.length === 1)).toBe(true);
+      expect(chart.events.easy!.length).toBeLessThan(chart.events.normal.length);
+      expect(chart.events.normal.length).toBeLessThan(chart.events.hard.length);
+      expect(song.hasStemMix).toBe(true);
+      for (const part of ['', '/lead', '/backing']) {
+        const audio = await page.request.get(`${url}/api/songs/${song.id}/audio${part}`, { headers: { ...headers, Range: 'bytes=0-1023' } });
+        expect(audio.status()).toBe(206);
+        expect((await audio.body()).length).toBe(1024);
+      }
+    }
+    const mobile = await phone.newPage();
+    await mobile.goto(url);
+    await expect(mobile.getByRole('button', { name: 'Play Blacktop Sparks' })).toBeInViewport();
+    await mobile.getByLabel('Genre').selectOption('Funk');
+    await expect(mobile.getByRole('button', { name: /^Load / })).toHaveCount(2);
+    await mobile.getByLabel('Difficulty').selectOption('easy');
+    await mobile.getByRole('button', { name: 'Load Mirrorball Static' }).click();
+    await expect(mobile.getByText(/^Easy ·/)).toBeVisible();
+    await mobile.getByRole('button', { name: 'Exit track' }).click();
+    await mobile.getByLabel('Difficulty').selectOption('normal');
+    await mobile.getByRole('button', { name: 'Load Mirrorball Static' }).click();
+    await mobile.getByRole('button', { name: 'Play', exact: true }).tap();
+    const { chart } = await (await page.request.get(url + '/api/songs/mirrorball-static', { headers })).json() as { chart: Chart };
+    const chord = chart.events.normal.find(event => event.lanes.length === 2 && event.timeMs > 800)!;
+    const session = await phone.newCDPSession(mobile);
+    const touchPoints = await Promise.all(chord.lanes.map(async (lane, id) => {
+      const box = await mobile.getByRole('button', { name: `Play lane ${lane + 1}` }).boundingBox();
+      expect(box?.height).toBeGreaterThanOrEqual(44);
+      return { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2, id };
+    }));
+    await mobile.waitForFunction(time => Number(document.querySelector('progress')?.value) >= time, chord.timeMs - 30);
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints });
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect(mobile.getByText(/^Score (70|100)$/)).toBeVisible();
+  } finally {
+    try { await phone.close(); }
+    finally {
+      if (server) await stop(server.child);
+      await rm(data, { recursive: true, force: true });
+    }
+  }
+});
+
+test('A charged amp doubles the next note award on both duel scoreboards', async ({ page, browser }) => {
+  test.skip(!!live, 'The duel uses a bundled track.');
+  const data = await mkdtemp(join(tmpdir(), 'keyboard-boost-'));
+  const guestContext = await browser.newContext();
+  let server: Awaited<ReturnType<typeof launch>> | undefined;
+  try {
+    server = await launch(data);
+    const { url } = server;
+    const guest = await guestContext.newPage();
+    const { chart } = await (await page.request.get(url + '/api/songs/blacktop-sparks', { headers })).json() as { chart: Chart };
+    await page.goto(url);
+    await page.getByRole('button', { name: 'Head-to-head' }).click();
+    await page.getByRole('combobox', { name: /^Track/ }).selectOption('blacktop-sparks');
+    await page.getByLabel('Duel difficulty').selectOption('easy');
+    await page.getByRole('button', { name: 'Create invite' }).click();
+    await guest.goto((await page.getByLabel('Invite link').inputValue()) + '&player=test-guest');
+    await page.getByRole('button', { name: 'Ready up' }).click();
+    await guest.getByRole('button', { name: 'Ready up' }).click();
+
+    const notes = chart.events.easy!.filter(event => event.timeMs >= 350 && !event.durationMs);
+    const boost = page.getByRole('button', { name: 'Boost Space', exact: true });
+    const score = page.getByLabel('Duel scoreboard').locator('.duel-player').first().locator('strong').last();
+    const opponentScore = guest.getByLabel('Duel scoreboard').locator('.duel-player').first().locator('strong').last();
+    const numeric = async () => Number((await score.textContent())!.replace(/[^0-9]/g, ''));
+    let boosted = false;
+    for (const note of notes.slice(0, 28)) {
+      const ready = await boost.isEnabled();
+      if (ready) {
+        await page.keyboard.press('Space');
+        await expect(page.getByText('Boost active', { exact: true })).toBeVisible();
+      }
+      const previous = await numeric();
+      const oldJudgement = await page.evaluate(() => document.querySelector('.hit-callout')?.getAttribute('data-judged-at'));
+      await page.waitForFunction(time => Number(document.querySelector('progress')?.value) >= time, note.timeMs - 25);
+      await page.keyboard.press(keys[note.lanes[0]]);
+      const feedback = page.locator('.hit-callout').filter({ hasText: /^(Perfect|Good) \+/ });
+      if (oldJudgement) await expect(feedback).not.toHaveAttribute('data-judged-at', oldJudgement);
+      await expect(feedback).toBeVisible();
+      const points = Number((await feedback.locator('strong').textContent())!.split('+')[1]);
+      await expect.poll(numeric, { intervals: [25, 50, 50] }).toBe(previous + points);
+      if (ready) {
+        expect(points).toBeGreaterThanOrEqual(140);
+        await expect(opponentScore).toHaveText(await score.textContent() || '');
+        await page.reload();
+        await page.getByRole('button', { name: 'Join playback' }).click();
+        await expect(page.getByText('Boost active', { exact: true })).toBeVisible();
+        boosted = true;
+        break;
+      }
+    }
+    expect(boosted).toBe(true);
+  } finally {
+    try { await guestContext.close(); }
+    finally {
+      if (server) await stop(server.child);
+      await rm(data, { recursive: true, force: true });
+    }
+  }
+});
+
+test('A missed note leaves the guitar silent while a hit brings it into the backing mix', async ({ page }) => {
+  test.skip(!!live, 'The test uses known note times on the bundled recording.');
+  const data = await mkdtemp(join(tmpdir(), 'keyboard-stem-gate-'));
+  let server: Awaited<ReturnType<typeof launch>> | undefined;
+  try {
+    server = await launch(data);
+    await page.addInitScript(() => {
+      const meters: AnalyserNode[] = [];
+      const source = AudioContext.prototype.createBufferSource;
+      const gain = AudioContext.prototype.createGain;
+      const watch = (node: AudioNode) => {
+        const meter = node.context.createAnalyser();
+        meter.fftSize = 512;
+        node.connect(meter);
+        meters.push(meter);
+      };
+      AudioContext.prototype.createBufferSource = function () {
+        const node = source.call(this);
+        if (!meters.length) watch(node);
+        return node;
+      };
+      AudioContext.prototype.createGain = function () {
+        const node = gain.call(this);
+        watch(node);
+        return node;
+      };
+      Object.assign(window, {
+        stemSamples: () => meters.map(meter => {
+          const samples = new Float32Array(meter.fftSize);
+          meter.getFloatTimeDomainData(samples);
+          return Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
+        }),
+      });
+    });
+
+    const { url } = server;
+    const { chart } = await (await page.request.get(url + '/api/songs/blacktop-sparks', { headers })).json() as { chart: Chart };
+    const [miss, hit] = chart.events.easy!.filter(event => event.timeMs > 300 && !event.durationMs);
+    await page.goto(url);
+    await page.getByRole('combobox', { name: 'Difficulty', exact: true }).selectOption('easy');
+    await page.getByRole('button', { name: 'Play Blacktop Sparks' }).click();
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    const audioAt = (time: number) => page.evaluate(async time => {
+      const progress = document.querySelector<HTMLProgressElement>('progress[aria-label="Track progress"]')!;
+      const samples = (window as unknown as { stemSamples(): number[] }).stemSamples;
+      const peaks = [0, 0];
+      while (progress.value < time + 110) {
+        if (progress.value >= time + 30) {
+          samples().forEach((level, index) => { peaks[index] = Math.max(peaks[index], level); });
+        }
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      }
+      return peaks;
+    }, time);
+    const [missBacking, missLead] = await audioAt(miss.timeMs);
+    expect(missBacking).toBeGreaterThan(.003);
+    expect(missLead).toBeLessThan(.0001);
+
+    await page.waitForFunction(time => Number(document.querySelector('progress')?.value) >= time, hit.timeMs - 30);
+    await page.keyboard.press(keys[hit.lanes[0]]);
+    const [hitBacking, hitLead] = await audioAt(hit.timeMs);
+    expect(hitBacking).toBeGreaterThan(.003);
+    expect(hitLead).toBeGreaterThan(.003);
+    await expect(page.getByText(/^Score (70|100)$/)).toBeVisible();
+  } finally {
+    if (server) await stop(server.child);
+    await rm(data, { recursive: true, force: true });
+  }
+});
+
+test('Number row scores a digit on the same song timing and stays outside duels', async ({ page }) => {
+  test.skip(!!live, 'The test uses a bundled practice chart.');
+  const data = await mkdtemp(join(tmpdir(), 'keyboard-practice-'));
+  let server: Awaited<ReturnType<typeof launch>> | undefined;
+  try {
+    server = await launch(data);
+    const { url } = server;
+    const { chart } = await (await page.request.get(url + '/api/songs/blacktop-sparks', { headers })).json() as { chart: Chart };
+    await page.goto(url);
+    await page.getByRole('checkbox', { name: 'Use practice keys in solo tracks' }).check();
+    await page.getByRole('combobox', { name: 'Practice layout' }).selectOption('numbers');
+    await page.getByRole('combobox', { name: 'Difficulty', exact: true }).selectOption('easy');
+    await page.getByRole('button', { name: 'Play Blacktop Sparks' }).click();
+    await expect(page.locator('.target kbd')).toHaveText('1234567890'.split(''));
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    const note = chart.events.easy!.find(event => event.timeMs >= 850 && !event.durationMs)!;
+    const key = await page.locator(`[data-note="${note.id}"] kbd`).textContent();
+    expect(key).toMatch(/^\d$/);
+    await page.waitForFunction(time => Number(document.querySelector('progress')?.value) >= time, note.timeMs - 32);
+    await page.keyboard.press(key!);
+    await expect(page.getByText(/^Score (70|100)$/)).toBeVisible();
+    await page.getByRole('button', { name: 'Exit track' }).click();
+
+    await page.getByRole('button', { name: 'Head-to-head' }).click();
+    await page.getByRole('combobox', { name: /^Track/ }).selectOption('blacktop-sparks');
+    await page.getByRole('button', { name: 'Create invite' }).click();
+    await expect(page.locator('.target kbd')).toHaveText(['A', 'S', 'D', 'F', 'G']);
+  } finally {
+    if (server) await stop(server.child);
+    await rm(data, { recursive: true, force: true });
   }
 });
