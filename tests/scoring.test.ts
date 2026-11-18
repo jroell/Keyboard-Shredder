@@ -88,3 +88,20 @@ test('An unheld sustain drops when the 150 ms resume grace expires', () => {
   assert.equal(game.judgement, 'Sustain dropped');
   assert.equal(game.combo, 0);
 });
+
+test('The resume count-in restores only active sustain lanes without scoring new notes', () => {
+  const game = new Scoring([
+    { id: 'hold', timeMs: 1000, lanes: [0], durationMs: 400 },
+    { id: 'next', timeMs: 1300, lanes: [2], durationMs: 0 },
+  ]);
+  game.press(0, 1000);
+  game.pause(1250);
+  game.regrip(2);
+  game.regrip(0);
+  assert.deepEqual([...game.held], [0]);
+  assert.equal(game.score, 100);
+  game.press(2, 1300);
+  game.tick(1400);
+  assert.equal(game.score, 230);
+  assert.equal(game.accuracy, 100);
+});

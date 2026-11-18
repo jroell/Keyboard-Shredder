@@ -95,9 +95,8 @@ export default function SoloGame({ song, chart, difficulty, audio, keys, calibra
       event.preventDefault();
       if (event.repeat) return;
       const inputTime = playback.timeMs(event.timeStamp);
-      if (inputTime >= offset.current || scoring.current.sustaining.size) {
-        scoring.current.press(lane, Math.max(inputTime, offset.current) - calibration);
-      }
+      if (inputTime >= offset.current) scoring.current.press(lane, inputTime - calibration);
+      else scoring.current.regrip(lane);
     };
     const keyup = (event: KeyboardEvent) => {
       const lane = keys.indexOf(event.code);

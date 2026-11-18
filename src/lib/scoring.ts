@@ -94,6 +94,10 @@ export class Scoring {
     }
   }
 
+  regrip(lane: number) {
+    if ([...this.sustaining.values()].some(event => event.lanes.includes(lane))) this.held.add(lane);
+  }
+
   pause(timeMs: number) {
     this.tick(timeMs);
     this.held.clear();
