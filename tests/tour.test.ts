@@ -6,9 +6,12 @@ import {
 } from '../shared/tour';
 import { catalogTracks } from '../backend/catalog-data';
 
-test('The nine tour venues and the encore contain every playable catalog track once', () => {
-  assert.equal(TOUR_VENUES.length, 10);
-  for (const venue of TOUR_VENUES) assert.equal(venue.tracks.length, venue.id === 'sunrise-encore' ? 1 : 4);
+test('The ten tour venues and the encore contain every playable catalog track once', () => {
+  assert.equal(TOUR_VENUES.length, 11);
+  for (const venue of TOUR_VENUES) {
+    if (venue.id === 'sunrise-encore') assert.equal(venue.tracks.length, 1);
+    else assert.ok(venue.tracks.length === 4 || venue.tracks.length === 5, venue.id);
+  }
   assert.deepEqual(TOUR_TRACKS.map(track => track.id).sort(), catalogTracks.map(([id]) => id).sort());
   for (const track of TOUR_TRACKS) {
     const chart = JSON.parse(readFileSync(new URL(`../catalog/${track.id}/chart.json`, import.meta.url), 'utf8'));
@@ -30,7 +33,7 @@ test('A 59% result leaves the next song locked and 60% opens it', () => {
   assert.equal(recordTourResult(cleared, first.id, 40), cleared);
 });
 
-test('Clearing every song in order opens the next venue and completes the tour after 37 clears', () => {
+test('Clearing every song in order opens the next venue and completes the tour after 43 clears', () => {
   let progress: TourProgress = {};
   for (const [index, track] of TOUR_TRACKS.entries()) {
     assert.equal(tourStart(progress), track.id);
@@ -38,7 +41,7 @@ test('Clearing every song in order opens the next venue and completes the tour a
     progress = recordTourResult(progress, track.id, 60);
   }
   assert.equal(tourStart(progress), null);
-  assert.equal(Object.keys(progress).length, 37);
+  assert.equal(Object.keys(progress).length, 43);
 });
 
 test('Restoring account progress drops impossible clears and keeps the best valid attempt', () => {

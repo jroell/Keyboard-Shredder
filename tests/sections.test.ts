@@ -6,7 +6,7 @@ import { sectionNames, SECTION_COUNT } from '../shared/sections';
 
 test('Every catalog song gets eight distinct section names that start with Intro, end with Finale and include one Solo.', async () => {
   const catalog = loadCatalog();
-  assert.ok(catalog.size >= 37);
+  assert.ok(catalog.size >= 43);
   for (const [id, entry] of catalog) {
     const chart = JSON.parse(await entry.chart()) as Chart;
     const names = sectionNames(chart.events.normal, chart.durationMs);

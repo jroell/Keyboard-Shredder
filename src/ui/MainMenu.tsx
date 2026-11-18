@@ -49,7 +49,7 @@ export default function MainMenu() {
   const items = useMemo(() => {
     const go = (route: Route) => () => app.go(route);
     return [
-      { id: 'songs', label: 'Quick play', icon: Play, blurb: 'Pick a song, pick a difficulty, chase five stars.', detail: `${app.songs.length || 37} songs · ${starTotal} stars earned`, art: cover, run: go({ name: 'songs' }) },
+      { id: 'songs', label: 'Quick play', icon: Play, blurb: 'Pick a song, pick a difficulty, chase five stars.', detail: `${app.songs.length || 43} songs · ${starTotal} stars earned`, art: cover, run: go({ name: 'songs' }) },
       { id: 'tour', label: 'World tour', icon: MapPin, blurb: 'Start in a workshop. End on the festival main stage.', detail: `${tourCleared} of ${TOUR_TRACKS.length} songs cleared${nextTour ? ` · next up: ${nextTour}` : ''}`, art: stageArt('voltage-parade') ?? stage, run: go({ name: 'tour' }) },
       { id: 'academy', label: 'Typing academy', icon: GraduationCap, blurb: 'Learn touch typing one key at a time, to real music.', detail: `${lessonsPassed} of ${TYPING_LESSONS.length} lessons passed${save.totals.bestWpm ? ` · best ${Math.round(save.totals.bestWpm)} WPM` : ''}`, art: stageArt('paper-antenna') ?? stage, run: go({ name: 'academy' }) },
       { id: 'party', label: 'Party mode', icon: Users, blurb: 'Two players, one keyboard. Battle or team up.', detail: 'Or battle the computer on your own', art: band, run: go({ name: 'party' }) },

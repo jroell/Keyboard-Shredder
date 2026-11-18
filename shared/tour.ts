@@ -63,6 +63,7 @@ export const TOUR_VENUES: readonly TourVenue[] = [
       { id: 'redline-radio', title: 'Redline Radio' },
       { id: 'glass-circuit', title: 'Glass Circuit' },
       { id: 'foundry-bloom', title: 'Foundry Bloom' },
+      { id: 'raincoat-static', title: 'Raincoat Static' },
     ],
   },
   {
@@ -90,12 +91,23 @@ export const TOUR_VENUES: readonly TourVenue[] = [
   {
     id: 'crossroads', name: 'Crossroads Fairground',
     scene: 'You arrive at a huge summer fair with four stages and a storm on the horizon. You play the rodeo arena, a street party and the stadium stage.',
-    sendoff: 'You leave the fair and travel to the Aurora Dome.',
+    sendoff: 'You leave the Crossroads Fairground and fly overseas to the Passport Festival.',
     tracks: [
       { id: 'banjo-lightning', title: 'Banjo Lightning' },
       { id: 'neon-rodeo', title: 'Neon Rodeo' },
       { id: 'havana-voltage', title: 'Havana Voltage' },
       { id: 'kings-of-saturday', title: 'Kings of Saturday' },
+    ],
+  },
+  {
+    id: 'passport', name: 'Passport Festival',
+    scene: 'You join the Passport Festival, a travelling festival with a stage in a different country nightly. You play ska punk in a checkerboard club, Celtic rock at an Irish harbor, flamenco rock in a Spanish courtyard and city pop on a rooftop above a neon skyline.',
+    sendoff: 'Your last flight lands under the northern lights at the Aurora Dome.',
+    tracks: [
+      { id: 'rude-brass-riot', title: 'Rude Brass Riot' },
+      { id: 'emerald-reel', title: 'Emerald Reel' },
+      { id: 'flamenco-thunder', title: 'Flamenco Thunder' },
+      { id: 'sugar-skyline', title: 'Sugar Skyline' },
     ],
   },
   {
@@ -107,6 +119,7 @@ export const TOUR_VENUES: readonly TourVenue[] = [
       { id: 'midnight-monsoon', title: 'Midnight Monsoon' },
       { id: 'iron-harvest', title: 'Iron Harvest' },
       { id: 'tidal-cathedral', title: 'Tidal Cathedral' },
+      { id: 'clockwork-sirens', title: 'Clockwork Sirens' },
     ],
   },
   {
