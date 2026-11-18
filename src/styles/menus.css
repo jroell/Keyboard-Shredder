@@ -367,7 +367,7 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
   .duel-player > strong { font-size: 1rem; text-align: right; }
   .duel-player p { grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .duel-player .duel-frets { display: none; }
-  .stage[data-duel] .stage-cover { padding-top: 100px; place-items: start center; }
+  .stage[data-duel] .stage-cover { padding-top: 136px; place-items: start center; }
   .stage[data-duel] .stage-top { top: 92px; }
   .stage[data-duel] .hud-left, .stage[data-duel] .hud-right { top: 150px !important; }
 }
@@ -380,3 +380,11 @@ button.primary:disabled { background: #3a3350; color: #b3a8cc; box-shadow: none;
 .player-menu button:last-child { grid-template-columns: 1fr; color: var(--muted); }
 .venue-set-note { flex-basis: 100%; color: var(--muted); font-size: .78rem; }
 .continue-tour { margin-top: .6rem; display: inline-flex; gap: .4rem; align-items: center; min-height: 44px; }
+
+/* The team meter belongs to play. In the lobby the ready card states the target, so the meter cannot cross the song title. */
+.duel-lobby .team-target { display: none; }
+.next-song { margin-top: .6rem; }
+.party-results .goal { color: var(--gold); font-size: .82rem; }
+.try-row { display: flex; gap: .4rem; justify-content: center; font-size: .75rem; }
+.try-row span { padding: .1rem .5rem; border-radius: 999px; border: 1px solid var(--edge); color: var(--muted); }
+.try-row span[data-done] { border-color: var(--green); color: var(--green); }

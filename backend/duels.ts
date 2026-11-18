@@ -194,6 +194,32 @@ export function attachDuels(http: HttpServer, authenticate: (token: string) => P
         reject(ack, 'Could not read the next track.');
       }
     });
+    // After a duel, the host may pick another song for the same pair. Both keep their difficulty and still ready up.
+    socket.on('change-song', async (songId, ack) => {
+      if (typeof ack !== 'function') return;
+      const room = current();
+      if (!room || room.coop || room.players[0].uid !== uid) return reject(ack, 'Only the host of a duel can change the song.');
+      if (room.phase !== 'finished' || !room.players.every(player => player.socket)) {
+        return reject(ack, 'Both players must be connected to change the song.');
+      }
+      const round = room.round;
+      const assets = typeof songId === 'string' ? songs.assets(uid, songId) : undefined;
+      if (!assets) return reject(ack, 'That track is unavailable.');
+      try {
+        const chart = JSON.parse(await assets.chart()) as Chart;
+        if (current() !== room || room.phase !== 'finished' || room.round !== round || !room.players.every(player => player.socket)) {
+          return reject(ack, 'The room changed. Wait for both players, then try again.');
+        }
+        room.assets = assets;
+        room.chart = chart;
+        resetRound(room);
+        room.rematchBy = room.players.findIndex(player => player.uid === uid);
+        ack({});
+        publish(room);
+      } catch {
+        reject(ack, 'Could not read that track.');
+      }
+    });
     socket.on('join-duel', (id, ack) => {
       if (typeof ack !== 'function') return;
       const room = typeof id === 'string' ? rooms.get(id) : undefined;

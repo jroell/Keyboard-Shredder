@@ -653,6 +653,24 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   const usedLanes = useMemo(() => new Set(players[0].events.flatMap(event => event.lanes)), [players]);
   // Keys light up on the ready card, so players can check their hands are in the right place.
   const [lit, setLit] = useState<ReadonlySet<string>>(new Set());
+  // Party ready card: each seat can try one tap and one hold before the song, and sees both tick off.
+  const [tried, setTried] = useState<{ tap: boolean; hold: boolean }[]>([{ tap: false, hold: false }, { tap: false, hold: false }]);
+  useEffect(() => {
+    if (state !== 'ready' || !setup.party) return;
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const seat = (code: string) => players.findIndex(player => player.keys.includes(code));
+    const mark = (index: number, what: 'tap' | 'hold') => setTried(previous => previous[index]?.[what] ? previous : previous.map((item, at) => at === index ? { ...item, [what]: true } : item));
+    const down = (event: KeyboardEvent) => {
+      const index = seat(event.code);
+      if (index < 0 || event.repeat || timers.has(event.code)) return;
+      mark(index, 'tap');
+      timers.set(event.code, setTimeout(() => mark(index, 'hold'), 600));
+    };
+    const up = (event: KeyboardEvent) => { clearTimeout(timers.get(event.code)); timers.delete(event.code); };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); timers.forEach(clearTimeout); };
+  }, [state, setup.party, players]);
   useEffect(() => {
     if (state !== 'ready') { setLit(new Set()); return; }
     const change = (down: boolean) => (event: KeyboardEvent) => setLit(previous => {
@@ -785,9 +803,12 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
             {players.map((player, index) => <div key={index}><strong>{setup.party!.names[index]}</strong>
               <div className="ready-keys">{player.keys.map((key, lane) => <kbd key={key} className={`${lit.has(key) ? 'lit' : ''}${player.events.some(event => event.lanes.includes(lane)) ? '' : ' unused'}`}
                 style={{ '--lane': layouts[index].color(lane) } as CSSProperties}>{guitarSeats.includes(index) ? layouts[index].targets[lane].label : keyLabel(key)}</kbd>)}</div>
+              {!(index === 1 && setup.party!.cpu !== undefined) && !guitarSeats.includes(index) && <div className="try-row" aria-live="polite">
+                <span data-done={tried[index].tap ? 'true' : undefined}>{tried[index].tap ? 'Tap ✓' : 'Try a tap'}</span>
+                <span data-done={tried[index].hold ? 'true' : undefined}>{tried[index].hold ? 'Hold ✓' : 'Try holding a key'}</span></div>}
               <small>{setup.party!.difficulties ? `${difficultyNames[setup.party!.difficulties[index]]} · ` : ''}{guitarSeats.includes(index) ? 'Guitar: hold a fret and strum · Overdrive: Select or tilt' : `Overdrive: ${player.boostKey === 'Enter' ? 'Enter' : 'Space'}`}</small></div>)}
           </div>
-          <p>Press your key when a gem reaches its ring, and hold long notes to the end of the tail. Try your keys now: they light up above.</p>
+          <p>Press your key when a gem reaches its ring, and hold long notes to the end of the tail. Try your keys now: tap one, then hold one down for a moment. They light up above.</p>
           {setup.party.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1] && !setup.party.coop &&
             <p className="ready-goal">Different difficulties: the winner is whoever plays their own chart more accurately.</p>}
         </> : <>

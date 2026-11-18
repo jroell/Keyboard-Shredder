@@ -384,3 +384,4 @@
   .results-stats dd { font-size: 1.2rem; }
   .results-stats dt { font-size: .5rem; letter-spacing: .02em; }
 }
+.xp-name { margin-right: .5rem; color: var(--gold); }

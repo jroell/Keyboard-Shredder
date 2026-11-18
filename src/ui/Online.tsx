@@ -18,6 +18,7 @@ import { Screen } from './common';
 
 export default function Online({ invite, initialCoop }: { invite: string; initialCoop: boolean }) {
   const app = useApp();
+  const [nextPick, setNextPick] = useState('');
   const settings = useCell(settingsStore);
   const [duel, setDuel] = useState<Duel>();
   const [slot, setSlot] = useState<number>();
@@ -206,11 +207,18 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
         </div>
         {duel.reason && <p role="status">{duel.reason}</p>}
         {!cooperative && !!me?.profile.badges.length && <p>Earned badges: {me.profile.badges.map(badge => badgeNames[badge]).join(', ')}</p>}
-        {duel.phase === 'finished' && (slot === duel.host || !nextSong) && <button className="primary big" autoFocus
+        {duel.phase === 'finished' && (slot === duel.host || !nextSong) && <button className="primary big" ref={node => node?.focus({ preventScroll: true })}
           disabled={duel.players.length < 2 || !duel.players.every(player => player.connected) || !connected}
           onClick={() => action(nextSong ? 'advance-coop' : 'rematch')}>
           {nextSong ? 'Continue tour' : cooperative ? 'Replay song' : 'Rematch'}</button>}
         {duel.phase === 'finished' && slot !== duel.host && nextSong && <p>The host chooses when to continue the tour.</p>}
+        {duel.phase === 'finished' && !cooperative && slot === duel.host && <div className="form-row next-song">
+          <label className="field">Or play a different song<select value={nextPick} onChange={event => setNextPick(event.target.value)}>
+            <option value="">Choose a track</option>{app.songs.filter(song => song.id !== duel.song.id && song.model === 'starter-setlist').map(song => <option key={song.id} value={song.id}>{song.title}</option>)}</select></label>
+          <button disabled={!nextPick || !duel.players.every(player => player.connected) || !connected} onClick={() => { action('change-song', nextPick); setNextPick(''); }}>Play this next</button>
+        </div>}
+        {duel.phase === 'finished' && !cooperative && slot !== duel.host && <p className="muted">The host can pick a different song for the next round.</p>}
+        {duel.phase === 'finished' && !cooperative && me && <p className="muted">Rematch goal: {me.hits > 0 && me.bestCombo >= me.hits && me.accuracy === 100 ? 'match your full combo' : `beat your ${me.bestCombo} combo`}.</p>}
       </section>
     </Screen>;
   }
@@ -221,6 +229,7 @@ export default function Online({ invite, initialCoop }: { invite: string; initia
         onExit={() => void leave()} opponentBoostUntil={cooperative ? null : other?.boostEndMs ?? null}
         readyExtra={<div className="duel-invite">
           {venue && <p className="muted">Tour venue: {venue.name}</p>}
+          {team && duel.phase === 'lobby' && <p className="ready-goal">Team target: {team.targetScore.toLocaleString()} points between you.</p>}
           {slot === duel.host && duel.players.length < 2 && <>
             <label className="field">Invite link<input readOnly value={inviteLink} onFocus={event => event.target.select()} /></label>
             <button type="button" onClick={copy}>Copy invite</button><p role="status">{status}</p>

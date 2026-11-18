@@ -257,6 +257,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
             <strong>{fairParty ? `${scoring.rating.toFixed(1)}%` : finalScore(scoring.score, setup.mods).toLocaleString()}</strong>
             <p>{fairParty ? `timing rating · ${finalScore(scoring.score, setup.mods).toLocaleString()} points` : `${Math.round(scoring.rating)}%`}{party.difficulties ? ` · ${difficultyNames[party.difficulties[index]]}` : ''} · best streak {scoring.bestCombo}</p>
             <p>{scoring.perfects} perfect · {scoring.misses} missed</p>
+            {!bot && !(index === 1 && party.cpu !== undefined) && <p className="goal">Next round: {scoring.bestCombo > 0 && scoring.misses === 0 && scoring.bestCombo >= scoring.hits ? 'match your full combo' : scoring.bestCombo > 0 ? `beat your ${scoring.bestCombo} streak` : 'land your first streak'}</p>}
           </div>;
         })}
         {party.coop && <div className="team-total"><span>Team score</span><strong>{shownScore.toLocaleString()}</strong></div>}
@@ -376,7 +377,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         {result.credited.map(item => `${item.name} earned ${item.xp} XP`).join(' and ')} on {result.credited.length > 1 ? 'their own profiles' : 'their own profile'}.</p>}
       {result.spectator && party && <p className="offset-hint">{save.name || 'The active player'} sat this one out, so nothing below changed. Guests keep no progress.</p>}
       {!bot && !result.spectator && <div className="xp-panel">
-        <div className="xp-head"><strong>Level {after.level}</strong><span>{after.title}</span><em>+{outcome.xp.total} XP</em></div>
+        <div className="xp-head">{party && <b className="xp-name">{save.name || 'Player 1'}</b>}<strong>Level {after.level}</strong><span>{after.title}</span><em>+{outcome.xp.total} XP</em></div>
         <div className="xp-bar" role="progressbar" aria-label="Experience" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(after.progress * 100)}>
           <i style={{ width: `${xpShown * 100}%` }} /></div>
         <ul className="xp-parts">{outcome.xp.parts.map(part => <li key={part.label}><span>{part.label}</span><b>+{part.xp}</b></li>)}</ul>
