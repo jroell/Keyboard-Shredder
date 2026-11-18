@@ -82,8 +82,8 @@ export default function PartySetup() {
             </select></label>
           {seats[index] === null
             ? <label className="field">Guest name<input maxLength={16} value={names[index]} onChange={event => setNames(previous => index === 0 ? [event.target.value, previous[1]] : [previous[0], event.target.value])} /></label>
-            : <small className="seat-note">XP and stats go to {seatName(index)}'s profile.</small>}
-          {seats[index] === null && <small className="seat-note">Guests keep no progress. Add players in the Locker.</small>}
+            : <label className="field">Name on stage<input value={seatName(index)} readOnly /></label>}
+          <small className="seat-note">{seats[index] === null ? 'Guests keep no progress. Add players in the Locker.' : `XP and stats go to ${seatName(index)}'s profile.`}</small>
         </>}
         <label className="field">Difficulty<select value={levels[index]}
           onChange={event => setLevels(previous => index === 0 ? [event.target.value as Difficulty, previous[1]] : [previous[0], event.target.value as Difficulty])}>
