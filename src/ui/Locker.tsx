@@ -32,7 +32,7 @@ export default function Locker() {
   const look = useMemo(() => ({ theme: save.equipped.highway, gem: save.equipped.gem, fx: save.equipped.fx, hidden: false, calm: settings.calm }),
     [save.equipped, settings.calm]);
   const earned = ACHIEVEMENTS.filter(item => save.achievements[item.id]);
-  const starTotal = Object.values(save.records).reduce((total, record) => total + Math.min(5, record.stars), 0);
+  const starTotal = Object.values(save.records).reduce((total, record) => total + record.stars, 0);
 
   const equip = (kind: UnlockKind, id: string, locked: boolean) => {
     if (locked) { sfx.play('ui-error'); return; }

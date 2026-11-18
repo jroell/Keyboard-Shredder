@@ -69,6 +69,11 @@ export type AppApi = {
 };
 
 const AppContext = createContext<AppApi | null>(null);
+/** A song counts as cleared in this run when 60% of its notes were hit, with stray presses counted against it. */
+export function songCleared(summary: { perfects: number; greats: number; goods: number; totalNotes: number; wrongKeys: number }) {
+  return (summary.perfects + summary.greats + summary.goods) / Math.max(1, summary.totalNotes + summary.wrongKeys) >= 0.6;
+}
+
 export function useApp() {
   const value = useContext(AppContext);
   if (!value) throw new Error('App context is missing.');
@@ -241,14 +246,15 @@ export default function App() {
       const score = set.score + result.summary.score;
       const ratings = [...set.ratings, result.summary.rating];
       const last = set.index + 1 >= set.ids.length || result.summary.failed;
-      if (result.summary.failed || (result.outcome.tour && !result.outcome.tour.cleared)) return { label: 'Restart the set', run: () => void launch(set.ids[0], { ...setup, set: { ...set, index: 0, score: 0, ratings: [] } }, back) };
+      if (result.summary.failed || !songCleared(result.summary)) return { label: 'Restart the set', run: () => void launch(set.ids[0], { ...setup, set: { ...set, index: 0, score: 0, ratings: [] } }, back) };
       if (!last) return { label: `Next song: ${songs.find(song => song.id === set.ids[set.index + 1])?.title ?? 'next'}`,
         run: () => void launch(set.ids[set.index + 1], { ...setup, set: { ...set, index: set.index + 1, score, ratings } }, back) };
       if (!result.summary.failed && recorded.current !== result) {
         recorded.current = result;
         const rating = ratings.reduce((total, value) => total + value, 0) / ratings.length;
-        const previous = setStore.get()[set.name];
-        if (!previous || score > previous.score) setStore.set(all => ({ ...all, [set.name]: { score, rating: Math.max(rating, previous?.rating ?? 0) } }));
+        const key = `${set.name}:${setup.difficulty}`;
+        const previous = setStore.get()[key];
+        if (!previous || score > previous.score) setStore.set(all => ({ ...all, [key]: { score, rating: Math.max(rating, previous?.rating ?? 0) } }));
       }
       return undefined;
     }

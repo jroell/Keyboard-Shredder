@@ -383,7 +383,9 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       // In wait mode speed is the learner's own: letters after the first, over the time from first key to last.
       wpm: typing ? (game.wait ? wpm(Math.max(0, scoring.hits - 1), Math.max(1000, game.lastKeyAt - game.firstKeyAt)) : wpm(scoring.hits, Math.max(1000, span))) : undefined, won: partyWin, lessonId: setup.typing?.lesson?.id, genre: song.genre,
     };
-    const typingAccuracy = typing ? scoring.accuracy : undefined;
+    // One decimal, rounded down, so 100% is only ever shown for a clean passage.
+    const attempts = scoring.hits + scoring.misses + scoring.wrongKeys;
+    const typingAccuracy = typing ? (attempts ? Math.floor(1000 * scoring.hits / attempts) / 10 : 0) : undefined;
     // Slow-mo is practice: it earns nothing and leaves records alone.
     const counted = bot === undefined && !matchRef.current && !setup.practice && playbackRate(setup.mods) === 1;
     const outcome = counted ? completeRun(summary, {
@@ -594,7 +596,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     window.addEventListener('keyup', release);
     return () => { window.removeEventListener('keydown', press); window.removeEventListener('keyup', release); };
   }, [state]);
-  const modeLine = [typing ? setup.typing?.lesson?.title ?? 'Free typing' : difficultyNames[setup.difficulty],
+  const mixed = setup.party?.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1] ? setup.party.difficulties : undefined;
+  const modeLine = [typing ? setup.typing?.lesson?.title ?? 'Free typing' : mixed ? `${difficultyNames[mixed[0]]} vs ${difficultyNames[mixed[1]]}` : difficultyNames[setup.difficulty],
     ...setup.mods.map(id => MODS[id].name), ...(setup.practice ? [setup.practice.endMs - setup.practice.startMs >= chart.durationMs - 1 ? 'Whole song' : `Section ${Math.round(setup.practice.startMs / (chart.durationMs / SECTIONS)) + 1}`, `${setup.practice.rate * 100}% speed`, 'looping'] : [])].join(' · ');
   const single = players.length === 1;
   const waitingForMatch = !!match && match.ready && match.startAt === null;

@@ -10,6 +10,7 @@ import type { Recording } from '../lib/recording';
 import { fetchBoard, submitScore, type Board, type Submitted } from '../lib/api';
 import { sfx } from '../game/sfx';
 import { saveStore, settingsStore, useCell } from '../state/store';
+import { songCleared } from '../App';
 import { SECTIONS, type RunResult, type RunSetup } from './GameScreen';
 import KeyboardGuide, { fingerName } from './KeyboardGuide';
 import confetti from 'canvas-confetti';
@@ -200,7 +201,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
     : party ? (party.coop ? 'Set complete' : partyValue(0) === partyValue(1) ? 'Dead heat' : `${party.names[partyValue(0) > partyValue(1) ? 0 : 1]} wins!`)
     : outcome.lesson ? (outcome.lesson.passed ? 'Lesson passed' : 'Keep practicing')
     : typing ? (drillStars > 0 ? 'Drill complete' : 'Keep practicing')
-    : setup.set && !failed && outcome.tour && !outcome.tour.cleared ? 'Set over'
+    : setup.set && !failed && !songCleared(summary) ? 'Set over'
     : setup.set && !failed ? (setup.set.index + 1 < setup.set.ids.length ? `Song ${setup.set.index + 1} of ${setup.set.ids.length} cleared` : 'Headline set complete')
     : summary.fullCombo ? 'Full combo!' : summary.stars >= 5 ? 'Standing ovation' : summary.stars >= 3 ? 'Song cleared' : 'Rough night';
   const challenge = setup.challenge;
@@ -215,7 +216,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
   return <div className="results-layer" data-failed={failed ? 'true' : undefined}>
     <section className="results" aria-labelledby="results-title">
       <header>
-        <p className="eyebrow">{song.title} · {typing ? setup.typing?.lesson?.title ?? 'Free typing' : difficultyNames[setup.difficulty]}
+        <p className="eyebrow">{song.title} · {typing ? setup.typing?.lesson?.title ?? 'Free typing' : party?.difficulties && party.difficulties[0] !== party.difficulties[1] ? `${difficultyNames[party.difficulties[0]]} vs ${difficultyNames[party.difficulties[1]]}` : difficultyNames[setup.difficulty]}
           {setup.mods.map(id => ` · ${MODS[id].name}`)}</p>
         <h1 id="results-title">{title}</h1>
       </header>
@@ -250,7 +251,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
       </div>}
 
       {setup.set && <p className={`challenge-result ${failed ? 'lost' : 'won'}`} role="status">
-        {failed || (outcome.tour && !outcome.tour.cleared) ? `The set ends here, ${setup.set.index + 1} of ${setup.set.ids.length} songs in. Set total ${(setup.set.score + summary.score).toLocaleString()}.`
+        {failed || !songCleared(summary) ? `The set ends here, ${setup.set.index + 1} of ${setup.set.ids.length} songs in. Set total ${(setup.set.score + summary.score).toLocaleString()}.`
           : setup.set.index + 1 < setup.set.ids.length ? `Set total ${(setup.set.score + summary.score).toLocaleString()} after ${setup.set.index + 1} of ${setup.set.ids.length} songs.`
           : (() => {
             const ratings = [...setup.set.ratings, summary.rating];

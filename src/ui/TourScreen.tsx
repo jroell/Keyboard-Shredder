@@ -48,6 +48,7 @@ export default function TourScreen() {
         const available = isTourSongUnlocked(venue.tracks[0].id, progress);
         const done = venue.tracks.every(track => isTourSongCleared(track.id, progress));
         const art = stageArt(venue.tracks[0].id);
+        const best = sets[`${venue.name}:${settings.difficulty}`];
         return <li key={venue.id} className={`venue${available ? '' : ' locked'}${done ? ' done' : ''}`}>
           <div className="venue-art" style={art ? { backgroundImage: `url("${art}")` } : undefined}>
             <span className="venue-stop">{index + 1}</span>
@@ -74,8 +75,8 @@ export default function TourScreen() {
             <button disabled={!done} onClick={() => headline(venue.name, venue.tracks.map(track => track.id))}
               title={done ? 'Play every song here back to back for one score' : 'Clear every song here to unlock the headline set'}>
               <Disc3 size={15} aria-hidden="true" />Headline set</button>
-            {sets[venue.name] ? <span className={sets[venue.name].rating >= 80 ? 'gold' : ''}>{sets[venue.name].rating >= 80 ? 'Gold record · ' : ''}{sets[venue.name].score.toLocaleString()}</span>
-              : <span>{done ? `${venue.tracks.length} songs, one score` : 'Clear the venue to unlock'}</span>}
+            {best ? <span className={best.rating >= 80 ? 'gold' : ''}>{best.rating >= 80 ? 'Gold record · ' : ''}{best.score.toLocaleString()} on {difficultyNames[settings.difficulty]}</span>
+              : <span>{done ? `${venue.tracks.length} songs, one score. A record for each difficulty.` : 'Clear the venue to unlock'}</span>}
           </div>}
         </li>;
       })}
