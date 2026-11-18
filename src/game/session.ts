@@ -516,7 +516,8 @@ export class GameSession {
     const match = this.match();
     if (match?.startAt && clock - this.lastSync > 1500) {
       const expected = clock - match.startAt;
-      if (expected > 0 && Math.abs(expected - now) > 110) {
+      // Checked during the count-in too, so both players see the same numbers.
+      if (expected > -this.beatMs * 4 && Math.abs(expected - now) > 110) {
         this.lastSync = clock;
         void playback.start(0, 0, match.startAt).then(() => { if (this.options.openLead) playback.openLead(); }).catch(() => {});
         return;

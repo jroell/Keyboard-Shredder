@@ -3,13 +3,16 @@ import { keyInfo, type Finger } from '../../shared/typing';
 import { FINGER_COLORS } from './themes';
 import type { LaneLayout } from './renderer';
 
-export function laneLayout(keys: string[], colors: string[], lettered = false): LaneLayout {
+const FRETS = ['G', 'R', 'Y', 'B', 'O'];
+
+export function laneLayout(keys: string[], colors: string[], lettered = false, guitar = false): LaneLayout {
   return {
     columns: keys.length,
     column: lane => lane,
     color: lane => colors[lane % colors.length],
     gemLabel: lane => lettered ? keyLabel(keys[lane]) : '',
-    targets: keys.map((code, lane) => ({ label: keyLabel(code), color: colors[lane % colors.length] })),
+    // A seat played on a guitar shows fret letters (green, red, yellow, blue, orange) in place of keys.
+    targets: keys.map((code, lane) => ({ label: guitar ? FRETS[lane] ?? '' : keyLabel(code), color: colors[lane % colors.length] })),
   };
 }
 

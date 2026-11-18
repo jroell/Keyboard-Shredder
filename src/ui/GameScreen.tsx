@@ -142,10 +142,14 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     return [{ events: notes(setup.difficulty), windowMs: windowFor(setup.difficulty, setup.mods), keys: settings.keys, boostKey: 'Space', bot }];
   }, [chart, setup, typing, settings.keys, settings.partyKeys, bot]);
 
+  const guitarName = useGuitarName();
+  // With one guitar it takes player 2; with two, both seats.
+  const guitarSeats = !guitarName || !setup.party ? [] : pads().length > 1 ? [0, 1] : [1];
   const layouts = useMemo<LaneLayout[]>(() => players.map((player, index) => typing
     ? typingLayout(player.keys)
-    : laneLayout(player.keys, laneColors(settings), !setup.party && (setup.difficulty === 'beginner' || !!setup.tutorial))),
-  [players, typing, settings, setup.party]);
+    : laneLayout(player.keys, laneColors(settings), !setup.party && (setup.difficulty === 'beginner' || !!setup.tutorial),
+      !!setup.party && guitarSeats.includes(index))),
+  [players, typing, settings, setup.party, guitarSeats.join()]);
 
   const session = useRef<GameSession>(null);
   const renderer = useRef<StageRenderer>(null);
@@ -572,7 +576,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
     };
   }, [result, start, onExit, pauseItems, pauseIndex]);
 
-  const guitar = useGuitarName();
+  const guitar = guitarName;
   const usedLanes = useMemo(() => new Set(players[0].events.flatMap(event => event.lanes)), [players]);
   // Keys light up on the ready card, so players can check their hands are in the right place.
   const [lit, setLit] = useState<ReadonlySet<string>>(new Set());
@@ -676,8 +680,8 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
           <div className="ready-party">
             {players.map((player, index) => <div key={index}><strong>{setup.party!.names[index]}</strong>
               <div className="ready-keys">{player.keys.map((key, lane) => <kbd key={key} className={lit.has(key) ? 'lit' : ''}
-                style={{ '--lane': layouts[index].color(lane) } as CSSProperties}>{keyLabel(key)}</kbd>)}</div>
-              <small>{setup.party!.difficulties ? `${difficultyNames[setup.party!.difficulties[index]]} · ` : ''}Overdrive: {player.boostKey === 'Enter' ? 'Enter' : 'Space'}</small></div>)}
+                style={{ '--lane': layouts[index].color(lane) } as CSSProperties}>{guitarSeats.includes(index) ? layouts[index].targets[lane].label : keyLabel(key)}</kbd>)}</div>
+              <small>{setup.party!.difficulties ? `${difficultyNames[setup.party!.difficulties[index]]} · ` : ''}{guitarSeats.includes(index) ? 'Guitar: hold a fret and strum · Overdrive: Select or tilt' : `Overdrive: ${player.boostKey === 'Enter' ? 'Enter' : 'Space'}`}</small></div>)}
           </div>
           <p>Press your key when a gem reaches its ring, and hold long notes to the end of the tail. Try your keys now: they light up above.</p>
           {setup.party.difficulties && setup.party.difficulties[0] !== setup.party.difficulties[1] && !setup.party.coop &&
