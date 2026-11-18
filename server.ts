@@ -32,6 +32,7 @@ async function authenticate(token: string) {
 }
 const duels = attachDuels(server, authenticate, store, profiles);
 app.disable('x-powered-by');
+app.get('/healthz', (_request, response) => response.sendStatus(200));
 app.use(express.json({ limit: '8kb' }));
 app.get('/api/config', (_request, response) => {
   response.json({ firebase, localTest, ...(authEmulator ? { authEmulator: 'http://' + authEmulator } : {}), musicEnabled: !!process.env.ELEVENLABS_API_KEY || process.env.FIXTURE_MUSIC === '1',

@@ -20,11 +20,11 @@ Keep one app instance per `SONG_DATA_DIR` volume. The volume holds the SQLite jo
 
 ## Host the game
 
-The Docker image includes the charting worker, model weights, and frontend. Build for Linux x86-64. Set the Firebase and music server variables from `.env.example` on the host. Mount a persistent volume at `/app/data` writable by UID 1000. Route HTTPS and WebSocket traffic to port 3000 on the same instance.
+The Docker image includes the charting worker, model weights, and frontend. Build for Linux x86-64. Set the Firebase and music server variables from `.env.example` on the host. Mount a persistent volume at `/app/data`. The container prepares that directory at startup, then runs the game as UID 1000. Route HTTPS and WebSocket traffic to port 3000 on the same instance. Railway reads `railway.json` for the Docker build, single replica, and `/healthz` check.
 
 ```sh
 docker build --platform linux/amd64 -t keyboard-shredder .
-docker run --rm --env-file .env -p 127.0.0.1:3000:3000 \
+docker run --rm --env-file .env -e SONG_DATA_DIR=/app/data -p 127.0.0.1:3000:3000 \
   --mount source=keyboard-shredder-data,target=/app/data keyboard-shredder
 ```
 

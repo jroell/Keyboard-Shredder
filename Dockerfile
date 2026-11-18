@@ -17,8 +17,9 @@ COPY backend/ ./backend/
 COPY shared/ ./shared/
 COPY src/ ./src/
 COPY catalog/ ./catalog/
-RUN npm run build && mkdir -p /app/data && chown node:node /app/data
-ENV NODE_ENV=production PORT=3000 SONG_DATA_DIR=/app/data
-USER node
+COPY --chmod=755 scripts/container-start.sh /usr/local/bin/keyboard-shredder-start
+RUN npm run build
+ENV NODE_ENV=production PORT=3000 SONG_DATA_DIR=/app/data HOME=/home/node
 EXPOSE 3000
+ENTRYPOINT ["keyboard-shredder-start"]
 CMD ["node", "--import", "tsx", "server.ts"]
