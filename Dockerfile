@@ -8,7 +8,9 @@ ENV PATH="/opt/uv/bin:$PATH" UV_PYTHON_DOWNLOADS=never
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY analysis/pyproject.toml analysis/uv.lock analysis/setup.mjs ./analysis/
-RUN UV_NO_CACHE=1 npm run setup:analysis
+# The worker loads the ONNX model. Importing TensorFlow can abort on CPUs without AVX.
+RUN UV_NO_CACHE=1 uv sync --project analysis --locked --no-install-package tensorflow \
+    && node analysis/setup.mjs
 COPY index.html server.ts tsconfig.json vite.config.ts ./
 COPY analysis/ ./analysis/
 COPY backend/ ./backend/
