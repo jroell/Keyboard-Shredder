@@ -31,6 +31,7 @@ export default function Locker() {
   const [status, setStatus] = useState('');
   const [newName, setNewName] = useState('');
   const [nameError, setNameError] = useState(false);
+  const [learner, setLearner] = useState(false);
   const level = levelFor(save.xp);
   const colors = useMemo(() => laneColors(settings), [settings]);
   const look = useMemo(() => ({ theme: save.equipped.highway, gem: save.equipped.gem, fx: save.equipped.fx, hidden: false, calm: settings.calm }),
@@ -142,7 +143,8 @@ export default function Locker() {
         {player.id === currentPlayer ? <em>Playing now</em> : <button type="button" onClick={() => switchPlayer(player.id)}>Switch</button>}
       </li>)}</ul>
       <div className="form-row"><label className="field">New player name<input id="new-player-name" maxLength={24} value={newName} aria-invalid={nameError && !newName.trim() ? true : undefined} onChange={event => setNewName(event.target.value)} /></label>
-        <button type="button" onClick={() => { if (newName.trim()) addPlayer(newName); else { setNameError(true); document.getElementById('new-player-name')?.focus(); } }}>Add player</button></div>
+        <button type="button" onClick={() => { if (newName.trim()) addPlayer(newName, learner); else { setNameError(true); document.getElementById('new-player-name')?.focus(); } }}>Add player</button></div>
+      <label className="check"><input type="checkbox" checked={learner} onChange={event => setLearner(event.target.checked)} /> This player is learning to type (start on the typing academy)</label>
       {nameError && !newName.trim() && <p role="alert" className="error">Type a name first.</p>}
     </form>}
   </Screen>;

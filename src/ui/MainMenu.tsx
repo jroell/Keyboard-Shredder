@@ -84,7 +84,7 @@ export default function MainMenu() {
         {switching && <div className="player-menu" role="menu" aria-label="Players on this device">
           {listPlayers().map(player => <button key={player.id} role="menuitem" disabled={player.id === currentPlayer} onClick={() => switchPlayer(player.id)}>
             <span className="chip-level">{player.level}</span><strong>{player.name}</strong>
-            <em>{player.id === currentPlayer ? 'Playing now' : player.bestWpm ? `best ${player.bestWpm} WPM` : 'no typing yet'}</em></button>)}
+            <em>{player.id === currentPlayer ? 'Playing now · ' : ''}{player.bestWpm ? `best ${player.bestWpm.toFixed(1)} WPM` : 'no typing yet'}</em></button>)}
           <button role="menuitem" onClick={() => { try { sessionStorage.setItem('ks:lockerTab', 'Profile'); } catch { /* optional */ } app.go({ name: 'locker' }); }}>Add or manage players</button>
         </div>}
         <PlayerChip onClick={() => app.go({ name: 'locker' })} />

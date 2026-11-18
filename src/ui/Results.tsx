@@ -88,7 +88,10 @@ function Timeline({ result, durationMs, names, onPractice }: { result: RunResult
     return { total: events.length, judged: judged.length, hits, slips };
   });
   // The costliest moments: a broken streak first, then anything else, a few seconds apart.
-  const spots = [...result.troubles].sort((a, b) => b.streak - a.streak || a.timeMs - b.timeMs)
+  // Moments in the costliest section come first, then broken streaks, a few seconds apart.
+  const worst = sections.reduce((best, section, index) => section.judged - section.hits + section.slips > sections[best].judged - sections[best].hits + sections[best].slips ? index : best, 0);
+  const inWorst = (timeMs: number) => Math.floor(timeMs / size) === worst;
+  const spots = [...result.troubles].sort((a, b) => Number(inWorst(b.timeMs)) - Number(inWorst(a.timeMs)) || b.streak - a.streak || a.timeMs - b.timeMs)
     .filter((item, index, all) => all.findIndex(other => Math.abs(other.timeMs - item.timeMs) < 4000) === index).slice(0, 4).sort((a, b) => a.timeMs - b.timeMs);
   const label = { miss: 'missed note', stray: 'stray press', drop: 'hold let go early' };
   // Missed notes and slips both cost points, so the weakest section is the one with the most of either.
@@ -96,7 +99,7 @@ function Timeline({ result, durationMs, names, onPractice }: { result: RunResult
   const weakest = sections.reduce((worst, section, index) => cost(section) > cost(sections[worst]) ? index : worst, 0);
   const clean = sections.every(section => section.hits === section.judged && !section.slips);
   return <figure className="timeline">
-    <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `${sections.every(section => cost(section) === cost(sections[0])) ? 'Every section cost you about the same.' : `The ${names[weakest]} (section ${weakest + 1}) cost you the most.`} `}
+    <figcaption><strong>Song map</strong> {clean ? 'No section gave you trouble.' : `${sections.every(section => section.hits === 0) ? 'Every section was missed.' : sections.every(section => cost(section) === cost(sections[0])) ? 'Every section cost you about the same.' : `The ${names[weakest]} (section ${weakest + 1}) cost you the most.`} `}
       {!clean && <><span className="keyboard-only">Click</span><span className="touch-only">Tap</span> any section to loop it slowly.</>}</figcaption>
     <div className="timeline-row">
       {sections.map((section, index) => {
@@ -343,7 +346,7 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
         <div><dt>Best streak</dt><dd>{summary.bestCombo}</dd></div>
       </dl>}
       {typing && !result.waited && summary.misses >= 6 && <p className="offset-hint">Letters arriving too fast?{' '}
-        <button className="link" onClick={() => { settingsStore.set(previous => ({ ...previous, typingWait: true })); onReplay(); }}>Try again with the song waiting for you</button></p>}
+        <button onClick={() => { settingsStore.set(previous => ({ ...previous, typingWait: true })); onReplay(); }}>Try again with the song waiting for you</button></p>}
       {!party && !result.waited && <dl className="results-stats">
         <div data-tone="perfect"><dt>Perfect</dt><dd>{summary.perfects}</dd></div>
         <div data-tone="great"><dt>Great</dt><dd>{summary.greats}</dd></div>
@@ -375,7 +378,9 @@ export default function Results({ recording, setup, result, bot, onReplay, onExi
 
       {result.credited && result.credited.length > 0 && <p className="offset-hint" role="status">
         {result.credited.map(item => `${item.name} earned ${item.xp} XP`).join(' and ')} on {result.credited.length > 1 ? 'their own profiles' : 'their own profile'}.</p>}
-      {result.spectator && party && <p className="offset-hint">{save.name || 'The active player'} sat this one out, so nothing below changed. Guests keep no progress.</p>}
+      {party && !bot && !result.spectator && result.credited && result.credited.length > 0 && <p className="offset-hint">The reward card below is for {save.name || 'Player 1'}.</p>}
+      {party && !bot && party.seats?.some((id, index) => id === null && !(index === 1 && party.cpu !== undefined)) && <p className="offset-hint">Guests keep no progress.</p>}
+      {result.spectator && party && <p className="offset-hint">{save.name || 'The active player'} sat this one out, so nothing below changed.</p>}
       {!bot && !result.spectator && <div className="xp-panel">
         <div className="xp-head">{party && <b className="xp-name">{save.name || 'Player 1'}</b>}<strong>Level {after.level}</strong><span>{after.title}</span><em>+{outcome.xp.total} XP</em></div>
         <div className="xp-bar" role="progressbar" aria-label="Experience" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(after.progress * 100)}>

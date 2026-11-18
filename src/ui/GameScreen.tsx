@@ -563,7 +563,7 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
       if (previous) setTimeout(() => previous.forEach((streak, index) => {
         if (index === 1 && setup.party!.cpu !== undefined) return;
         callout(streak >= players[index].events.length && streak > 0 ? 'Match your full combo' : streak > 0 ? `Beat your ${streak} streak` : 'Land your first streak', 'streak', index);
-      }), 3600);
+      }), 400);
       setResult(undefined);
     }
     // A song counts as recently played once it starts, not when its ready card opens.
@@ -601,8 +601,11 @@ export default function GameScreen({ recording, setup: latestSetup, match, oppon
   const pauseItems = useMemo(() => [
     { label: 'Resume', icon: Play, run: () => void session.current?.start() },
     { label: 'Restart', icon: RotateCcw, run: () => start(true) },
+    // A learner who finds the beat too fast can switch pace without leaving the lesson.
+    ...(typing && bot === undefined ? [{ label: settings.typingWait ? 'Switch to keep the beat' : 'Make the song wait for me', icon: RotateCcw,
+      run: () => { settingsStore.set(previous => ({ ...previous, typingWait: !previous.typingWait })); start(true); } }] : []),
     { label: 'Quit', icon: LogOut, run: onExit },
-  ], [start, onExit]);
+  ], [start, onExit, typing, bot, settings.typingWait]);
 
   // Keyboard.
   useEffect(() => {
@@ -903,7 +906,8 @@ function HomePosition() {
   const keys: [string, string][] = [['A', 'L-pinky'], ['S', 'L-ring'], ['D', 'L-middle'], ['F', 'L-index'], ['J', 'R-index'], ['K', 'R-middle'], ['L', 'R-ring'], [';', 'R-pinky']];
   return <figure className="home-position">
     <div>{keys.map(([label, finger], index) => <kbd key={label} className={label === 'F' || label === 'J' ? 'bump' : ''}
-      style={{ '--lane': FINGER_COLORS[finger], marginRight: index === 3 ? '2.2rem' : undefined } as CSSProperties}>{label}</kbd>)}</div>
+      style={{ '--lane': FINGER_COLORS[finger], marginRight: index === 3 ? '2.2rem' : undefined } as CSSProperties}>{label}<small>{finger.split('-')[1]}</small></kbd>)}</div>
+    <p className="home-hands" aria-hidden="true"><span>Left hand</span><span>Right hand</span></p>
     <figcaption>Rest your left hand on A S D F and your right hand on J K L ;. Feel for the bumps on F and J. Thumbs rest on the space bar.</figcaption>
   </figure>;
 }

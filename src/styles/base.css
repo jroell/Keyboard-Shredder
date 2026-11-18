@@ -186,3 +186,6 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--pink); }
 .notice { display: grid; gap: .8rem; justify-items: start; max-width: 560px; }
 
 .toast.error { background: #2a0d14; border-color: var(--red); }
+.home-position kbd small { display: block; font-size: .5rem; font-weight: 600; letter-spacing: .02em; text-transform: lowercase; opacity: .85; }
+.home-hands { display: flex; justify-content: space-around; font-size: .75rem; color: var(--muted); }
+.check { display: flex; gap: .5rem; align-items: center; min-height: 44px; font-size: .9rem; }

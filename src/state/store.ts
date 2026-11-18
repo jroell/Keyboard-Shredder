@@ -78,7 +78,7 @@ export function listPlayers(): { id: string; name: string; level: number; bestWp
     return ['', ...ids.filter(id => typeof id === 'string' && /^[a-z0-9]{1,12}$/.test(id))].map(id => {
       const raw = JSON.parse(localStorage.getItem(id ? `ks:${id}:save` : 'ks:save') || 'null');
       const save = raw ? normalizeSave(raw) : emptySave();
-      return { id, name: save.name || (id ? 'New player' : 'Player 1'), level: levelFor(save.xp).level, bestWpm: Math.round(save.totals.bestWpm || 0) };
+      return { id, name: save.name || (id ? 'New player' : 'Player 1'), level: levelFor(save.xp).level, bestWpm: Math.floor(10 * (save.totals.bestWpm || 0)) / 10 };
     });
   } catch { return [{ id: '', name: 'Player 1', level: 1, bestWpm: 0 }]; }
 }
@@ -88,12 +88,17 @@ export function switchPlayer(id: string) {
   try { localStorage.setItem('ks:profile', id); sessionStorage.setItem('ks:switched', '1'); } catch { return; }
   location.reload();
 }
-export function addPlayer(name: string) {
+/** `learner` starts the new player on the typing academy with the gentlest song difficulty. */
+export function addPlayer(name: string, learner = false) {
   const id = Math.random().toString(36).slice(2, 10);
   try {
     const ids: string[] = JSON.parse(localStorage.getItem('ks:profiles') || '[]');
     localStorage.setItem('ks:profiles', JSON.stringify([...ids, id].slice(-8)));
     localStorage.setItem(`ks:${id}:save`, JSON.stringify({ ...emptySave(), name: name.trim().slice(0, 24), seenTutorial: true }));
+    if (learner) {
+      localStorage.setItem(`ks:learner:${id}`, '1');
+      localStorage.setItem(`ks:${id}:settings`, JSON.stringify({ ...settingsStore.get(), difficulty: 'beginner' }));
+    }
   } catch { return; }
   switchPlayer(id);
 }
